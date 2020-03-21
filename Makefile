@@ -1,4 +1,4 @@
-MAIN=patterns-paper
+MAIN=type-inference-paper
 
 all:
 	pdflatex $(MAIN)

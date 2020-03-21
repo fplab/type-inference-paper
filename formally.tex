@@ -1,751 +1,124 @@
-% !TEX root = ./patterns-paper.tex
+% !TEX root = ./type-inference-paper.tex
 \begin{figure}[t]
 $\arraycolsep=4pt\begin{array}{lll}
 \tau & ::= &
   \tnum ~\vert~
-  \tarr{\tau_1}{\tau_2} ~\vert~
-  \tprod{\tau_1}{\tau_2} ~\vert~
-  \tsum{\tau_1}{\tau_2} ~\vert~
-  \tunit ~\vert~
-  \tvoid \\
+  \tarr{\tau}{\tau} ~\vert~
+  \ehole^A 
+  \\
 e & ::= &
   x ~\vert~
-  \hnum{n} \\
-  & ~\vert~ &
-  \hlam{x}{\tau}{e} ~\vert~
-  \hap{e_1}{e_2} \\
-  & ~\vert~ &
-  \hpair{e_1}{e_2} ~\vert~
-  \htriv \\
-  & ~\vert~ &
-  \hinl{\tau}{e} ~\vert~
-  \hinr{\tau}{e} ~\vert~
-  \hmatch{e}{rs} \\
-  & ~\vert~ &
-  \hehole{u} ~\vert~
-  \hhole{e}{u} \\
-rs & ::= &
-  \cdot ~\vert~ \hrulesP{r}{rs'} \\
-r & ::= &
-  \hrul{p}{e} \\
-p & ::= &
-  x ~\vert~
-  \hnum{n} ~\vert~
-  \_ ~\vert~
-  \hpair{p_1}{p_2} ~\vert~
-  \htriv ~\vert~
-  \hinlp{p} ~\vert~
-  \hinrp{p} ~\vert~
-  \hehole{w} ~\vert~
-  \hhole{p}{w}
+  \lamfunc{x}{e} ~\vert~
+  e(e) ~\vert~
+  \underlinenum{n} ~\vert~
+  (e+e) ~\vert~
+  e: \tau ~\vert~
+  \ehole^u  ~\vert~
+  \notehole{e}^u \\
 \end{array}$
 \end{figure}
 
 \begin{figure}[t]
-  \fbox{$\hexptyp{\Gamma}{\Delta}{e}{\tau}$}~~\text{$e$ is of type $\tau$}
+  \fbox{$\consexptyp{\Gamma}{e}{\tau}{C}$}~~\text{$e$ synthesizes $\tau$}
 \begin{subequations}
 \begin{equation}
-\inferrule[TVar]{ }{
-  \hexptyp{\Gamma, x : \tau}{\Delta}{x}{\tau}
+\inferrule[SVar]{ }{
+  \consexptyp{\Gamma, x : \tau}{x}{\tau}{\econs}
 }
 \end{equation}
 \begin{equation}
-\inferrule[TNum]{ }{
-  \hexptyp{\Gamma}{\Delta}{\hnum{n}}{\tnum}
+\inferrule[SNum]{ }{
+  \consexptyp{\Gamma}{\hnum{n}}{\tnum}{\econs}
 }
 \end{equation}
+
 \begin{equation}
-\inferrule[TLam]{
-  \hexptyp{\Gamma, x : \tau_1}{\Delta}{e}{\tau_2}
+\inferrule[SAp]{
+  \consexptyp{\Gamma}{e_1}{\tau_1}{C_1} \\
+  \tau_1 \typearrow \tarr{\tau_{in}}{\tau_{out}} \addcons{C_2} \\
+  \ana{\Gamma}{e_2}{\tau_{in}}{C_3}
 }{
-  \hexptyp{\Gamma}{\Delta}{\hlam{x}{\tau_1}{e}}{\tarr{\tau_1}{\tau_2}}
+  \consexptyp{\Gamma}{\hap{e_1}{e_2}}{\tau_{out}} { C_1 \cup C_2 \cup C_3}
 }
 \end{equation}
 \begin{equation}
-\inferrule[TAp]{
-  \hexptyp{\Gamma}{\Delta}{e_1}{\tarr{\tau_2}{\tau}} \\
-  \hexptyp{\Gamma}{\Delta}{e_2}{\tau_2}
+\inferrule[SPlus]{
+  \ana{\Gamma}{e}{\tnum}{C_1} \\
+  \ana{\Gamma}{e}{\tnum}{C_2}
 }{
-  \hexptyp{\Gamma}{\Delta}{\hap{e_1}{e_2}}{\tau}
+  \consexptyp{\Gamma}{(e_1 + e_2)}{\tnum}{C_1 \cup C_2}
 }
 \end{equation}
+
 \begin{equation}
-\inferrule[TPair]{
-  \hexptyp{\Gamma}{\Delta}{e_1}{\tau_1} \\
-  \hexptyp{\Gamma}{\Delta}{e_2}{\tau_2}
+\inferrule[*]{
+  \ana{\Gamma}{e}{\tau}{C}
 }{
-  \hexptyp{\Gamma}{\Delta}{\hpair{e_1}{e_2}}{\tprod{\tau_1}{\tau_2}}
+  \consexptyp{\Gamma}{(e : \tau)}{\tau}{C}
+}
+\end{equation}
+
+\begin{equation}
+\inferrule[SEHole]{(A~fresh) }{
+  \consexptyp{\Gamma}{\llparenthesiscolor \rrparenthesiscolor^u}{\llparenthesiscolor \rrparenthesiscolor^A}{\econs}
 }
 \end{equation}
 \begin{equation}
-\inferrule[TTriv]{ }{
-  \hexptyp{\Gamma}{\Delta}{\htriv}{\tunit}
-}
-\end{equation}
-\begin{equation}
-\inferrule[TInL]{
-  \hexptyp{\Gamma}{\Delta}{e}{\tau_1}
+\inferrule[SHole]{
+ (A~fresh) \\
+ \consexptyp{\Gamma}{e}{\tau}{C}
 }{
-  \hexptyp{\Gamma}{\Delta}{\hinl{\tau_2}{e}}{\tsum{\tau_1}{\tau_2}}
-}
-\end{equation}
-\begin{equation}
-\inferrule[TInR]{
-  \hexptyp{\Gamma}{\Delta}{e}{\tau_2}
-}{
-  \hexptyp{\Gamma}{\Delta}{\hinr{\tau_1}{e}}{\tsum{\tau_1}{\tau_2}}
-}
-\end{equation}
-\begin{equation}
-\inferrule[TMatch]{
-  \hexptyp{\Gamma}{\Delta}{e_1}{\tau_1} \\
-  \hexptyp{\Gamma}{\Delta}{rs}{\trul{\tau_1}{\tau}}
-}{
-  \hexptyp{\Gamma}{\Delta}{\hmatch{e_1}{rs}}{\tau}
-}
-\end{equation}
-\begin{equation}
-\inferrule[TEHole]{ }{
-  \hexptyp{\Gamma}{\Delta, u::\tau}{\hehole{u}}{\tau}
-}
-\end{equation}
-\begin{equation}
-\inferrule[THole]{
-  \hexptyp{\Gamma}{\Delta, u::\tau}{e}{\tau'}
-}{
-  \hexptyp{\Gamma}{\Delta, u::\tau}{\hhole{e}{u}}{\tau}
+  \consexptyp{\Gamma}{\llparenthesiscolor e \rrparenthesiscolor^u}{\llparenthesiscolor \rrparenthesiscolor^A}{C}
 }
 \end{equation}
 \end{subequations}
 \end{figure}
 
 \begin{figure}[t]
-\fbox{$\hexptyp{\Gamma}{\Delta}{r}{\trul{\tau_1}{\tau_2}}$}~~\text{$r$ is of type $\trulnp{\tau_1}{\tau_2}$}
+\fbox{$\ana{\Gamma}{e}{\tau} {C}$}~~\text{$e$ analyzes against $\tau$}
 \begin{subequations}
+
 \begin{equation}
-\inferrule[TRule]{
-  \hpattyp{p}{\tau_1}{\Gamma'}{\Sigma} \\
-  \hexptyp{\Gamma \uplus \Gamma'}{\Delta}{e}{\tau_2}
+\inferrule[ALam]{
+ \tau \typearrow \tarr{\tau_{in}}{\tau_{out}} \addcons{C_1} \\
+  \ana{\Gamma, x : \tau_{in}}{e}{\tau_{in}}{C_2}
 }{
-  \hexptyp{\Gamma}{\Delta \uplus \Sigma}{\hrulP{p}{e}}{\trul{\tau_1}{\tau_2}}
+  \ana{\Gamma}{\lamfunc{x}{e}}{\tau}{C_1 \cup C_2}
 }
 \end{equation}
+
+\begin{equation}
+\inferrule[ASubsumption]{
+  \consexptyp{\Gamma}{e}{\tau'}{C_1} \\
+  \tau \sim \tau'
+}{
+  \ana{\Gamma}{e}{\tau}{C_1 \cup \{\tau \simeq \tau' \}}
+}
+\end{equation}
+
+
 \end{subequations}
 \end{figure}
+
 
 \begin{figure}[t]
-\fbox{$\hexptyp{\Gamma}{\Delta}{rs}{\trul{\tau_1}{\tau_2}}$}~~\text{$rs$ is of type $\trulnp{\tau_1}{\tau_2}$}
+\fbox{$\tau \typearrow \tarr{\tau_{in}}{\tau_{out}} \addcons{C}$}~~\text{$\tau$ is equivalent to $\tarr{\tau_{in}}{\tau_{out}}$}
 \begin{subequations}
+
 \begin{equation}
-\inferrule[TZeroRule]{ }{
-  \hexptyp{\Gamma}{\Delta}{\cdot}{\trul{\tau_1}{\tau_2}}
+\inferrule[EType]{ }{
+  \tarr{\tau_{in}}{\tau_{out}} \typearrow \tarr{\tau_{in}}{\tau_{out}} \addcons{\econs}
 }
 \end{equation}
+
 \begin{equation}
-\inferrule[TRules]{
-  \hexptyp{\Gamma}{\Delta}{r}{\trul{\tau_1}{\tau_2}} \\
-  \hexptyp{\Gamma}{\Delta}{rs}{\trul{\tau_1}{\tau_2}}
+\inferrule[EHole]{
+ (B~fresh) \\
+ (C~fresh)
 }{
-  \hexptyp{\Gamma}{\Delta}{\hrulesP{r}{rs}}{\trul{\tau_1}{\tau_2}}
+  \tehole^A \typearrow \tarr{\tehole^B}{\tehole^C} \addcons{\{ A \simeq B \rightarrow C \} }
 }
 \end{equation}
+
 \end{subequations}
 \end{figure}
-
-\begin{figure}[t]
-\fbox{$\hpattyp{p}{\tau}{\Gamma}{\Sigma}$}~~\text{$p$ matches expression of type $\tau$ and generates context $\Gamma$ and hole context $\Sigma$}
-\begin{subequations}
-\begin{equation}
-\inferrule[PTVar]{ }{
-  \hpattyp{x}{\tau}{x : \tau}{\cdot}
-}
-\end{equation}
-\begin{equation}
-\inferrule[PTNum]{ }{
-  \hpattyp{\hnum{n}}{\tnum}{\cdot}{\cdot}
-}
-\end{equation}
-\begin{equation}
-\inferrule[PTWild]{ }{
-  \hpattyp{\_}{\tau}{\cdot}{\cdot}
-}
-\end{equation}
-\begin{equation}
-\inferrule[PTPair]{
-  \hpattyp{p_1}{\tau_1}{\Gamma_1}{\Sigma_1} \\
-  \hpattyp{p_2}{\tau_2}{\Gamma_2}{\Sigma_2}
-}{
-  \hpattyp{\hpair{p_1}{p_2}}{\tprod{\tau_1}{\tau_2}}
-    {\Gamma_1 \uplus \Gamma_2}{\Sigma_1 \uplus \Sigma_2}
-}
-\end{equation}
-\begin{equation}
-\inferrule[PTTriv]{ }{
-  \hpattyp{\htriv}{\tunit}{\cdot}{\cdot}
-}
-\end{equation}
-\begin{equation}
-\inferrule[PTInL]{
-  \hpattyp{p}{\tau_1}{\Gamma}{\Sigma}
-}{
-  \hpattyp{\hinlp{p}}{\tsum{\tau_1}{\tau_2}}{\Gamma}{\Sigma}
-}
-\end{equation}
-\begin{equation}
-\inferrule[PTInR]{
-  \hpattyp{p}{\tau_2}{\Gamma}{\Sigma}
-}{
-  \hpattyp{\hinrp{p}}{\tsum{\tau_1}{\tau_2}}{\Gamma}{\Sigma}
-}
-\end{equation}
-\begin{equation}
-\inferrule[PTEHole]{ }{
-  \hpattyp{\hehole{w}}{\tau}{\cdot}{w :: \tau}
-}
-\end{equation}
-\begin{equation}
-\inferrule[PTHole]{
-  \hpattyp{p}{\tau'}{\Gamma}{\Sigma}
-}{
-  \hpattyp{\hhole{p}{w}}{\tau}
-  {\Gamma}{\Sigma , w :: \tau}
-}
-\end{equation}
-\end{subequations}
-\end{figure}
-
-\begin{figure}[t]
-\fbox{$\hsubstyp{\theta}{\Gamma}$}~~\text{Substitution $\theta$ is of type $\Gamma$}
-\begin{subequations}
-\begin{equation}
-\inferrule[STEmpty]{ }{
-  \hsubstyp{\emptyset}{\cdot}
-}
-\end{equation}
-\begin{equation}
-\inferrule[STExtend]{
-  \hsubstyp{\theta}{\Gamma} \\
-  \hexptyp{\cdot}{\Delta}{e}{\tau}
-}{
-  \hsubstyp{\theta , x / e}{\Gamma , x : \tau}
-}
-\end{equation}
-\end{subequations}
-\end{figure}
-
-\begin{figure}[t]
-\fbox{$\hpatmatch{e}{p}{\theta}$}~~\text{Pattern matching $e$ on $p$ emits $\theta$}
-\begin{subequations}
-\begin{equation}
-\inferrule[PMVar]{ }{
-  \hpatmatch{e}{x}{x / e}
-}
-\end{equation}
-\begin{equation}
-\inferrule[PMNum]{ }{
-  \hpatmatch{\hnum{n}}{\hnum{n}}{\cdot}
-}
-\end{equation}
-\begin{equation}
-\inferrule[PMWild]{ }{
-  \hpatmatch{e}{\_}{\cdot}
-}
-\end{equation}
-\begin{equation}
-\inferrule[PMTriv]{ }{
-  \hpatmatch{\htriv}{\htriv}{\cdot}
-}
-\end{equation}
-\begin{equation}
-\inferrule[PMPair]{
-  \hpatmatch{e_1}{p_1}{\theta_1} \\
-  \hpatmatch{e_2}{p_2}{\theta_2}
-}{
-  \hpatmatch{\hpair{e_1}{e_2}}{\hpair{p_1}{p_2}}{\theta_1 \uplus \theta_2}
-}
-\end{equation}
-\begin{equation}
-\inferrule[PMInL]{
-  \hpatmatch{e}{p}{\theta}
-}{
-  \hpatmatch{\hinl{\tau}{e}}{\hinlp{p}}{\theta}
-}
-\end{equation}
-\begin{equation}
-\inferrule[PMInR]{
-  \hpatmatch{e}{p}{\theta}
-}{
-  \hpatmatch{\hinr{\tau}{e}}{\hinrp{p}}{\theta}
-}
-\end{equation}
-\end{subequations}
-\end{figure}
-
-\begin{figure}[t]
-\fbox{$\hmaymatch{e}{p}$}~~\text{$e$ may match $p$}
-\begin{subequations}
-\begin{equation}
-\inferrule[MMEHole]{ }{
-  \hmaymatch{e}{\hehole{w}}
-}
-\end{equation}
-\begin{equation}
-\inferrule[MMHole]{ }{
-  \hmaymatch{e}{\hhole{p}{w}}
-}
-\end{equation}
-\begin{equation}
-\inferrule[MMExpEHole]{
-  p \neq x, \_
-}{
-  \hmaymatch{\hehole{u}}{p}
-}
-\end{equation}
-\begin{equation}
-\inferrule[MMExpHole]{
-  p \neq x, \_
-}{
-  \hmaymatch{\hhole{e}{u}}{p}
-}
-\end{equation}
-\begin{equation}
-\inferrule[MMPair1]{
-  \hmaymatch{e_1}{p_1} \\
-  \hpatmatch{e_2}{p_2}{\theta_2}
-}{
-  \hmaymatch{\hpair{e_1}{e_2}}{\hpair{p_1}{p_2}}
-}
-\end{equation}
-\begin{equation}
-\inferrule[MMPair2]{
-  \hpatmatch{e_1}{p_1}{\theta_1} \\
-  \hmaymatch{e_2}{p_2}
-}{
-  \hmaymatch{\hpair{e_1}{e_2}}{\hpair{p_1}{p_2}}
-}
-\end{equation}
-\begin{equation}
-\inferrule[MMPair3]{
-  \hmaymatch{e_1}{p_1} \\
-  \hmaymatch{e_2}{p_2}
-}{
-  \hmaymatch{\hpair{e_1}{e_2}}{\hpair{p_1}{p_2}}
-}
-\end{equation}
-\begin{equation}
-\inferrule[MMInL]{
-  \hmaymatch{e}{p}
-}{
-  \hmaymatch{\hinl{\tau}{e}}{\hinlp{p}}
-}
-\end{equation}
-\begin{equation}
-\inferrule[MMInR]{
-  \hmaymatch{e}{p}
-}{
-  \hmaymatch{\hinr{\tau}{e}}{\hinrp{p}}
-}
-\end{equation}
-\end{subequations}
-\end{figure}
-
-\begin{figure}[t]
-\fbox{$\hnotmatch{e}{p}$}~~\text{$e$ doesn't match $p$}
-\begin{subequations}
-\begin{equation}
-\inferrule[NMPair1]{
-  \hnotmatch{e_1}{p_1}
-}{
-  \hnotmatch{\hpair{e_1}{e_2}}{\hpair{p_1}{p_2}}
-}
-\end{equation}
-\begin{equation}
-\inferrule[NMPair2]{
-  \hnotmatch{e_2}{p_2}
-}{
-  \hnotmatch{\hpair{e_1}{e_2}}{\hpair{p_1}{p_2}}
-}
-\end{equation}
-\begin{equation}
-\inferrule[NMConfL]{ }{
-  \hnotmatch{\hinr{\tau}{e}}{\hinlp{p}}
-}
-\end{equation}
-\begin{equation}
-\inferrule[NMConfR]{ }{
-  \hnotmatch{\hinl{\tau}{e}}{\hinrp{p}}
-}
-\end{equation}
-\begin{equation}
-\inferrule[NMInjL]{
-  \hnotmatch{e}{p}
-}{
-  \hnotmatch{\hinr{\tau}{e}}{\hinlp{p}}
-}
-\end{equation}
-\begin{equation}
-\inferrule[NMInjR]{
-  \hnotmatch{e}{p}
-}{
-  \hnotmatch{\hinl{\tau}{e}}{\hinrp{p}}
-}
-\end{equation}
-\end{subequations}
-\end{figure}
-
-\begin{figure}[t]
-\fbox{$\isVal{e}$}~~\text{$e$ is a value}
-\begin{subequations}
-\begin{equation}
-\inferrule[VNum]{ }{
-  \isVal{\hnum{n}}
-}
-\end{equation}
-\begin{equation}
-\inferrule[VTriv]{ }{
-  \isVal{\htriv}
-}
-\end{equation}
-\begin{equation}
-\inferrule[VLam]{ }{
-  \isVal{\hlam{x}{\tau}{e}}
-}
-\end{equation}
-\begin{equation}
-\inferrule[VPair]{
-  \isVal{e_1} \\
-  \isVal{e_2}
-}{\isVal{\hpair{e_1}{e_2}}}
-\end{equation}
-\begin{equation}
-\inferrule[VInL]{
-  \isVal{e}
-}{
-  \isVal{\hinl{\tau}{e}}
-}
-\end{equation}
-\begin{equation}
-\inferrule[VinR]{
-  \isVal{e}
-}{
-  \isVal{\hinr{\tau}{e}}
-}
-\end{equation}
-\end{subequations}
-\end{figure}
-
-\begin{figure}[t]
-\fbox{$\isIndet{e}$}~~\text{$e$ is indeterminate}
-\begin{subequations}
-\begin{equation}
-\inferrule[IEHole]{ }{
-  \isIndet{\hehole{u}}
-}
-\end{equation}
-\begin{equation}
-\inferrule[IHole]{
-  \isFinal{e}
-}{
-  \isIndet{\hhole{e}{u}}
-}
-\end{equation}
-\begin{equation}
-\inferrule[IAp1]{
-  \isIndet{e_1}
-}{
-  \isIndet{\hap{e_1}{e_2}}
-}
-\end{equation}
-\begin{equation}
-\inferrule[IAp2]{
-  \isVal{e_1} \\ \isIndet{e_2}
-}{
-  \isIndet{\hap{e_1}{e_2}}
-}
-\end{equation}
-\begin{equation}
-\inferrule[IPair1]{
-  \isIndet{e_1}
-}{
-  \isIndet{\hpair{e_1}{e_2}}
-}
-\end{equation}
-\begin{equation}
-\inferrule[IPair2]{
-  \isVal{e_1} \\
-  \isIndet{e_2}
-}{
-  \isIndet{\hpair{e_1}{e_2}}
-}
-\end{equation}
-\begin{equation}
-\inferrule[IInL]{
-  \isIndet{e}
-}{
-  \isIndet{\hinl{\tau}{e}}
-}
-\end{equation}
-\begin{equation}
-\inferrule[IInR]{
-  \isIndet{e}
-}{
-  \isIndet{\hinr{\tau}{e}}
-}
-\end{equation}
-\begin{equation}
-\inferrule[IMayMatch]{
-  \isFinal{e} \\
-  \hmaymatch{e}{p_0}
-}{
-  \isIndet{\hmatch{e}{\hrules{\hrul{p_0}{e_0}}{rs}}}
-}
-\end{equation}
-\end{subequations}
-\end{figure}
-
-\begin{figure}[t]
-\fbox{$\isErr{e}$}~~\text{$e$ results in a checked error}
-\begin{subequations}
-\begin{equation}
-\inferrule[EAp1]{
-  \isErr{e_1}
-}{
-  \isErr{\hap{e_1}{e_2}}
-}
-\end{equation}
-\begin{equation}
-\inferrule[EAp2]{
-  \isVal{e_1} \\ \isErr{e_2}
-}{
-  \isErr{\hap{e_1}{e_2}}
-}
-\end{equation}
-\begin{equation}
-\inferrule[EPair1]{
-  \isErr{e_1}
-}{
-  \isErr{\hpair{e_1}{e_2}}
-}
-\end{equation}
-\begin{equation}
-\inferrule[EPair2]{
-  \isVal{e_1} \\
-  \isErr{e_2}
-}{
-  \isErr{\hpair{e_1}{e_2}}
-}
-\end{equation}
-\begin{equation}
-\inferrule[EInL]{
-  \isErr{e}
-}{
-  \isErr{\hinl{\tau}{e}}
-}
-\end{equation}
-\begin{equation}
-\inferrule[EInR]{
-  \isErr{e}
-}{
-  \isErr{\hinr{\tau}{e}}
-}
-\end{equation}
-\begin{equation}
-\inferrule[EExpMatch]{
-  \isErr{e}
-}{
-  \isErr{\hmatch{e}{rs}}
-}
-\end{equation}
-\begin{equation}
-\inferrule[EExhMatch]{
-  \isFinal{e}
-}{
-  \isErr{\hmatch{e}{\cdot}}
-}
-\end{equation}
-\end{subequations}
-\end{figure}
-
-\begin{figure}
-\fbox{$\isFinal{e}$}~~\text{$e$ is final}
-\begin{subequations}
-\begin{equation}
-\inferrule[FVal]{
-  \isVal{e}
-}{
-  \isFinal{e}
-}
-\end{equation}
-\begin{equation}
-\inferrule[FIndet]{
-  \isIndet{e}
-}{
-  \isFinal{e}
-}
-\end{equation}
-\end{subequations}
-\end{figure}
-
-\begin{figure}[t]
-\fbox{$e \mapsto e'$}~~\text{$e$ takes an instruction transition to $e'$}
-\begin{subequations}
-\begin{equation}
-\inferrule[ITHole]{
-  \htrans{e}{e'}
-}{
-  \htrans{\hhole{e}{u}}{\hhole{e'}{u}}
-}
-\end{equation}
-\begin{equation}
-\inferrule[ITAp1]{
-  \htrans{e_1}{e_1'}
-}{
-  \htrans{\hap{e_1}{e_2}}{\hap{e_1'}{e_2}}
-}
-\end{equation}
-\begin{equation}
-\inferrule[ITAp2]{
-  \isVal{e_1} \\
-  \htrans{e_2}{e_2'}
-}{
-  \htrans{\hap{e_1}{e_2}}{\hap{e_1}{e_2'}}
-}
-\end{equation}
-\begin{equation}
-\inferrule[ITAP]{
-  \isVal{e_2}
-}{
-  \hap{\hlam{x}{\tau}{e_1}}{e_2} \mapsto
-    [e_2/x]e_1
-}
-\end{equation}
-\begin{equation}
-\inferrule[ITPair1]{
-  \htrans{e_1}{e_1'}
-}{
-  \htrans{\hpair{e_1}{e_2}}{\hpair{e_1'}{e_2}}
-}
-\end{equation}
-\begin{equation}
-\inferrule[ITPair2]{
-  \isVal{e_1} \\
-  \htrans{e_2}{e_2'}
-}{
-  \htrans{\hpair{e_1}{e_2}}{\hpair{e_1}{e_2'}}
-}
-\end{equation}
-\begin{equation}
-\inferrule[ITInL]{
-  \htrans{e}{e'}
-}{
-  \htrans{\hinl{\tau}{e}}{\hinl{\tau}{e'}}
-}
-\end{equation}
-\begin{equation}
-\inferrule[ITInR]{
-  \htrans{e}{e'}
-}{
-  \htrans{\hinr{\tau}{e}}{\hinr{\tau}{e'}}
-}
-\end{equation}
-\begin{equation}
-\inferrule[ITExpMatch]{
-  \htrans{e}{e'}
-}{
-  \htrans{\hmatch{e}{rs}}{\hmatch{e'}{rs}}
-}
-\end{equation}
-\begin{equation}
-\inferrule[ITSuccMatch]{
-  \isFinal{e} \\
-  \hpatmatch{e}{p_0}{\theta}
-}{
-  \htrans{
-    \hmatch{e}{\hrules{\hrul{p_0}{e_0}}{rs}}
-  }{
-    [\theta](e_0)
-  }
-}
-\end{equation}
-\begin{equation}
-\inferrule[ITFailMatch]{
-  \isFinal{e} \\
-  \hnotmatch{e}{p_0} \\
-}{
-  \htrans{
-    \hmatch{e}{\hrules{\hrul{p_0}{e_0}}{rs}}
-  }{
-    \hmatch{e}{rs}
-  }
-}
-\end{equation}
-\end{subequations}
-\end{figure}
-
-
-\begin{thm}[Preservation]
-  \label{thrm:preservation}
-  If $\hexptyp{\cdot}{\Delta}{e}{\tau}$ and $\htrans{e}{e'}$
-  then $\hexptyp{\cdot}{\Delta}{e'}{\tau}$
-\end{thm}
-
-\begin{lem}[Substitution]
-  \label{lemma:substitution}
-  If $\hexptyp{\Gamma, x : \tau}{\Delta}{e_0}{\tau_0}$ and $\hexptyp{\Gamma}{\Delta}{e}{\tau}$
-  then $\hexptyp{\Gamma}{\Delta}{[e/x]e_0}{\tau_0}$
-\end{lem}
-
-\begin{lem}[Simultaneous Substitution]
-  \label{lemma:simult-substitution}
-  If $\hexptyp{\Gamma \uplus \Gamma'}{\Delta}{e}{\tau}$ and $\hsubstyp{\theta}{\Gamma'}$
-  then $\hexptyp{\Gamma}{\Delta}{[\theta]e}{\tau}$
-\end{lem}
-Proof by induction on the derivation of $\hexptyp{\Gamma \uplus \Gamma'}{\Delta}{e}{\tau}$.
-
-\begin{lem}[Substitution Typing]
-  \label{lemma:subs-typing}
-  If $\hpatmatch{e}{p}{\theta}$ and $\hexptyp{\cdot}{\Delta}{e}{\tau}$ and $\hpattyp{p}{\tau}{\Gamma}{\Sigma}$
-  then $\hsubstyp{\theta}{\Gamma}$
-\end{lem}
-Proof by induction on the derivation of $\hpatmatch{e}{p}{\theta}$.
-
-To apply this lemma in ITSuccMatch case, first apply inversion lemma on premise of preservation theorem,
-
-\begin{thm}[Progress]
-  \label{thrm:progrs}
-  If $\hexptyp{\cdot}{\Delta}{e}{\tau}$
-  then $\isVal{e}$ or $\isErr{e}$ or $\isIndet{e}$ or $\htrans{e}{e'}$ for some $e'$
-\end{thm}
-
-\begin{lem}[Matching Progress]
-  \label{lemma:match-progress}
-  If $\hexptyp{\cdot}{\Delta}{e}{\tau}$ and $\hpattyp{p}{\tau}{\Gamma}{\Sigma}$
-  then $\hnotmatch{e}{p}$ or $\hmaymatch{e}{p}$ or $\hpatmatch{e}{p}{\theta}$ for some $\theta$
-\end{lem}
-Proof by induction on two premises.
-
-\begin{thm}[Stepping Determinism]
-  \label{thrm:step-determinism}
-  If $\htrans{e}{e'}$ and $\htrans{e}{e''}$ then $e' = e''$
-\end{thm}
-
-\begin{thm}[Determinism]
-  \label{thrm:determinism}
-  If $\hexptyp{\cdot}{\Delta}{e}{\tau}$ then exactly one of the following holds
-  \begin{enumerate}
-    \item $\isVal{e}$
-    \item $\isErr{e}$
-    \item $\isIndet{e}$
-    \item $\htrans{e}{e'}$ for some unique $e'$
-  \end{enumerate}
-\end{thm}
-
-\begin{lem}[Matching Determinism]
-  \label{lemma:match-determinism}
-  If $\hexptyp{\cdot}{\Delta}{e}{\tau}$ and $\hpattyp{p}{\tau}{\Gamma}{\Sigma}$ then exactly one of the following holds
-  \begin{enumerate}
-    \item $\hpatmatch{e}{p}{\theta}$ for some $\theta$
-    \item $\hmaymatch{e}{p}$
-    \item $\hnotmatch{e}{p}$
-  \end{enumerate}
-\end{lem}
