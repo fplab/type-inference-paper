@@ -122,3 +122,13 @@ e & ::= &
 
 \end{subequations}
 \end{figure}
+
+\begin{thm}[Preservation]
+  \label{thrm:preservation}
+  If $\tau \sim \tau' \addcons{C}$ then $\tau \sim \tau'$
+\end{thm}
+
+\begin{thm}[Constraint Existence]
+  \label{Constraint Existence}
+  If $\Gamma \vdash e \Rightarrow \tau$ then $\consexptyp{\Gamma}{e}{\tau}{C}$ for some C
+\end{thm}
