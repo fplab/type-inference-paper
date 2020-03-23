@@ -4,7 +4,8 @@ $\arraycolsep=4pt\begin{array}{lll}
 \tau & ::= &
   \tnum ~\vert~
   \tarr{\tau}{\tau} ~\vert~
-  \ehole^A 
+  ? ~\vert~
+  \ehole^A
   \\
 e & ::= &
   x ~\vert~
@@ -77,6 +78,11 @@ e & ::= &
 \begin{figure}[t]
 \fbox{$\ana{\Gamma}{e}{\tau} {C}$}~~\text{$e$ analyzes against $\tau$}
 \begin{subequations}
+\begin{equation}
+\inferrule[Analyzation]{ }{
+  \ana{\Gamma}{e:\tau_1}{\tau_2}{\{ \tau_2 \sqsubseteq \tau_1 \}}
+}
+\end{equation}
 
 \begin{equation}
 \inferrule[ALam]{
@@ -90,9 +96,9 @@ e & ::= &
 \begin{equation}
 \inferrule[ASubsumption]{
   \consexptyp{\Gamma}{e}{\tau'}{C_1} \\
-  \tau \sim \tau'
+  \tau \sqsubseteq \tau' 
 }{
-  \ana{\Gamma}{e}{\tau}{C_1 \cup \{\tau \simeq \tau' \}}
+  \ana{\Gamma}{e}{\tau}{C_1 \cup \{\tau \sqsubseteq \tau'  \}}
 }
 \end{equation}
 
@@ -123,9 +129,104 @@ e & ::= &
 \end{subequations}
 \end{figure}
 
+\begin{figure}[t]
+\fbox{$\tau \sqsubseteq \tau' $}~~\text{$\tau$ is consistent-less than $\tau'$}
+\begin{subequations}
+
+\begin{equation}
+\inferrule[CLNum]{ }{
+  \conless{num}{num}
+}
+\end{equation}
+\begin{equation}
+\inferrule[CLG]{ }{
+  \conless{\ehole^A}{\ehole^A}
+}
+\end{equation}
+\begin{equation}
+\inferrule[CLDL]{ }{
+  \conless{?}{\tau}
+}
+\end{equation}
+
+\begin{equation}
+\inferrule[CLFun]{
+\conless{\tau_1}{\tau_3} \\
+\conless{\tau_2}{\tau_4}
+ }{
+  \conless{\tarr{\tau_1}{\tau_2}}{\tarr{\tau_3}{\tau_4}}
+}
+\end{equation}
+
+
+\end{subequations}
+\end{figure}
+
+
+\begin{figure}[t]
+\fbox{$\tau \simeq \tau $}~~\text{$\tau$ is consistent equivalent to $\tau$}
+\begin{subequations}
+
+\begin{equation}
+\inferrule[CENum]{
+}{
+  num \simeq num
+}
+\end{equation}
+
+\begin{equation}
+\inferrule[CEG]{
+}{
+  \ehole^A \simeq \ehole^A
+}
+\end{equation}
+
+\begin{equation}
+\inferrule[CEDL]{
+}{
+  ? \simeq \tau
+}
+\end{equation}
+
+\begin{equation}
+\inferrule[CEDR]{
+}{
+  \tau \simeq ?
+}
+\end{equation}
+
+\begin{equation}
+\inferrule[CEFun]{
+\tau_1 \simeq \tau_3 \\
+\tau_2 \simeq \tau_4
+}{
+  \tarr{\tau_1}{\tau_2} \simeq \tarr{\tau_3}{\tau_4}
+}
+\end{equation}
+
+\begin{equation}
+\inferrule[CEVL]{
+\conless{\tau_1}{\tau_2}
+}{
+  \tau_1 \simeq \tau_2
+}
+\end{equation}
+
+\begin{equation}
+\inferrule[CEVR]{
+\conless{\tau_1}{\tau_2}
+}{
+  \tau_2 \simeq \tau_1
+}
+\end{equation}
+
+\end{subequations}
+\end{figure}
+
+
 \begin{thm}[Preservation]
   \label{thrm:preservation}
-  If $\tau \sim \tau' \addcons{C}$ then $\tau \sim \tau'$
+  If $\tau \simeq \tau' \addcons{C}$ then $\tau \simeq \tau'$
 \end{thm}
 
 \begin{thm}[Constraint Existence]
