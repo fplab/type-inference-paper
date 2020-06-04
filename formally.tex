@@ -4,7 +4,6 @@ $\arraycolsep=4pt\begin{array}{lll}
 \tau & ::= &
   \tnum ~\vert~
   \tarr{\tau}{\tau} ~\vert~
-  ? ~\vert~
   \ehole^A
   \\
 e & ::= &
@@ -16,6 +15,9 @@ e & ::= &
   e: \tau ~\vert~
   \ehole^u  ~\vert~
   \notehole{e}^u \\
+C & :: = &
+	C ~\vert~
+	C \cup C \\
 \end{array}$
 \end{figure}
 
@@ -44,15 +46,15 @@ e & ::= &
 \end{equation}
 \begin{equation}
 \inferrule[SPlus]{
-  \ana{\Gamma}{e}{\tnum}{C_1} \\
-  \ana{\Gamma}{e}{\tnum}{C_2}
+  \ana{\Gamma}{e_1}{\tnum}{C_1} \\
+  \ana{\Gamma}{e_2}{\tnum}{C_2}
 }{
   \consexptyp{\Gamma}{(e_1 + e_2)}{\tnum}{C_1 \cup C_2}
 }
 \end{equation}
 
 \begin{equation}
-\inferrule[*]{
+\inferrule[SAsc]{
   \ana{\Gamma}{e}{\tau}{C}
 }{
   \consexptyp{\Gamma}{(e : \tau)}{\tau}{C}
@@ -60,34 +62,65 @@ e & ::= &
 \end{equation}
 
 \begin{equation}
-\inferrule[SEHole]{(A~fresh) }{
+\inferrule[SEHole]{(A~\text{fresh}) }{
   \consexptyp{\Gamma}{\llparenthesiscolor \rrparenthesiscolor^u}{\llparenthesiscolor \rrparenthesiscolor^A}{\econs}
 }
 \end{equation}
 \begin{equation}
 \inferrule[SHole]{
- (A~fresh) \\
+ (A~\text{fresh}) \\
  \consexptyp{\Gamma}{e}{\tau}{C}
 }{
   \consexptyp{\Gamma}{\llparenthesiscolor e \rrparenthesiscolor^u}{\llparenthesiscolor \rrparenthesiscolor^A}{C}
 }
 \end{equation}
+
+\begin{equation}
+\inferrule[SLamAnn]{
+  \consexptyp{\Gamma, x : \tau_{in}}{e}{\tau_{out}}{C_2}
+}{
+  \consexptyp{\Gamma}{\lamfunc{x:\tau_{in}}{e}}{\tarr{\tau_{in}}{\tau_{out}}}{C_1 \cup C_2}
+}
+\end{equation}
+\begin{equation}
+\inferrule[SLetAnn]{
+ \ana{\Gamma}{e_1}{\tau_1}{C_1} \\
+ \consexptyp{\Gamma,x : \tau_1}{e_2}{\tau_2}{C_2}
+}{
+  \consexptyp{\Gamma}{let \; x:\tau_1 \; be \; e_1 \; in \; e_2}{\tau_2}{C_1 \cup C_2}
+}
+\end{equation}
+
+\begin{equation}
+\inferrule[SLet]{
+ \consexptyp{\Gamma}{e_1}{\tau_1}{C_1} \\
+ \consexptyp{\Gamma,x : \tau_1}{e_2}{\tau_2}{C_2}
+}{
+  \consexptyp{\Gamma}{let \; x \; be \; e_1 \; in \; e_2}{\tau_2}{C_1 \cup C_2}
+}
+\end{equation}
+
 \end{subequations}
 \end{figure}
 
 \begin{figure}[t]
 \fbox{$\ana{\Gamma}{e}{\tau} {C}$}~~\text{$e$ analyzes against $\tau$}
 \begin{subequations}
+
 \begin{equation}
-\inferrule[Analyzation]{ }{
-  \ana{\Gamma}{e:\tau_1}{\tau_2}{\{ \tau_2 \sqsubseteq \tau_1 \}}
+\inferrule[ALamAnn]{
+ \tau \typearrow \tarr{\tau_{in}}{\tau_{out}} \addcons{C_1} \\
+  \ana{\Gamma, x : \tau'_{in}}{e}{\tau_{out}}{C_2} \\
+  \tau_{in} \simeq \tau'_{in}
+}{
+  \ana{\Gamma}{\lamfunc{x:\tau'_{in}}{e}}{\tau}{C_1 \cup C_2 \cup \{ \tau_{in} \simeq \tau'_{in} \}}
 }
 \end{equation}
 
 \begin{equation}
 \inferrule[ALam]{
  \tau \typearrow \tarr{\tau_{in}}{\tau_{out}} \addcons{C_1} \\
-  \ana{\Gamma, x : \tau_{in}}{e}{\tau_{in}}{C_2}
+  \ana{\Gamma, x : \tau_{in}}{e}{\tau_{out}}{C_2}
 }{
   \ana{\Gamma}{\lamfunc{x}{e}}{\tau}{C_1 \cup C_2}
 }
@@ -96,9 +129,27 @@ e & ::= &
 \begin{equation}
 \inferrule[ASubsumption]{
   \consexptyp{\Gamma}{e}{\tau'}{C_1} \\
-  \tau \sqsubseteq \tau' 
+  \tau \simeq \tau' 
 }{
-  \ana{\Gamma}{e}{\tau}{C_1 \cup \{\tau \sqsubseteq \tau'  \}}
+  \ana{\Gamma}{e}{\tau}{C_1 \cup \{\tau \simeq \tau'  \}}
+}
+\end{equation}
+
+\begin{equation}
+\inferrule[ALetAnn]{
+ \ana{\Gamma}{e_1}{\tau_1}{C_1} \\
+ \ana{\Gamma,x : \tau_1}{e_2}{\tau_2}{C_2}
+}{
+  \ana{\Gamma}{let \; x:\tau_1 \; be \; e_1 \; in \; e_2}{\tau_2}{C_1 \cup C_2}
+}
+\end{equation}
+
+\begin{equation}
+\inferrule[ALet]{
+ \consexptyp{\Gamma}{e_1}{\tau_1}{C_1} \\
+ \ana{\Gamma,x : \tau_1}{e_2}{\tau_2}{C_2}
+}{
+  \ana{\Gamma}{let \; x \; be \; e_1 \; in \; e_2}{\tau_2}{C_1 \cup C_2}
 }
 \end{equation}
 
@@ -108,21 +159,21 @@ e & ::= &
 
 
 \begin{figure}[t]
-\fbox{$\tau \typearrow \tarr{\tau_{in}}{\tau_{out}} \addcons{C}$}~~\text{$\tau$ is equivalent to $\tarr{\tau_{in}}{\tau_{out}}$}
+\fbox{$\tau \typearrow \tarr{\tau_{in}}{\tau_{out}} \addcons{C}$}~~\text{$\tau$ has matching arrow type $\tarr{\tau_{in}}{\tau_{out}}$}
 \begin{subequations}
 
 \begin{equation}
-\inferrule[EType]{ }{
+\inferrule[ArrowMatchArrow]{ }{
   \tarr{\tau_{in}}{\tau_{out}} \typearrow \tarr{\tau_{in}}{\tau_{out}} \addcons{\econs}
 }
 \end{equation}
 
 \begin{equation}
 \inferrule[EHole]{
- (B~fresh) \\
- (C~fresh)
+ (B~\text{fresh}) \\
+ (C~\text{fresh})
 }{
-  \tehole^A \typearrow \tarr{\tehole^B}{\tehole^C} \addcons{\{ A \simeq B \rightarrow C \} }
+  \tehole^A \typearrow \tarr{\tehole^B}{\tehole^C} \addcons{\{ \tehole^A \simeq \tarr{\tehole^B}{\tehole^C} \} }
 }
 \end{equation}
 
@@ -130,73 +181,33 @@ e & ::= &
 \end{figure}
 
 \begin{figure}[t]
-\fbox{$\tau \sqsubseteq \tau' $}~~\text{$\tau$ is consistent-less than $\tau'$}
+\fbox{$\tau \simeq \tau $}~~\text{$\tau$ is consistent to $\tau$}
 \begin{subequations}
 
 \begin{equation}
-\inferrule[CLNum]{ }{
-  \conless{num}{num}
-}
-\end{equation}
-\begin{equation}
-\inferrule[CLG]{ }{
-  \conless{\ehole^A}{\ehole^A}
-}
-\end{equation}
-\begin{equation}
-\inferrule[CLDL]{ }{
-  \conless{?}{\tau}
-}
-\end{equation}
-
-\begin{equation}
-\inferrule[CLFun]{
-\conless{\tau_1}{\tau_3} \\
-\conless{\tau_2}{\tau_4}
- }{
-  \conless{\tarr{\tau_1}{\tau_2}}{\tarr{\tau_3}{\tau_4}}
-}
-\end{equation}
-
-
-\end{subequations}
-\end{figure}
-
-
-\begin{figure}[t]
-\fbox{$\tau \simeq \tau $}~~\text{$\tau$ is consistent equivalent to $\tau$}
-\begin{subequations}
-
-\begin{equation}
-\inferrule[CENum]{
+\inferrule[CNum]{
 }{
   num \simeq num
 }
 \end{equation}
 
+
 \begin{equation}
-\inferrule[CEG]{
+\inferrule[CDL]{
 }{
-  \ehole^A \simeq \ehole^A
+  \tehole^A \simeq \tau
 }
 \end{equation}
 
 \begin{equation}
-\inferrule[CEDL]{
+\inferrule[CDR]{
 }{
-  ? \simeq \tau
+  \tau \simeq \tehole^A
 }
 \end{equation}
 
 \begin{equation}
-\inferrule[CEDR]{
-}{
-  \tau \simeq ?
-}
-\end{equation}
-
-\begin{equation}
-\inferrule[CEFun]{
+\inferrule[CArrow]{
 \tau_1 \simeq \tau_3 \\
 \tau_2 \simeq \tau_4
 }{
@@ -204,32 +215,6 @@ e & ::= &
 }
 \end{equation}
 
-\begin{equation}
-\inferrule[CEVL]{
-\conless{\tau_1}{\tau_2}
-}{
-  \tau_1 \simeq \tau_2
-}
-\end{equation}
-
-\begin{equation}
-\inferrule[CEVR]{
-\conless{\tau_1}{\tau_2}
-}{
-  \tau_2 \simeq \tau_1
-}
-\end{equation}
-
 \end{subequations}
 \end{figure}
 
-
-\begin{thm}[Preservation]
-  \label{thrm:preservation}
-  If $\tau \simeq \tau' \addcons{C}$ then $\tau \simeq \tau'$
-\end{thm}
-
-\begin{thm}[Constraint Existence]
-  \label{Constraint Existence}
-  If $\Gamma \vdash e \Rightarrow \tau$ then $\consexptyp{\Gamma}{e}{\tau}{C}$ for some C
-\end{thm}
