@@ -9,6 +9,7 @@ $\arraycolsep=4pt\begin{array}{lll}
 e & ::= &
   x ~\vert~
   \lamfunc{x}{e} ~\vert~
+  \lamfunc{x:\tau}{e} ~\vert~
   e(e) ~\vert~
   \underlinenum{n} ~\vert~
   (e+e) ~\vert~
@@ -82,23 +83,23 @@ C & :: = &
   \consexptyp{\Gamma}{\lamfunc{x:\tau_{in}}{e}}{\tarr{\tau_{in}}{\tau_{out}}}{C_1 \cup C_2}
 }
 \end{equation}
-\begin{equation}
-\inferrule[SLetAnn]{
- \ana{\Gamma}{e_1}{\tau_1}{C_1} \\
- \consexptyp{\Gamma,x : \tau_1}{e_2}{\tau_2}{C_2}
-}{
-  \consexptyp{\Gamma}{let \; x:\tau_1 \; be \; e_1 \; in \; e_2}{\tau_2}{C_1 \cup C_2}
-}
-\end{equation}
+%\begin{equation}
+%\inferrule[SLetAnn]{
+% \ana{\Gamma}{e_1}{\tau_1}{C_1} \\
+% \consexptyp{\Gamma,x : \tau_1}{e_2}{\tau_2}{C_2}
+%}{
+%  \consexptyp{\Gamma}{let \; x:\tau_1 \; be \; e_1 \; in \; e_2}{\tau_2}%{C_1 \cup C_2}
+%}
+%\end{equation}
 
-\begin{equation}
-\inferrule[SLet]{
- \consexptyp{\Gamma}{e_1}{\tau_1}{C_1} \\
- \consexptyp{\Gamma,x : \tau_1}{e_2}{\tau_2}{C_2}
-}{
-  \consexptyp{\Gamma}{let \; x \; be \; e_1 \; in \; e_2}{\tau_2}{C_1 \cup C_2}
-}
-\end{equation}
+% \begin{equation}
+% \inferrule[SLet]{
+%  \consexptyp{\Gamma}{e_1}{\tau_1}{C_1} \\
+%  \consexptyp{\Gamma,x : \tau_1}{e_2}{\tau_2}{C_2}
+% }{
+%   \consexptyp{\Gamma}{let \; x \; be \; e_1 \; in \; e_2}{\tau_2}{C_1 \cup C_2}
+% }
+% \end{equation}
 
 \end{subequations}
 \end{figure}
@@ -135,23 +136,23 @@ C & :: = &
 }
 \end{equation}
 
-\begin{equation}
-\inferrule[ALetAnn]{
- \ana{\Gamma}{e_1}{\tau_1}{C_1} \\
- \ana{\Gamma,x : \tau_1}{e_2}{\tau_2}{C_2}
-}{
-  \ana{\Gamma}{let \; x:\tau_1 \; be \; e_1 \; in \; e_2}{\tau_2}{C_1 \cup C_2}
-}
-\end{equation}
+% \begin{equation}
+% \inferrule[ALetAnn]{
+%  \ana{\Gamma}{e_1}{\tau_1}{C_1} \\
+%  \ana{\Gamma,x : \tau_1}{e_2}{\tau_2}{C_2}
+% }{
+%   \ana{\Gamma}{let \; x:\tau_1 \; be \; e_1 \; in \; e_2}{\tau_2}{C_1 \cup C_2}
+% }
+% \end{equation}
 
-\begin{equation}
-\inferrule[ALet]{
- \consexptyp{\Gamma}{e_1}{\tau_1}{C_1} \\
- \ana{\Gamma,x : \tau_1}{e_2}{\tau_2}{C_2}
-}{
-  \ana{\Gamma}{let \; x \; be \; e_1 \; in \; e_2}{\tau_2}{C_1 \cup C_2}
-}
-\end{equation}
+% \begin{equation}
+% \inferrule[ALet]{
+%  \consexptyp{\Gamma}{e_1}{\tau_1}{C_1} \\
+%  \ana{\Gamma,x : \tau_1}{e_2}{\tau_2}{C_2}
+% }{
+%   \ana{\Gamma}{let \; x \; be \; e_1 \; in \; e_2}{\tau_2}{C_1 \cup C_2}
+% }
+% \end{equation}
 
 
 \end{subequations}
