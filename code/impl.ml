@@ -86,7 +86,6 @@ module Ctx = struct
           ctx empty
 end
 
-(* TBD: build map for fresh var? *)
 let get_match_arrow_typ (t: Typ.t): (Typ.t * Constraints.t) option = 
   match t with
   | THole _ -> (
@@ -124,7 +123,7 @@ let rec update_type_variable (ctx: Ctx.t) (e: Exp.t): unit =
   | EExpHole _ -> ()
 
 let rec syn (ctx: Ctx.t) (e: Exp.t): (Typ.t * Constraints.t) option =
-  (* update_type_variable ctx e; *)
+  update_type_variable ctx e;
   match e with
   | EVar x -> (
     match Ctx.lookup ctx x with
