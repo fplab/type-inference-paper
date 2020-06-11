@@ -1,6 +1,5 @@
-exception NotImplemented
-
 exception Impossible
+
 module Identifier = struct
   type t = string
 end
@@ -9,6 +8,7 @@ module TypeInferenceVar = struct
   type t = int
   let recent (var_1:t) (var_2:t) = max var_1 var_2;; 
 end
+
 module Typ = struct
   type t =
     | THole of TypeInferenceVar.t
@@ -33,6 +33,7 @@ module Typ = struct
       load_type_variable(ty2);
     )
 end
+
 
 module Exp = struct
 
@@ -86,16 +87,16 @@ module Ctx = struct
 end
 
 (* TBD: build map for fresh var? *)
-let get_match_arrow_typ (t: Typ.t): Typ.t option * Constraints.t = 
+let get_match_arrow_typ (t: Typ.t): (Typ.t * Constraints.t) option = 
   match t with
   | THole _ -> (
     let var_in = Typ.gen_new_type_var() in 
     let var_out = Typ.gen_new_type_var() in
     let arrow_typ = Typ.TArrow (THole(var_in),THole(var_out)) in
-    (Some arrow_typ,[(t,arrow_typ)])
+    Some (arrow_typ,[(t,arrow_typ)])
     )
-  | TArrow (_,_) -> (Some t, [])
-  | _ -> (None, [])
+  | TArrow (_,_) -> Some (t, [])
+  | _ -> None
 
 
 let rec update_type_variable (ctx: Ctx.t) (e: Exp.t): unit =
@@ -122,65 +123,69 @@ let rec update_type_variable (ctx: Ctx.t) (e: Exp.t): unit =
   | EEmptyHole _
   | EExpHole _ -> ()
 
-let rec syn (ctx: Ctx.t) (e: Exp.t): Typ.t option * Constraints.t =
+let rec syn (ctx: Ctx.t) (e: Exp.t): (Typ.t * Constraints.t) option =
   (* update_type_variable ctx e; *)
   match e with
-  | EVar x -> (Ctx.lookup ctx x, [])
-  | ELam (_, _) -> (None,[]) 
+  | EVar x -> (
+    match Ctx.lookup ctx x with
+    | None -> None
+    | Some(typ) -> Some (typ, [])
+  )
+  | ELam (_, _) -> None
   | ELamAnn (x, ty1, e2) -> (
       match syn (Ctx.extend ctx (x, ty1)) e2 with
-      | (None, cons)-> (None, cons) 
-      | (Some ty2, cons) -> (Some (TArrow (ty1, ty2)),cons) )
+      | None -> None
+      | Some (ty2, cons) -> Some (TArrow (ty1, ty2),cons) )
   | EBinOp (e1, OpPlus, e2) -> (
       match (ana ctx e1 Typ.TNum, ana ctx e2 Typ.TNum) with
-      | ((false, cons1), (_, cons2)) 
-      | ((_, cons1), (false, cons2)) -> (None,cons1@cons2)
-      | ((true,cons1), (true,cons2)) -> (Some TNum, cons1@cons2) )
+      | (None, _) 
+      | (_, None) -> None
+      | (Some cons1, Some cons2) -> Some (TNum, cons1@cons2) )
   | EBinOp (e1, OpAp, e2) -> (
       match (syn ctx e1) with
-      | (None, cons)-> (None, cons) (* TBD *)
-      | (Some(typ_e1), cons1) -> (
+      | None -> None
+      | Some (typ_e1, cons1) -> (
           match get_match_arrow_typ typ_e1 with
-          | (None, cons2) -> (None, cons1@cons2) (* TBD *)
-          | (Some(TArrow (ty_in, ty_out)), cons2) -> (
+          | None -> None
+          | Some ((TArrow (ty_in, ty_out)), cons2) -> (
             match ana ctx e2 ty_in with
-            | (false, _) -> (None, []) (* TBD *)
-            | (true, cons3) -> (Some ty_out, cons1@cons2@cons3)
+            | None -> None
+            | Some cons3 -> Some (ty_out, cons1@cons2@cons3)
           )
           | _ -> raise Impossible
         )
     )
-  | ENumLiteral _ -> (Some TNum, [])
+  | ENumLiteral _ -> Some (TNum, [])
   | EAsc (exp, typ) -> (
       match ana ctx exp typ with
-      | (false, _) -> (None, []) (* TBD *)
-      | (true, cons) -> (Some typ, cons)
+      | None -> None
+      | Some cons -> Some (typ, cons)
   )
-  | EEmptyHole _ -> (Some (THole (Typ.gen_new_type_var())),[])
+  | EEmptyHole _ -> Some (THole (Typ.gen_new_type_var()),[])
   | EExpHole (_, e2) -> (
     match syn ctx e2 with
-    | (None, _)-> (None, []) (* TBD *)
-    | (Some _, cons) -> (Some (THole (Typ.gen_new_type_var())),cons)
+    | None -> None
+    | Some (_, cons) -> Some (THole (Typ.gen_new_type_var()),cons)
   )
-and ana (ctx: Ctx.t) (e: Exp.t) (ty: Typ.t): bool * Constraints.t =
+and ana (ctx: Ctx.t) (e: Exp.t) (ty: Typ.t): Constraints.t option =
   match e with
   | ELam (x, exp) -> (
     match get_match_arrow_typ ty with
-    | (None, _) -> (false, []) (* TBD *)
-    | (Some(TArrow (ty_in, ty_out)), cons1) -> (
+    | None -> None
+    | Some (TArrow (ty_in, ty_out), cons1) -> (
       match ana (Ctx.extend ctx (x, ty_in)) exp ty_out with
-      | (false, _) -> (false, []) (* TBD *)
-      | (true, cons2) -> (true, cons1@cons2)
+      | None -> None
+      | Some cons2 -> Some (cons1@cons2)
     )
     | _ -> raise Impossible
   ) 
   | ELamAnn (x, ty_in', exp) -> (
     match get_match_arrow_typ ty with
-    | (None, _) -> (false, []) (* TBD *)
-    | (Some(TArrow (ty_in, ty_out)), cons1) -> (
+    | None -> None
+    | Some (TArrow (ty_in, ty_out), cons1) -> (
       match ana (Ctx.extend ctx (x, ty_in')) exp ty_out with
-      | (false, _) -> (false, []) (* TBD *)
-      | (true, cons2) -> (true, cons1@cons2@[(ty_in,ty_in')])
+      | None -> None
+      | Some cons2 -> Some (cons1@cons2@[(ty_in,ty_in')])
     )
     | _ -> raise Impossible
   ) 
@@ -192,8 +197,8 @@ and ana (ctx: Ctx.t) (e: Exp.t) (ty: Typ.t): bool * Constraints.t =
   | EExpHole _ ->
     (* subsumption *)
       (match syn ctx e with
-        | (None, _) -> (false, []) (* TBD *)
-        | (Some ty', cons) -> (true, cons@[(ty,ty')])
+        | None -> None
+        | Some (ty', cons) -> Some (cons@[(ty,ty')])
       )
 ;;
   
