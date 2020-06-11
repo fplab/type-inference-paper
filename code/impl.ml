@@ -231,3 +231,8 @@ and unify_one (t1: Typ.t) (t2: Typ.t) : Typ.subs option =
     | (TArrow(a, b), TArrow(x, y)) -> unify [(a, x); (b, y)]
     | _ -> None
   ;;
+
+(* let print_subs(subs: Typ.subs) =
+  match subs with
+  | [] -> Printf.printf "%s\n" "*** Empty subs ***"
+  |  *)
