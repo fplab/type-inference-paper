@@ -1,2 +1,0 @@
-parser.ml: Exp Lexing Syntax Typ
-parser.mli: Lexing Syntax
