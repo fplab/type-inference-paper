@@ -27,7 +27,7 @@ module Typ = struct
         ;;
     let rec load_type_variable (t: t) =
         match t with
-        | THole id -> type_variable:= TypeInferenceVar.recent id !type_variable
+        | THole id -> type_variable:= TypeInferenceVar.recent (id+1) !type_variable
         | TNum -> ()
         | TArrow (ty1,ty2)-> (
         load_type_variable(ty1);

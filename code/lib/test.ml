@@ -3,6 +3,8 @@ open Impl
 let parse = Myparse.parse;;
 let testcases: (Ctx.t * Exp.t) list = [
   (Ctx.empty, parse "5+5+(|0|)");
+  (Ctx.empty, parse "fun (x:Hole[2]) -> x 5");
+  (Ctx.empty, parse "fun (x:Num->Num) -> x 5");
   (Ctx.extend Ctx.empty ("x", TArrow(TNum,TNum)), parse "x 1");
 ]
 ;;

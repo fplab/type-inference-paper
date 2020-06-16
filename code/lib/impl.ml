@@ -183,11 +183,19 @@ let rec string_of_exp(exp: Exp.t) =
 let print_exp(exp: Exp.t) = Printf.printf "EXP:  %s\n" (string_of_exp exp)
 ;;
 
+let rec print_cons(constraints: Constraints.t) = 
+  match constraints with
+  | [] -> ();
+  | hd::tl -> (
+    let (typ1,typ2) = hd in Printf.printf "%s\n" (string_of_typ(typ1)^" == "^ string_of_typ(typ2));
+    print_cons(tl);
+  )
 let solve (ctx: Ctx.t) (e: Exp.t) = 
   match syn ctx e with
   | None -> Printf.printf "%s" "ERROR\n: syn/ana error"
   | Some (typ,cons) -> (
     Printf.printf "exp infer typ: %s\n" (string_of_typ typ);
+    print_cons cons;
     match unify cons with
     | None -> Printf.printf "%s\n" "ERROR: unify error"
     | Some subs -> ( 
@@ -196,4 +204,4 @@ let solve (ctx: Ctx.t) (e: Exp.t) =
       Printf.printf "exp new infer typ: %s\n" (string_of_typ new_typ);
     )
   )
-
+;;
