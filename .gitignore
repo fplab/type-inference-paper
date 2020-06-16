@@ -160,4 +160,4 @@ TSWLatexianTemp*
 
 type-inference-paper.pdf
 
-./code/_build
+*/_build
