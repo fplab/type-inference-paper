@@ -1,0 +1,20 @@
+(** @canonical Dune__exe.Impl *)
+module Impl = Dune__exe__Impl
+
+(** @canonical Dune__exe.Lexer *)
+module Lexer = Dune__exe__Lexer
+
+(** @canonical Dune__exe.Myparse *)
+module Myparse = Dune__exe__Myparse
+
+(** @canonical Dune__exe.Parser *)
+module Parser = Dune__exe__Parser
+
+(** @canonical Dune__exe.Start *)
+module Start = Dune__exe__Start
+
+(** @canonical Dune__exe.Syntax *)
+module Syntax = Dune__exe__Syntax
+
+(** @canonical Dune__exe.Test *)
+module Test = Dune__exe__Test
