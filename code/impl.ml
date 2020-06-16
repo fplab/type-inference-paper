@@ -96,7 +96,7 @@ let get_match_arrow_typ (t: Typ.t): (Typ.t * Constraints.t) option =
     )
   | TArrow (_,_) -> Some (t, [])
   | _ -> None
-
+;;
 
 let rec update_type_variable (ctx: Ctx.t) (e: Exp.t): unit =
   match e with
@@ -114,13 +114,14 @@ let rec update_type_variable (ctx: Ctx.t) (e: Exp.t): unit =
     update_type_variable ctx e1;
     update_type_variable ctx e2;
   )
-  | ENumLiteral _ -> ()
+  | ENumLiteral _ -> ();
   | EAsc (exp, typ) -> (
     Typ.load_type_variable(typ);
     update_type_variable ctx exp;
   )
   | EEmptyHole _
-  | EExpHole _ -> ()
+  | EExpHole _ -> ();
+;;
 
 let rec syn (ctx: Ctx.t) (e: Exp.t): (Typ.t * Constraints.t) option =
   update_type_variable ctx e;
@@ -200,7 +201,7 @@ and ana (ctx: Ctx.t) (e: Exp.t) (ty: Typ.t): Constraints.t option =
         | Some (ty', cons) -> Some (cons@[(ty,ty')])
       )
 ;;
-  
+
 let rec substitute (u: Typ.t) (x: TypeInferenceVar.t) (t: Typ.t) : Typ.t =
   match t with
   | TNum -> t
@@ -231,7 +232,48 @@ and unify_one (t1: Typ.t) (t2: Typ.t) : Typ.subs option =
     | _ -> None
   ;;
 
-(* let print_subs(subs: Typ.subs) =
+let rec string_of_typ(typ:Typ.t) =
+  match typ with
+  | THole var ->  "THole["^string_of_int(var)^"]"
+  | TNum -> "TNum"
+  | TArrow (t1,t2) -> "TArrow:" ^ string_of_typ(t1) ^ "->"^ string_of_typ(t2)
+;;
+
+let rec print_subs(subs: Typ.subs) =
   match subs with
   | [] -> Printf.printf "%s\n" "*** Empty subs ***"
-  |  *)
+  | hd::tl -> 
+    let (var,typ) = hd in
+    Printf.printf "%s\n" ("(" ^ string_of_int(var) ^ ") ("^ string_of_typ(typ) ^ ")");
+    print_subs(tl);
+;;
+
+let rec string_of_exp(exp: Exp.t) =
+  match exp with
+  | EVar id -> id
+  | ELam (id,exp) -> "λ"^id^"."^string_of_exp(exp);
+  | ELamAnn (id,typ,exp) -> "λ"^id^":"^string_of_typ(typ)^"."^string_of_exp(exp);
+  | EBinOp (exp1,binop,exp2) -> (
+    match binop with
+    | OpAp -> string_of_exp(exp1)^"__"^string_of_exp(exp2)
+    | OpPlus -> string_of_exp(exp1)^" + "^string_of_exp(exp2)
+  )
+  | ENumLiteral num -> string_of_int(num)
+  | EAsc (exp,typ) -> string_of_exp(exp)^":"^string_of_typ(typ)
+  | EEmptyHole hole_id -> "(|["^string_of_int(hole_id)^"]|)"
+  | EExpHole (hole_id, exp)->"(|["^string_of_int(hole_id)^"]"^string_of_exp(exp)^"|)"
+;;
+
+let print_exp(exp: Exp.t) = Printf.printf "EXP:  %s\n" (string_of_exp exp)
+;;
+
+let solve (e: Exp.t) = 
+  match syn [] e with
+  | None -> Printf.printf "%s" "ERROR\n: syn/ana error"
+  | Some (typ,cons) -> (
+    Printf.printf "exp infer typ: %s\n" (string_of_typ typ);
+    match unify cons with
+    | None -> Printf.printf "%s\n" "ERROR: unify error"
+    | Some subs -> print_subs subs
+  )
+
