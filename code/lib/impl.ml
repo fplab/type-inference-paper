@@ -153,7 +153,7 @@ let rec string_of_typ(typ:Typ.t) =
   match typ with
   | THole var ->  "THole["^string_of_int(var)^"]"
   | TNum -> "TNum"
-  | TArrow (t1,t2) -> "TArrow:" ^ string_of_typ(t1) ^ "->"^ string_of_typ(t2)
+  | TArrow (t1,t2) -> string_of_typ(t1) ^ "->"^ string_of_typ(t2)
 ;;
 
 let rec print_subs(subs: Typ.subs) =
@@ -172,7 +172,7 @@ let rec string_of_exp(exp: Exp.t) =
   | ELamAnn (id,typ,exp) -> "λ"^id^":"^string_of_typ(typ)^"."^string_of_exp(exp);
   | EBinOp (exp1,binop,exp2) -> (
     match binop with
-    | OpAp -> string_of_exp(exp1)^"__"^string_of_exp(exp2)
+    | OpAp -> string_of_exp(exp1)^" "^string_of_exp(exp2)
     | OpPlus -> string_of_exp(exp1)^" + "^string_of_exp(exp2)
   )
   | ENumLiteral num -> string_of_int(num)
