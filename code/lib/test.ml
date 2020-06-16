@@ -1,8 +1,10 @@
 open Syntax
 open Impl
 let parse = Myparse.parse;;
+
 let testcases: (Ctx.t * Exp.t* string) list = [
   (Ctx.empty, parse "5+5+(|0|)", "5+5+(|0|)");
+  (Ctx.empty, parse "fun (x:Hole[2]) -> x + 5", "fun (x:Hole[2]) -> x + 5");
   (Ctx.empty, parse "fun (x:Hole[2]) -> x 5", "fun (x:Hole[2]) -> x 5");
   (Ctx.empty, parse "fun (x:Num->Num) -> x 5", "fun (x:Num->Num) -> x 5");
   (Ctx.empty, EAsc (parse "(|0|)", TArrow(TNum,TNum)), "(|0|) : Num->Num");
@@ -10,6 +12,7 @@ let testcases: (Ctx.t * Exp.t* string) list = [
   (Ctx.extend Ctx.empty ("x", TArrow(TNum,TNum)), parse "x 1", "x 1");
 ]
 ;;
+
 let rec _test (testcases: (Ctx.t * Exp.t* string) list) (index: int) = (
   match testcases with
   | [] -> ();
