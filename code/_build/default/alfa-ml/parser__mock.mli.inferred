@@ -1,0 +1,59 @@
+type token =
+    UNROLL
+  | UNIT
+  | TIMES
+  | TID of string
+  | THEN
+  | RSQUARE
+  | RPRJ
+  | RPAREN
+  | ROLL
+  | REC
+  | R
+  | PLUS
+  | OFTYPE
+  | OF
+  | NUM
+  | MINUS
+  | LT
+  | LSQUARE
+  | LPRJ
+  | LPAREN
+  | LET
+  | L
+  | INT of int
+  | IN
+  | IF
+  | GT
+  | FUN
+  | FORALLT
+  | FORALL
+  | FIX
+  | EQ
+  | EOL
+  | ELSE
+  | EID of string
+  | DOT
+  | COMMA
+  | CASE
+  | BOOLLIT of bool
+  | BOOL
+  | BE
+  | AT
+  | ARROW
+val menhir_begin_marker : int
+val xv_ty_sum : (string, string) Syntax.Typ.p
+val xv_ty_prod : (string, string) Syntax.Typ.p
+val xv_ty : (string, string) Syntax.Typ.p
+val xv_tid : string
+val xv_simple : Syntax.Exp.t
+val xv_right : Syntax.Exp.t
+val xv_main : Syntax.Exp.t
+val xv_factor : Syntax.Exp.t
+val xv_expr : Syntax.Exp.t
+val xv_eid : string
+val xv_boolean : Syntax.Exp.t
+val xv_base_ty : (string, string) Syntax.Typ.p
+val xv_arith : Syntax.Exp.t
+val xv_app : Syntax.Exp.t
+val menhir_end_marker : int

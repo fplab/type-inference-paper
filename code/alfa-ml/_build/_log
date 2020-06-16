@@ -2,23 +2,23 @@
 # Target: main.ml.depends, tags: { extension:ml, file:main.ml, ocaml, ocamldep, quiet }
 /home/zoep/.opam/4.08.0/bin/ocamldep.opt -modules main.ml > main.ml.depends
 # Target: lexer.mll, tags: { extension:mll, file:lexer.mll, lexer, ocaml, ocamllex, quiet }
-/home/zoep/.opam/4.08.0/bin/ocamllex.opt -q lexer.mll # cached
+/home/zoep/.opam/4.08.0/bin/ocamllex.opt -q lexer.mll
 # Target: lexer.ml.depends, tags: { extension:ml, file:lexer.ml, ocaml, ocamldep, quiet }
-/home/zoep/.opam/4.08.0/bin/ocamldep.opt -modules lexer.ml > lexer.ml.depends # cached
+/home/zoep/.opam/4.08.0/bin/ocamldep.opt -modules lexer.ml > lexer.ml.depends
 # Target: parser.mly.depends, tags: { extension:mly, file:parser.mly, infer, menhir_ocamldep, ocaml, ocamldep, quiet }
-menhir --raw-depend --ocamldep '/home/zoep/.opam/4.08.0/bin/ocamldep.opt -modules' parser.mly > parser.mly.depends # cached
+menhir --raw-depend --ocamldep '/home/zoep/.opam/4.08.0/bin/ocamldep.opt -modules' parser.mly > parser.mly.depends
 # Target: syntax.ml.depends, tags: { extension:ml, file:syntax.ml, ocaml, ocamldep, quiet }
-/home/zoep/.opam/4.08.0/bin/ocamldep.opt -modules syntax.ml > syntax.ml.depends # cached
+/home/zoep/.opam/4.08.0/bin/ocamldep.opt -modules syntax.ml > syntax.ml.depends
 # Target: syntax.cmo, tags: { byte, compile, extension:cmo, extension:ml, file:syntax.cmo, file:syntax.ml, implem, ocaml, quiet }
-/home/zoep/.opam/4.08.0/bin/ocamlc.opt -c -o syntax.cmo syntax.ml # cached
+/home/zoep/.opam/4.08.0/bin/ocamlc.opt -c -o syntax.cmo syntax.ml
 # Target: parser.mly, tags: { byte, compile, extension:ml, extension:mly, file:parser.ml, file:parser.mly, infer, menhir, ocaml, parser, quiet }
-menhir --ocamlc /home/zoep/.opam/4.08.0/bin/ocamlc.opt --infer parser.mly # cached
+menhir --ocamlc /home/zoep/.opam/4.08.0/bin/ocamlc.opt --infer parser.mly
 # Target: parser.mli.depends, tags: { extension:mli, file:parser.mli, ocaml, ocamldep, quiet }
-/home/zoep/.opam/4.08.0/bin/ocamldep.opt -modules parser.mli > parser.mli.depends # cached
+/home/zoep/.opam/4.08.0/bin/ocamldep.opt -modules parser.mli > parser.mli.depends
 # Target: parser.cmi, tags: { byte, compile, extension:mli, file:parser.mli, interf, ocaml, quiet }
-/home/zoep/.opam/4.08.0/bin/ocamlc.opt -c -o parser.cmi parser.mli # cached
+/home/zoep/.opam/4.08.0/bin/ocamlc.opt -c -o parser.cmi parser.mli
 # Target: lexer.cmo, tags: { byte, compile, extension:cmo, extension:ml, file:lexer.cmo, file:lexer.ml, implem, ocaml, quiet }
-/home/zoep/.opam/4.08.0/bin/ocamlc.opt -c -o lexer.cmo lexer.ml # cached
+/home/zoep/.opam/4.08.0/bin/ocamlc.opt -c -o lexer.cmo lexer.ml
 # Target: main.cmo, tags: { byte, compile, extension:cmo, extension:ml, file:main.cmo, file:main.ml, implem, ocaml, quiet }
 /home/zoep/.opam/4.08.0/bin/ocamlc.opt -c -o main.cmo main.ml
 # Target: parser.ml.depends, tags: { extension:ml, file:parser.ml, ocaml, ocamldep, quiet }

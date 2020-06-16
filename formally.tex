@@ -78,9 +78,9 @@ C & :: = &
 
 \begin{equation}
 \inferrule[SLamAnn]{
-  \consexptyp{\Gamma, x : \tau_{in}}{e}{\tau_{out}}{C_2}
+  \consexptyp{\Gamma, x : \tau_{in}}{e}{\tau_{out}}{C}
 }{
-  \consexptyp{\Gamma}{\lamfunc{x:\tau_{in}}{e}}{\tarr{\tau_{in}}{\tau_{out}}}{C_1 \cup C_2}
+  \consexptyp{\Gamma}{\lamfunc{x:\tau_{in}}{e}}{\tarr{\tau_{in}}{\tau_{out}}}{C}
 }
 \end{equation}
 %\begin{equation}
@@ -112,9 +112,9 @@ C & :: = &
 \inferrule[ALamAnn]{
  \tau \typearrow \tarr{\tau_{in}}{\tau_{out}} \addcons{C_1} \\
   \ana{\Gamma, x : \tau'_{in}}{e}{\tau_{out}}{C_2} \\
-  \tau_{in} \simeq \tau'_{in}
+  \tau_{in} \sim \tau'_{in}
 }{
-  \ana{\Gamma}{\lamfunc{x:\tau'_{in}}{e}}{\tau}{C_1 \cup C_2 \cup \{ \tau_{in} \simeq \tau'_{in} \}}
+  \ana{\Gamma}{\lamfunc{x:\tau'_{in}}{e}}{\tau}{C_1 \cup C_2 \cup \{ \tau_{in} \sim \tau'_{in} \}}
 }
 \end{equation}
 
@@ -130,9 +130,9 @@ C & :: = &
 \begin{equation}
 \inferrule[ASubsumption]{
   \consexptyp{\Gamma}{e}{\tau'}{C_1} \\
-  \tau \simeq \tau' 
+  \tau \sim \tau' 
 }{
-  \ana{\Gamma}{e}{\tau}{C_1 \cup \{\tau \simeq \tau'  \}}
+  \ana{\Gamma}{e}{\tau}{C_1 \cup \{\tau \sim \tau'  \}}
 }
 \end{equation}
 
@@ -168,13 +168,14 @@ C & :: = &
   \tarr{\tau_{in}}{\tau_{out}} \typearrow \tarr{\tau_{in}}{\tau_{out}} \addcons{\econs}
 }
 \end{equation}
-
+\newline
+when $\tau$ is hole type:
 \begin{equation}
-\inferrule[EHole]{
+\inferrule[ ]{
  (B~\text{fresh}) \\
  (C~\text{fresh})
 }{
-  \tehole^A \typearrow \tarr{\tehole^B}{\tehole^C} \addcons{\{ \tehole^A \simeq \tarr{\tehole^B}{\tehole^C} \} }
+  \tehole^A \typearrow \tarr{\tehole^B}{\tehole^C} \addcons{\{ \tehole^A \sim \tarr{\tehole^B}{\tehole^C} \} }
 }
 \end{equation}
 
@@ -182,13 +183,13 @@ C & :: = &
 \end{figure}
 
 \begin{figure}[t]
-\fbox{$\tau \simeq \tau $}~~\text{$\tau$ is consistent to $\tau$}
+\fbox{$\tau \sim \tau $}~~\text{$\tau$ is consistent to $\tau$}
 \begin{subequations}
 
 \begin{equation}
 \inferrule[CNum]{
 }{
-  num \simeq num
+  num \sim num
 }
 \end{equation}
 
@@ -196,23 +197,23 @@ C & :: = &
 \begin{equation}
 \inferrule[CDL]{
 }{
-  \tehole^A \simeq \tau
+  \tehole^A \sim \tau
 }
 \end{equation}
 
 \begin{equation}
 \inferrule[CDR]{
 }{
-  \tau \simeq \tehole^A
+  \tau \sim \tehole^A
 }
 \end{equation}
 
 \begin{equation}
 \inferrule[CArrow]{
-\tau_1 \simeq \tau_3 \\
-\tau_2 \simeq \tau_4
+\tau_1 \sim \tau_3 \\
+\tau_2 \sim \tau_4
 }{
-  \tarr{\tau_1}{\tau_2} \simeq \tarr{\tau_3}{\tau_4}
+  \tarr{\tau_1}{\tau_2} \sim \tarr{\tau_3}{\tau_4}
 }
 \end{equation}
 

@@ -159,3 +159,5 @@ pythontex-files-*/
 TSWLatexianTemp*
 
 type-inference-paper.pdf
+
+./code/_build
