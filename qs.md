@@ -3,7 +3,7 @@
 1. counter example for our current system:
 
 ```
-contex: z:bool
+context: z:bool
 
 λx:hole[A].(
     if z then (
@@ -15,13 +15,22 @@ contex: z:bool
 ```
 
 
-2. solution:
+2. 
+    1. modification of unification alg:
+        
+        change substitution function. 
+        
+        when ``` ~ ```, substitute;
+        
+        when ``` < ``` , keep the cons in constraint lists
+        
+    2. solution:
 
-```
-[(hole[A] ~ int)]  =>  hole[A] = int
-[(hole[A] ~ int); (hole[A] ~ bool);] => ill-type
-[(hole[A] < int); (hole[A] < bool);] => hole[A] = bool or int
-```
+        ```
+        [(hole[A] ~ int)]  =>  hole[A] = int
+        [(hole[A] ~ int); (hole[A] ~ bool);] => ill-type
+        [(hole[A] < int); (hole[A] < bool);] => hole[A] = bool or int
+        ```
 
 3. consistency
 
