@@ -16,21 +16,63 @@ context: z:bool
 
 
 2. 
+    subs:   id*Typ.t list  [("A", num); ("B", bool)]   ==>  
+            id*op*(Typ.t list) list [("A", <, [num,bool]); ("B", ~,[bool])];
+
+    cons:   Typ.t*Typ.t list ==> Typ.t*op*Typ.t
+
     1. modification of unification alg:
+        - change constraints gathering
         
-        change substitution function. 
-        
-        when ``` ~ ```, substitute;
-        
-        when ``` < ``` , keep the cons in constraint lists
-        
+        - change unify function. 
+            in unify:
+
+            ```
+            match cons with
+            | (x, y) :: xs ->
+                let subs_xs =  unify xs 
+                in (
+                 match unify_one (apply subs_xs x) (apply subs_xs y) with
+                 | ("A", <, t) -> 
+                    if (subs_xs.contain "A" && op == <), subs_xs["A"].append(t)
+                    if (subs_xs.contain "A" && op == ~), ignore
+                    esle add ("A", <, t) into subs_xs
+                 | ("A", ~, t) -> 
+                    if (subs_xs.contain "A" && op == <), subs_xs["A"] = ("A", ~, t)
+                    if (subs_xs.contain "A" && op == ~), error
+                    esle add ("A", ~, t) into subs_xs
+                )
+            ```
+
+            in unify_one:
+            ```
+            (THole "A", <, t) => ("A", <, t);
+            (THole "A", ~, t) => ("A", ~, t);
+            ```
+            
+            in apply:
+            only applys (_, ~, _), not (_, <, _)
+
     2. solution:
 
         ```
-        [(hole[A] ~ int)]  =>  hole[A] = int
-        [(hole[A] ~ int); (hole[A] ~ bool);] => ill-type
-        [(hole[A] < int); (hole[A] < bool);] => hole[A] = bool or int
+        cons: [(THole "A", ~, int)]  
+        subs: [("A", ~, int)]  
+        ==> hole[A] = int
+
+        cons: [(THole "A", ~, int); (THole "A", ~, bool);]
+        subs: None
+        ==> ill-type
+
+        cons: [(THole "A", <, int); (THole "A", <, bool);] 
+        subs: [("A", <, [int, bool]);]
+        ==> hole[A] = int or bool
+
+        cons: [(THole "A", ~, int); (THole "A", <, bool);]  
+        subs: [("A", ~, int);]
+        ==>  hole[A] = int
         ```
+
 
 3. consistency
 
@@ -41,7 +83,7 @@ context: z:bool
         ---------------------
         t1 -> t2  ~  t3 -> t4
 
-    4. ``` ? < t (t is all other types except THole) ```
+    4. ```? ~ t or ? < t ``` (t is all other types except THole) *
 
     5. 
         ```
