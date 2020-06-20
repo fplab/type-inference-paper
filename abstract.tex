@@ -1,0 +1,7 @@
+% !TEX root = hazel-LIVE2018.tex
+
+\begin{abstract}
+\emph{Type inference} allows programmers to omit type annotations while still permitting type checking. The problem is that type inference only works on complete programs, e.g. syntactically well-formed expressions. This paper introduces a \emph{type hole inference} system that applies type inference on incomplete programs by extending bidirectional static semantics with \emph{type constraints} and using a unification-based algorithm to solve constraints. Incomplete programs are modeled by a bidirectionally typed lambda calculus extended with holes. Hole stands for missing types and expressions. 
+\emph{Type hole inference} takes two steps. First, use bidirectional static semantics with holes for type checking, expression type inference and type constraints collecting. \emph{Type constraints} are  type consistency equations appearing in the premise of static semantics rules. Second, solve type constraints with a unification-based algorithm to infer types for type holes.
+\end{abstract}
+    
