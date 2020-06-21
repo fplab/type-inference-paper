@@ -1,0 +1,3 @@
+\section{Inference Algorithm}
+\label{sec:infalg}
+\emph{Type hole inference} takes two steps. First, use bidirectional static semantics extended with holes for type checking, \emph{local type inference} and type constraints collecting. \emph{Type constraints} are type consistency equations appearing in the premise of static semantics rules. The system triggers a static error if a program fails bidirectional checking, otherwise, move to the next step. Second, solve type constraints with a unification-based algorithm to infer types for type holes. If type constraints conflict in unification, the system postpones remaining type checking to runtime. 

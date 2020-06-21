@@ -12,7 +12,7 @@ context: z:bool
     ) else (
         (λy:bool.(|e|)) x            <= hole[A] ~ bool     |  hole[A] consistent-less bool 
     )
-)
+) 
 ```
 
 type id_solution = 
