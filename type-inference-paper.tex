@@ -5,8 +5,9 @@
 \documentclass[acmsmall,nonacm]{acmart}
 \else
 %%% Note: arxiv does not want line numbers (they are detected somehow, and are not allowed)
-\documentclass[acmsmall,review,anonymous,nonacm]{acmart}
-\settopmatter{printfolios=false,printccs=false,printacmref=false}
+\documentclass[acmsmall,nonacm]{acmart}
+%\documentclass[acmsmall,review,anonymous,nonacm]{acmart}
+%\settopmatter{printfolios=false,printccs=false,printacmref=false}
 % \settopmatter{printccs=false,printacmref=false}
 \fi
   
@@ -134,14 +135,14 @@ moredelim=**[is][\color{red}]{SSTR}{ESTR}
 \makeatletter\if@ACM@journal\makeatother
 %% Journal information (used by PACMPL format)
 %% Supplied to authors by publisher for camera-ready submission
-\acmJournal{PACMPL}
-\acmVolume{1}
-\acmNumber{1}
-\acmArticle{1}
-\acmYear{2018}
-\acmMonth{3}
-\acmDOI{10.1145/nnnnnnn.nnnnnnn}
-\startPage{1}
+%\acmJournal{PACMPL}
+%\acmVolume{1}
+%\acmNumber{1}
+%\acmArticle{1}
+%\acmYear{2018}
+%\acmMonth{3}
+%\acmDOI{10.1145/nnnnnnn.nnnnnnn}
+%\startPage{1}
 \else\makeatother
 %% Conference information (used by SIGPLAN proceedings format)
 %% Supplied to authors by publisher for camera-ready submission
@@ -184,10 +185,10 @@ moredelim=**[is][\color{red}]{SSTR}{ESTR}
 \begin{document}
 
 %% Title information
-\title{Live and Direct Functional Programming with Holes}         %% [Short Title] is optional;
+\title{Type Hole Inference}         %% [Short Title] is optional;
                                         %% when present, will be used in
                                         %% header instead of Full Title.
-\titlenote{Some text and figures in this submission are taken from a full paper by the authors, which is currently under review.}
+% \titlenote{Some text and figures in this submission are taken from a full paper by the authors, which is currently under review.}
 %% \titlenote is optional;
                                         %% can be repeated if necessary;
                                         %% contents suppressed with 'anonymous'
@@ -215,62 +216,30 @@ moredelim=**[is][\color{red}]{SSTR}{ESTR}
 \affiliation{
   % \position{Position1}
   % \department{Department1}              %% \department is recommended
-  \institution{University of Chicago}            %% \institution is required
+  \institution{University of Michigan}            %% \institution is required
   % \streetaddress{Street1 Address1}
   % \city{City1}
   % \state{State1}
   % \postcode{Post-Code1}
   % \country{Country1}
 }
-\email{comar@cs.uchicago.edu}          %% \email is recommended
+\email{comar@umich.edu}          %% \email is recommended
 
-\author{Ian Voysey}
+\author{Zhiyi Pan}
 % \authornote{with author1 note}          %% \authornote is optional;
                                         %% can be repeated if necessary
 % \orcid{nnnn-nnnn-nnnn-nnnn}             %% \orcid is optional
 \affiliation{
   % \position{Position1}
   % \department{Department1}              %% \department is recommended
-  \institution{Carnegie Mellon University}            %% \institution is required
+  \institution{University of Michigan}            %% \institution is required
   % \streetaddress{Street1 Address1}
   % \city{City1}
   % \state{State1}
   % \postcode{Post-Code1}
   % \country{Country1}
 }
-\email{iev@cs.cmu.edu}          %% \email is recommended
-
-\author{Ravi Chugh}
-% \authornote{with author1 note}          %% \authornote is optional;
-                                        %% can be repeated if necessary
-% \orcid{nnnn-nnnn-nnnn-nnnn}             %% \orcid is optional
-\affiliation{
-  % \position{Position1}
-  % \department{Department1}              %% \department is recommended
-  \institution{University of Chicago}            %% \institution is required
-  % \streetaddress{Street1 Address1}
-  % \city{City1}
-  % \state{State1}
-  % \postcode{Post-Code1}
-  % \country{Country1}
-}
-\email{rchugh@cs.uchicago.edu}          %% \email is recommended
-
-\author{Matthew A. Hammer}
-% \authornote{with author1 note}          %% \authornote is optional;
-                                        %% can be repeated if necessary
-% \orcid{nnnn-nnnn-nnnn-nnnn}             %% \orcid is optional
-\affiliation{
-  % \position{Position1}
-  % \department{Department1}              %% \department is recommended
-  \institution{University of Colorado Boulder}            %% \institution is required
-  % \streetaddress{Street1 Address1}
-  % \city{City1}
-  % \state{State1}
-  % \postcode{Post-Code1}
-  % \country{Country1}
-}
-\email{matthew.hammer@colorado.edu}          %% \email is recommended
+\email{zhiyipan@umich.edu}          %% \email is recommended
 
 
 % %% Author with two affiliations and emails.

@@ -133,6 +133,7 @@ pythontex-files-*/
 # Texpad
 .texpadtmp
 
+
 # TikZ & PGF
 *.dpth
 *.md5
