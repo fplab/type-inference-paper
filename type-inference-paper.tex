@@ -6,7 +6,6 @@
 \else
 %%% Note: arxiv does not want line numbers (they are detected somehow, and are not allowed)
 \documentclass[acmsmall,nonacm]{acmart}
-%\documentclass[acmsmall,review,anonymous,nonacm]{acmart}
 %\settopmatter{printfolios=false,printccs=false,printacmref=false}
 % \settopmatter{printccs=false,printacmref=false}
 \fi
@@ -29,7 +28,9 @@
 \usepackage{subcaption} %% For complex figures with subfigures/subcaptions
                         %% http://ctan.org/pkg/subcaption
 
+
 %% Cyrus packages
+
 \usepackage{multirow}
 \usepackage{multicol}
 \usepackage{microtype}
@@ -45,6 +46,7 @@
 \usepackage{xspace}
 \usepackage{wrapfig}
 \usepackage{extarrows}
+\usepackage{listings}
 % \usepackage[subtle]{savetrees}
 \usepackage{listings}%
 \lstloadlanguages{ML}
@@ -59,7 +61,17 @@ morekeywords={string, float, int, bool},
 classoffset=0,belowskip=\smallskipamount, aboveskip=\smallskipamount,
 moredelim=**[is][\color{red}]{SSTR}{ESTR}
 }
-\usepackage[skip=2\baselineskip]{caption}
+
+\lstdefinestyle{mystyle}{
+otherkeywords = {match,Some,None,substitute,postpone,to, runtime,type, checking,unification, fails},
+}
+
+%"mystyle" code listing set
+\lstset{style=mystyle}
+
+%\usepackage[skip=2\baselineskip]{caption}
+\usepackage{caption}
+\setlength{\belowcaptionskip}{-10pt}
 \newcommand{\li}[1]{\lstinline[basicstyle=\ttfamily\fontsize{9pt}{1em}\selectfont]{#1}}
 \newcommand{\lismall}[1]{\lstinline[basicstyle=\ttfamily\fontsize{9pt}{1em}\selectfont]{#1}}
 
@@ -148,10 +160,10 @@ moredelim=**[is][\color{red}]{SSTR}{ESTR}
 %% Supplied to authors by publisher for camera-ready submission
 % \acmConference[]{ACM SIGPLAN Conference on Programming Languages}{January 01--03, 2017}{New York, NY, USA}
 
-\acmYear{2018}
-\acmISBN{978-x-xxxx-xxxx-x/YY/MM}
-\acmDOI{10.1145/nnnnnnn.nnnnnnn}
-\startPage{1}
+%\acmYear{2018}
+%\acmISBN{978-x-xxxx-xxxx-x/YY/MM}
+%\acmDOI{10.1145/nnnnnnn.nnnnnnn}
+%\startPage{1}
 \fi
 
 
@@ -169,11 +181,12 @@ moredelim=**[is][\color{red}]{SSTR}{ESTR}
 
 
 %% Bibliography style
-\bibliographystyle{ACM-Reference-Format}
+%\bibliographystyle{ACM-Reference-Format}
+\bibliographystyle{abbrvnat}
 %% Citation style
 %% Note: author/year citations are required for papers published as an
 %% issue of PACMPL.
-\citestyle{acmauthoryear}   %% For author/year citations
+%\citestyle{acmauthoryear}   %% For author/year citations
 
 \input{commands}
 \input{macros}
@@ -188,7 +201,7 @@ moredelim=**[is][\color{red}]{SSTR}{ESTR}
 \title{Type Hole Inference}         %% [Short Title] is optional;
                                         %% when present, will be used in
                                         %% header instead of Full Title.
-% \titlenote{Some text and figures in this submission are taken from a full paper by the authors, which is currently under review.}
+%\titlenote{Some text and figures in this submission are taken from a full paper by the authors, which is currently under review.}
 %% \titlenote is optional;
                                         %% can be repeated if necessary;
                                         %% contents suppressed with 'anonymous'
@@ -209,21 +222,7 @@ moredelim=**[is][\color{red}]{SSTR}{ESTR}
 %% extraction tools.
 
 %% Author with single affiliation.
-\author{Cyrus Omar}
-% \authornote{with author1 note}          %% \authornote is optional;
-                                        %% can be repeated if necessary
-% \orcid{nnnn-nnnn-nnnn-nnnn}             %% \orcid is optional
-\affiliation{
-  % \position{Position1}
-  % \department{Department1}              %% \department is recommended
-  \institution{University of Michigan}            %% \institution is required
-  % \streetaddress{Street1 Address1}
-  % \city{City1}
-  % \state{State1}
-  % \postcode{Post-Code1}
-  % \country{Country1}
-}
-\email{comar@umich.edu}          %% \email is recommended
+
 
 \author{Zhiyi Pan}
 % \authornote{with author1 note}          %% \authornote is optional;
@@ -240,35 +239,6 @@ moredelim=**[is][\color{red}]{SSTR}{ESTR}
   % \country{Country1}
 }
 \email{zhiyipan@umich.edu}          %% \email is recommended
-
-
-% %% Author with two affiliations and emails.
-% \author{First2 Last2}
-% \authornote{with author2 note}          %% \authornote is optional;
-%                                         %% can be repeated if necessary
-% \orcid{nnnn-nnnn-nnnn-nnnn}             %% \orcid is optional
-% \affiliation{
-%   \position{Position2a}
-%   \department{Department2a}             %% \department is recommended
-%   \institution{Institution2a}           %% \institution is required
-%   \streetaddress{Street2a Address2a}
-%   \city{City2a}
-%   \state{State2a}
-%   \postcode{Post-Code2a}
-%   \country{Country2a}
-% }
-% \email{first2.last2@inst2a.com}         %% \email is recommended
-% \affiliation{
-%   \position{Position2b}
-%   \department{Department2b}             %% \department is recommended
-%   \institution{Institution2b}           %% \institution is required
-%   \streetaddress{Street3b Address2b}
-%   \city{City2b}
-%   \state{State2b}
-%   \postcode{Post-Code2b}
-%   \country{Country2b}
-% }
-% \email{first2.last2@inst2b.org}         %% \email is recommended
 
 
 %% Paper note
@@ -324,7 +294,8 @@ moredelim=**[is][\color{red}]{SSTR}{ESTR}
 \input{intro}
 \input{typinf}
 \input{infalg}
+\input{conclusion}
 \clearpage
-%\bibliography{references,all.short,hazel_NSF}
+\bibliography{references,all.short,hazel_NSF}
 
 \end{document}
