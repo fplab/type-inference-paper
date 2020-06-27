@@ -2,10 +2,13 @@
 \newif\ifarxiv
 \arxivfalse
 \ifarxiv
-\documentclass[acmsmall,nonacm]{acmart}
+
+%\documentclass[acmsmall,nonacm]{acmart}
+\documentclass[acmsmall,screen,review,nonacm]{acmart}
 \else
 %%% Note: arxiv does not want line numbers (they are detected somehow, and are not allowed)
-\documentclass[acmsmall,nonacm]{acmart}
+\documentclass[acmsmall,screen,review,nonacm]{acmart}
+%\documentclass[acmsmall,nonacm]{acmart}
 %\settopmatter{printfolios=false,printccs=false,printacmref=false}
 % \settopmatter{printccs=false,printacmref=false}
 \fi
@@ -28,7 +31,8 @@
 \usepackage{subcaption} %% For complex figures with subfigures/subcaptions
                         %% http://ctan.org/pkg/subcaption
 
-
+\usepackage{graphicx}
+%\usepackage{subfig}
 %% Cyrus packages
 
 \usepackage{multirow}
@@ -71,7 +75,6 @@ otherkeywords = {match,Some,None,substitute,postpone,to, runtime,type, checking,
 
 %\usepackage[skip=2\baselineskip]{caption}
 \usepackage{caption}
-\setlength{\belowcaptionskip}{-10pt}
 \newcommand{\li}[1]{\lstinline[basicstyle=\ttfamily\fontsize{9pt}{1em}\selectfont]{#1}}
 \newcommand{\lismall}[1]{\lstinline[basicstyle=\ttfamily\fontsize{9pt}{1em}\selectfont]{#1}}
 
@@ -181,17 +184,18 @@ otherkeywords = {match,Some,None,substitute,postpone,to, runtime,type, checking,
 
 
 %% Bibliography style
-%\bibliographystyle{ACM-Reference-Format}
-\bibliographystyle{abbrvnat}
+\bibliographystyle{ACM-Reference-Format}
+%\bibliographystyle{abbrvnat}
 %% Citation style
 %% Note: author/year citations are required for papers published as an
 %% issue of PACMPL.
-%\citestyle{acmauthoryear}   %% For author/year citations
+\citestyle{acmauthoryear}   %% For author/year citations
 
 \input{commands}
 \input{macros}
 
-\setlength{\abovecaptionskip}{4pt plus 3pt minus 2pt} % Chosen fairly arbitrarily
+%\setlength{\abovecaptionskip}{4pt plus 3pt minus 2pt} % Chosen fairly arbitrarily
+\setlength{\abovecaptionskip}{4pt}
 \setlength{\belowcaptionskip}{-4pt plus 3pt minus 2pt} % Chosen fairly arbitrarily
 
 
@@ -225,7 +229,7 @@ otherkeywords = {match,Some,None,substitute,postpone,to, runtime,type, checking,
 
 
 \author{Zhiyi Pan}
-% \authornote{with author1 note}          %% \authornote is optional;
+ \authornote{Research advisor: Cyrus Omar; ACM student member number: 5024951; Category: undergraduate}          %% \authornote is optional;
                                         %% can be repeated if necessary
 % \orcid{nnnn-nnnn-nnnn-nnnn}             %% \orcid is optional
 \affiliation{
@@ -237,6 +241,7 @@ otherkeywords = {match,Some,None,substitute,postpone,to, runtime,type, checking,
   % \state{State1}
   % \postcode{Post-Code1}
   % \country{Country1}
+ %\category{undergraduate}
 }
 \email{zhiyipan@umich.edu}          %% \email is recommended
 
@@ -254,7 +259,7 @@ otherkeywords = {match,Some,None,substitute,postpone,to, runtime,type, checking,
 %% Abstract
 %% Note: \begin{abstract}...\end{abstract} environment must come
 %% before \maketitle command
-\input{abstract}
+%\input{abstract}
 
 
 %% 2012 ACM Computing Classification System (CSS) concepts
