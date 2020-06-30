@@ -2,6 +2,29 @@
 exception Impossible
 open Syntax
 
+module TypeInfVarSet = Set.Make(TypeInferenceVar);;
+module SubTyp = struct
+  type t =
+    | HoleSubs of TypeInfVarSet.t * typ
+    | Primitive of typ
+  and typ =
+    | STHole of TypeInferenceVar.t
+    | STNum
+    | STArrow of t * t
+  type subs = (TypeInferenceVar.t * t) list
+end
+module Constraints = struct
+  type consistent = SubTyp.t * SubTyp.t
+
+  type t = consistent list
+end
+
+let rec typ_to_subtyp (t: Typ.t): SubTyp.t = 
+  match t with
+  | THole var -> Primitive (STHole var)
+  | TNum -> Primitive STNum
+  | TArrow(t1, t2) -> Primitive (STArrow(typ_to_subtyp t1, typ_to_subtyp t2))
+;;
 
 let get_match_arrow_typ (t: Typ.t): (Typ.t * Constraints.t) option = 
   match t with
@@ -9,7 +32,7 @@ let get_match_arrow_typ (t: Typ.t): (Typ.t * Constraints.t) option =
     let var_in = Typ.gen_new_type_var() in 
     let var_out = Typ.gen_new_type_var() in
     let arrow_typ = Typ.TArrow (THole(var_in),THole(var_out)) in
-    Some (arrow_typ,[(t,arrow_typ)])
+    Some (arrow_typ,[(typ_to_subtyp t, typ_to_subtyp arrow_typ)])
     )
   | TArrow (_,_) -> Some (t, [])
   | _ -> None
@@ -102,7 +125,7 @@ and ana (ctx: Ctx.t) (e: Exp.t) (ty: Typ.t): Constraints.t option =
     | Some (TArrow (ty_in, ty_out), cons1) -> (
       match ana (Ctx.extend ctx (x, ty_in')) exp ty_out with
       | None -> None
-      | Some cons2 -> Some (cons1@cons2@[(ty_in,ty_in')])
+      | Some cons2 -> Some (cons1@cons2@[(typ_to_subtyp ty_in,typ_to_subtyp ty_in')])
     )
     | _ -> raise Impossible
   ) 
@@ -115,18 +138,56 @@ and ana (ctx: Ctx.t) (e: Exp.t) (ty: Typ.t): Constraints.t option =
     (* subsumption *)
       (match syn ctx e with
         | None -> None
-        | Some (ty', cons) -> Some (cons@[(ty,ty')])
+        | Some (ty', cons) -> Some (cons@[(typ_to_subtyp ty,typ_to_subtyp ty')])
       )
 ;;
 
-let rec substitute (u: Typ.t) (x: TypeInferenceVar.t) (t: Typ.t) : Typ.t =
-  match t with
-  | TNum -> t
-  | THole v -> if v = x then u else t
-  | TArrow(t1, t2) -> TArrow(substitute u x t1, substitute u x t2)
+let rec substitute (u: Typ.t) (x: TypeInferenceVar.t) (t: SubTyp.t) : SubTyp.t =
+  match (typ_to_subtyp u,t) with 
+  | (HoleSubs(typvar_set_u, typ_u), HoleSubs(typvar_set_t, typ_t)) -> (
+    match typ_t with
+    | STNum -> t
+    | STHole v -> if v = x then (
+      let typvarset = TypeInfVarSet.add v (TypeInfVarSet.union typvar_set_u typvar_set_t)
+      in HoleSubs(typvarset, typ_u)
+    )
+    | STArrow(t1, t2) -> 
+      let typvarset = TypeInfVarSet.union typvar_set_u typvar_set_t
+      in HoleSubs(typvarset, STArrow(substitute u x t1, substitute u x t2))
+  )
+  | (HoleSubs(typvar_set_u, typ_u), Primitive typ_t) -> (
+    match typ_t with
+    | STNum -> t
+    | STHole v -> if v = x then (
+      let typvarset = TypeInfVarSet.add v typvar_set_u
+      in HoleSubs(typvarset, typ_u)
+    )
+    | STArrow(t1, t2) -> 
+      Primitive STArrow(substitute u x t1, substitute u x t2)
+  )
+  | (Primitive typ_u, HoleSubs(typvar_set_t, typ_t)) -> (
+    match typ_t with
+    | STNum -> t
+    | STHole v -> if v = x then (
+      let typvarset = TypeInfVarSet.add v typvar_set_t
+      in HoleSubs(typvarset, typ_u)
+    )
+    | STArrow(t1, t2) -> 
+      HoleSubs(typvar_set_t, STArrow(substitute u x t1, substitute u x t2))
+  )
+  | (Primitive typ_u, Primitive typ_t) -> (
+    match typ_t with
+    | STNum -> t
+    | STHole v -> if v = x then (
+      let typvarset = TypeInfVarSet.add v TypeInfVarSet.empty
+      in HoleSubs(typvarset, typ_u)
+    )
+    | STArrow(t1, t2) -> 
+      Primitive STArrow(substitute u x t1, substitute u x t2)
+  )
 ;;
 
-let apply (subs: Typ.subs) (t: Typ.t) : Typ.t =
+let apply (subs: SubTyp.subs) (t: SubTyp.t) : SubTyp.t =
   List.fold_right (fun (x, u) t -> substitute u x t) subs t
 ;;
 

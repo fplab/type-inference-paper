@@ -6,7 +6,7 @@
 
 \section{Introduction}
 \label{sec:intro}
-\emph{Bidirectional typing} and \emph{constraint-based type inference} are common approaches to deducing types for partially annotated programs. \emph{Bidirectional typing} is a simple algorithmic system with type information propagating from the outside in  \cite{BidirTyping}. This produces clear error messages at the cost of requiring explicit type annotations in certain situations, e.g. top-level functions. \emph{Type inference} allows programmers to omit most or all type annotations, but requires complex constraint solving for type checking, making it difficult for users to reason about types and producing complex error messages \cite{typeinferDif}.
+\emph{Bidirectional typing} and \emph{constraint-based type inference} are common approaches to deducing types for partially annotated programs. \emph{Bidirectional typing} is a simple algorithmic system with type information propagating from the outside in \cite{BidirTyping}. This produces clear error messages at the cost of requiring explicit type annotations in certain situations, e.g. top-level functions. \emph{Type inference} allows programmers to omit most or all type annotations, but requires complex constraint solving for type checking, making it difficult for users to reason about types and producing complex error messages \cite{typeinferDif}.
 This paper develops \emph{type hole inference}, which combines the benefits of bidirectional typing and type inference.\par
 
 In recent work on the \Hazel programming environment, \citet{HazelnutPOPL} assign formal meaning to incomplete programs, i.e. programs with holes, by developing a bidirectional type system with support for expression and type holes. Type holes operate as the unknown types from gradual type theory \cite{GradualTyping}. Our approach takes this type system and adds constraint solving as a layer on top to suggest type hole fillings, without making constraint solving necessary for typing. Take the following \Hazel programs extended with type hole inference as examples: 
@@ -15,12 +15,12 @@ In recent work on the \Hazel programming environment, \citet{HazelnutPOPL} assig
   \begin{tabular}[b]{cc}
     \begin{tabular}[b]{c}
       \begin{subfigure}[b]{0.4\columnwidth}
-        \includegraphics[width=5cm]{3_1.png}
+        \includegraphics[width=5.5cm]{3_1.png}
         \caption{Example of static error}
         \label{fig:staticerror}
       \end{subfigure}\\
       \begin{subfigure}[b]{0.4\columnwidth}
-        \includegraphics[width=5cm]{4_gray.png}
+        \includegraphics[width=5.5cm]{4_gray.png}
         \caption{Example of constraint solving success}
 		\label{fig:unifsuc}
       \end{subfigure}
@@ -28,12 +28,12 @@ In recent work on the \Hazel programming environment, \citet{HazelnutPOPL} assig
     &
      \begin{tabular}[b]{c}
           \begin{subfigure}[b]{0.4\columnwidth}
-      \includegraphics[width=5cm]{unifyfail_2.png}
+      \includegraphics[width=5.5cm]{unifyfail_2.png}
       \caption{Example of constraint solving failure}
 	\label{fig:uniffail}
 	\end{subfigure}\\
       \begin{subfigure}[b]{0.4\columnwidth}
-        \includegraphics[width=5cm]{4_black.png}
+        \includegraphics[width=5.5cm]{4_black.png}
         \caption{Example of filling type holes}
 		\label{fig:fillholeeg}
       \end{subfigure}
@@ -42,7 +42,7 @@ In recent work on the \Hazel programming environment, \citet{HazelnutPOPL} assig
   \caption{Programs in Hazel environment}
   \vspace{-2px}
 \end{figure}
-\par Figure ~\ref{fig:staticerror} fails type checking at bidirectional typing, so our system reports a static error. Bidirectional judgements easily trace back the error and indicate the source in the editor with a red box, showing that the operand should be $Int$ type. No inference is used.\par 
+\par Figure ~\ref{fig:staticerror} fails type checking at bidirectional typing, so our system reports a static error. Bidirectional judgements easily trace back the error and indicate the source in the editor with a red box, showing that the operand should be $Int$ type. \par 
 Figure ~\ref{fig:unifsuc} is an example succeeding in both static checking and constraint solving.  The bidirectional typing requires that a type annotation be provided on the lambda, but it is left as a hole. The system synthesizes the "$\tarr{?}{Int}$" type, with "$?$" standing for hole type. The constraint solver then generates a solution, $[(?,~ Int)]$, for the hole. Hence, the type hole is filled with a gray "$Int$" in the editor. The programmer can use a keyboard shortcut to replace the type hole with the suggested type as shown in Figure ~\ref{fig:fillholeeg}, and the expression is synthesized to "$\tarr{Int}{Int}$" after replacement. \par
 
 Figure ~\ref{fig:uniffail} is an example failing in constraint solving. Constraints, $(? \sim Int)$ and $(? \sim \tarr{?}{?})$, conflict since the type hole can not be $Int$ and $arrow \, type$ at the same time. In this case, the expression still remains well-typed since $x$ is of hole type. The system postpones type-checking to runtime. However, the failure to infer a type is visually reported to indicate the issue.
@@ -58,10 +58,6 @@ Figure ~\ref{fig:uniffail} is an example failing in constraint solving. Constrai
 %  To combine type inference with gradual typing, \citet{GradualInfer} came up an inference algorithm with design space under conditions that three straightforward approaches fail. One simple approach that replaces unknown types with a fresh variable and apply type inference does not work because unexpected static error is triggered when an unknown type is equal to multiple types \cite{GradualInfer}. However, starting from static semantics extended with \emph{holes} gives a new insight to this approach. The type holes corresponding to the unknown type can be filled with hole type to keep programs well-typed when unification fails, and delay type checking for those holes to runtime rather than raise a static error. Our approach is easy to implement by introducing holes into the type inference algorithm \cite{TaplBook}.
 
 % We extended static semantics with \emph{type constraints}, and borrow machinery from unification-based type inference to infer types for type holes by identifying the type hole with the type variable. In particular, our system will not report a static error when unification fails but postpone type-checking for type holes to runtime. This provides an approach to combine \emph{gradual typing} and \emph{type inference}. 
-\parahead{Contributions} The contributions of this paper are:
-\begin{itemize}
-  \item A new bidirectional typing system extended with type constraints. We start from static semantics developed by \citet{HazelnutPOPL}, assigning unique identifiers for type holes and modifying bidirectional judgements for constraint generation in Section ~\ref{sec:typinf}.
-  \item A type inference algorithm to handle type holes in Section ~\ref{sec:infalg}.
-\end{itemize}
+\parahead{Contributions} The contributions of this paper are: (1) a new bidirectional typing system extended with type constraints in section ~\ref{sec:typinf}; (2) a type inference algorithm to handle type holes in section ~\ref{sec:infalg}.
 
 %Programmers have to deal with incomplete programs like syntactically malformed edit states during development.

@@ -5,6 +5,7 @@ end
 module TypeInferenceVar = struct
     type t = int
     let recent (var_1:t) (var_2:t) = max var_1 var_2;; 
+    let compare = Pervasives.compare;;
 end
 
 module Typ = struct
@@ -12,13 +13,10 @@ module Typ = struct
         | THole of TypeInferenceVar.t
         | TNum
         | TArrow of t * t
-
-    type subs = (TypeInferenceVar.t * t) list
     type unify_result = 
         | Solved of t
         | Unsolve of (t list)
     type unify_results  = (TypeInferenceVar.t * unify_result) list
-    
     let type_variable = ref (0)
 
     (* generates a new unique type variable *)
@@ -58,13 +56,6 @@ module Exp = struct
         | EExpHole of hole_id * t
 end
 
-module Constraints = struct
-    type consistent = Typ.t * Typ.t
-
-    type t = consistent list
-
-    let empty : t = []
-end
 
 module Ctx = struct
     type assumption = Identifier.t * Typ.t
