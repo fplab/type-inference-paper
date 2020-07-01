@@ -2,23 +2,6 @@
 exception Impossible
 open Syntax
 
-module TypeInfVarSet = Set.Make(TypeInferenceVar);;
-module SubTyp = struct
-  type t =
-    | HoleSubs of TypeInfVarSet.t * typ
-    | Primitive of typ
-  and typ =
-    | STHole of TypeInferenceVar.t
-    | STNum
-    | STArrow of t * t
-  type subs = (TypeInferenceVar.t * t) list
-end
-module Constraints = struct
-  type consistent = SubTyp.t * SubTyp.t
-
-  type t = consistent list
-end
-
 let rec typ_to_subtyp (t: Typ.t): SubTyp.t = 
   match t with
   | THole var -> Primitive (STHole var)
@@ -26,6 +9,16 @@ let rec typ_to_subtyp (t: Typ.t): SubTyp.t =
   | TArrow(t1, t2) -> Primitive (STArrow(typ_to_subtyp t1, typ_to_subtyp t2))
 ;;
 
+let rec subtyp_to_typ (t: SubTyp.t): Typ.t = 
+  match t with 
+  | HoleSubs (_, typ)
+  | Primitive typ -> (
+    match typ with
+    | STHole var -> THole var
+    | STNum -> TNum
+    | STArrow (t1, t2) -> TArrow(subtyp_to_typ t1, subtyp_to_typ t2)
+  )
+;;
 let get_match_arrow_typ (t: Typ.t): (Typ.t * Constraints.t) option = 
   match t with
   | THole _ -> (
@@ -142,70 +135,93 @@ and ana (ctx: Ctx.t) (e: Exp.t) (ty: Typ.t): Constraints.t option =
       )
 ;;
 
-let rec substitute (u: Typ.t) (x: TypeInferenceVar.t) (t: SubTyp.t) : SubTyp.t =
-  match (typ_to_subtyp u,t) with 
-  | (HoleSubs(typvar_set_u, typ_u), HoleSubs(typvar_set_t, typ_t)) -> (
-    match typ_t with
-    | STNum -> t
-    | STHole v -> if v = x then (
-      let typvarset = TypeInfVarSet.add v (TypeInfVarSet.union typvar_set_u typvar_set_t)
-      in HoleSubs(typvarset, typ_u)
+let rec substitute (u: Typ.unify_result) (x: TypeInferenceVar.t) (t: SubTyp.t) : SubTyp.t =
+  match u with 
+  | UnSolved _ -> raise Impossible
+  | Solved u' -> (
+    match (typ_to_subtyp u',t) with 
+    | (Primitive typ_u, HoleSubs(typvar_set_t, typ_t)) -> (
+      match typ_t with
+      | STNum -> t
+      | STHole v -> 
+        if v = x then 
+          (HoleSubs(TypeInfVarSet.add v typvar_set_t, typ_u)) 
+        else t
+      | STArrow(t1, t2) -> 
+        HoleSubs(typvar_set_t, STArrow(substitute u x t1, substitute u x t2))
     )
-    | STArrow(t1, t2) -> 
-      let typvarset = TypeInfVarSet.union typvar_set_u typvar_set_t
-      in HoleSubs(typvarset, STArrow(substitute u x t1, substitute u x t2))
-  )
-  | (HoleSubs(typvar_set_u, typ_u), Primitive typ_t) -> (
-    match typ_t with
-    | STNum -> t
-    | STHole v -> if v = x then (
-      let typvarset = TypeInfVarSet.add v typvar_set_u
-      in HoleSubs(typvarset, typ_u)
+    | (Primitive typ_u, Primitive typ_t) -> (
+      match typ_t with
+      | STNum -> t
+      | STHole v -> if v = x then (
+        let typvarset = TypeInfVarSet.add v TypeInfVarSet.empty
+        in HoleSubs(typvarset, typ_u)
+      ) else t
+      | STArrow(t1, t2) -> 
+        Primitive (STArrow(substitute u x t1, substitute u x t2))
     )
-    | STArrow(t1, t2) -> 
-      Primitive STArrow(substitute u x t1, substitute u x t2)
-  )
-  | (Primitive typ_u, HoleSubs(typvar_set_t, typ_t)) -> (
-    match typ_t with
-    | STNum -> t
-    | STHole v -> if v = x then (
-      let typvarset = TypeInfVarSet.add v typvar_set_t
-      in HoleSubs(typvarset, typ_u)
-    )
-    | STArrow(t1, t2) -> 
-      HoleSubs(typvar_set_t, STArrow(substitute u x t1, substitute u x t2))
-  )
-  | (Primitive typ_u, Primitive typ_t) -> (
-    match typ_t with
-    | STNum -> t
-    | STHole v -> if v = x then (
-      let typvarset = TypeInfVarSet.add v TypeInfVarSet.empty
-      in HoleSubs(typvarset, typ_u)
-    )
-    | STArrow(t1, t2) -> 
-      Primitive STArrow(substitute u x t1, substitute u x t2)
+    | _ -> raise Impossible
   )
 ;;
 
-let apply (subs: SubTyp.subs) (t: SubTyp.t) : SubTyp.t =
-  List.fold_right (fun (x, u) t -> substitute u x t) subs t
+let apply (unify_results: Typ.unify_results) (t: SubTyp.t) : SubTyp.t =
+  List.fold_right (fun (x, u) t -> substitute u x t) unify_results t
 ;;
 
-let rec unify (constraints: Constraints.t) : Typ.subs option =
+type result =
+  | Success of Typ.unify_results
+  | Failure of Typ.unify_results
+
+let rec to_solution_ls (typvar_set: TypeInferenceVar.t list) (typ_ls: Typ.t list): Typ.unify_results = 
+  match typvar_set with
+  | [] -> []
+  | hd::tl -> [(hd, Typ.UnSolved typ_ls)] @ (to_solution_ls tl typ_ls)
+;;
+
+let rec unify (constraints: Constraints.t) : result =
   match constraints with
-  | [] -> Some []
+  | [] -> Success []
   | (x, y) :: xs ->
     match unify xs with
-    | None -> None
-    | Some subs1 -> (
-      match unify_one (apply subs1 x) (apply subs1 y) with
-      | None -> None
-      | Some subs2 -> Some (subs1@subs2)
+    | Failure unify_results -> Failure unify_results
+    | Success unify_results1 -> (
+      match unify_one (apply unify_results1 x) (apply unify_results1 y) with
+      | Failure unify_results2 -> Failure unify_results2
+      | Success unify_results2 -> Success (unify_results1@unify_results2)
     )
-and unify_one (t1: Typ.t) (t2: Typ.t) : Typ.subs option =
+and unify_one (t1: SubTyp.t) (t2: SubTyp.t) : result =
     match (t1, t2) with
-    | (TNum, TNum) -> Some []
-    | (THole x, z) | (z, THole x) -> Some [(x, z)]
-    | (TArrow(a, b), TArrow(x, y)) -> unify [(a, x); (b, y)]
-    | _ -> None
+    | (Primitive typ_1, Primitive typ_2) -> (
+      match (typ_1, typ_2) with
+      | (STNum, STNum) -> Success []
+      | (STHole x, _) -> Success [(x, Solved (subtyp_to_typ t2))]
+      | (_, STHole x) -> Success [(x, Solved (subtyp_to_typ t1))]
+      | (STArrow(a, b), STArrow(x, y)) -> unify [(a, x); (b, y)]
+      | _ -> Failure []
+    )
+    | (Primitive typ_2, HoleSubs(typvar_set, typ_1))
+    | (HoleSubs(typvar_set, typ_1), Primitive typ_2) -> (
+      match (typ_1, typ_2) with
+      | (STNum, STNum) -> Success []
+      | (STHole x, _) -> Success [(x, Solved (subtyp_to_typ t2))]
+      | (_, STHole x) -> Success [(x, Solved (subtyp_to_typ t1))]
+      | (STArrow(a, b), STArrow(x, y)) -> unify [(a, x); (b, y)]
+      | _ -> (
+        let typ_ls = [(subtyp_to_typ t1); (subtyp_to_typ t2)] in
+        let typvar_ls = TypeInfVarSet.elements typvar_set in
+        Failure (to_solution_ls typvar_ls typ_ls)
+      )
+    )
+    | (HoleSubs(typvar_set_1, typ_1), HoleSubs(typvar_set_2, typ_2)) -> (
+      match (typ_1, typ_2) with
+      | (STNum, STNum) -> Success []
+      | (STHole x, _) -> Success [(x, Solved (subtyp_to_typ t2))]
+      | (_, STHole x) -> Success [(x, Solved (subtyp_to_typ t1))]
+      | (STArrow(a, b), STArrow(x, y)) -> unify [(a, x); (b, y)]
+      | _ -> ( 
+        let typ_ls = [(subtyp_to_typ t1); (subtyp_to_typ t2)] in
+        let typvar_ls = TypeInfVarSet.elements (TypeInfVarSet.inter typvar_set_1 typvar_set_2) in
+        Failure (to_solution_ls typvar_ls typ_ls)
+      )
+    )
   ;;

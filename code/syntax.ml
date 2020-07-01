@@ -1,3 +1,4 @@
+
 module Identifier = struct
     type t = string
 end
@@ -5,7 +6,7 @@ end
 module TypeInferenceVar = struct
     type t = int
     let recent (var_1:t) (var_2:t) = max var_1 var_2;; 
-    let compare = Pervasives.compare;;
+    let compare = Stdlib.compare;;
 end
 
 module Typ = struct
@@ -15,8 +16,9 @@ module Typ = struct
         | TArrow of t * t
     type unify_result = 
         | Solved of t
-        | Unsolve of (t list)
+        | UnSolved of (t list)
     type unify_results  = (TypeInferenceVar.t * unify_result) list
+    type subs = (TypeInferenceVar.t * t) list
     let type_variable = ref (0)
 
     (* generates a new unique type variable *)
@@ -81,4 +83,22 @@ module Ctx = struct
             (fun (i, v) new_ctx ->
                 if id = i then (i, vl) :: new_ctx else (i, v) :: new_ctx)
             ctx empty
+end
+
+module TypeInfVarSet = Set.Make(TypeInferenceVar);;
+
+module SubTyp = struct
+  type t =
+    | HoleSubs of TypeInfVarSet.t * typ
+    | Primitive of typ
+  and typ =
+    | STHole of TypeInferenceVar.t
+    | STNum
+    | STArrow of t * t
+end
+
+module Constraints = struct
+  type consistent = SubTyp.t * SubTyp.t
+
+  type t = consistent list
 end

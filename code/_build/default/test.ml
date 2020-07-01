@@ -1,8 +1,12 @@
+
 open Syntax
 open Util
 let parse = Myparse.parse;;
 
+(* TBD *)
 let testcases: (Ctx.t * Exp.t) list = [
+  (Ctx.empty, parse "fun (x:Hole[2]) -> x (x+5)");
+  ([("f",TArrow(TNum,THole 1));("g",TArrow(TArrow(TNum, TNum),THole 2))], parse "fun (x:Hole[2]) -> x + 5");
   (Ctx.empty, parse "5+5+(|0|)");
   (Ctx.empty, parse "fun (x:Hole[2]) -> x + 5");
   (Ctx.empty, parse "fun (x:Hole[2]) -> x 5");

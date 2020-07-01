@@ -1,19 +1,40 @@
 open Syntax
 
+let rec subtyp_to_typ (t: SubTyp.t): Typ.t = 
+  match t with 
+  | HoleSubs (_, typ)
+  | Primitive typ -> (
+    match typ with
+    | STHole var -> THole var
+    | STNum -> TNum
+    | STArrow (t1, t2) -> TArrow(subtyp_to_typ t1, subtyp_to_typ t2)
+  )
+;;
 let rec string_of_typ(typ:Typ.t) =
   match typ with
   | THole var ->  "THole["^string_of_int(var)^"]"
   | TNum -> "TNum"
   | TArrow (t1,t2) -> string_of_typ(t1) ^ "->"^ string_of_typ(t2)
 ;;
-
-let rec print_subs(subs: Typ.subs) =
-  match subs with
-  | [] -> Printf.printf "%s\n" " "
+let rec string_of_typ_ls(typ_ls:Typ.t list) =
+  match typ_ls with
+  | [] -> " "
   | hd::tl -> 
+   (string_of_typ hd)^ ", " ^ (string_of_typ_ls tl);
+;;
+
+let rec string_of_results(results: Typ.unify_results) =
+  match results with
+  | [] -> "\n"
+  | hd::tl -> (
     let (var,typ) = hd in
-    Printf.printf "%s\n" ("(" ^ string_of_int(var) ^ ") ("^ string_of_typ(typ) ^ ")");
-    print_subs(tl);
+    (
+      match typ with 
+      | Solved typ' -> ("solved: (" ^ string_of_int(var) ^ ") ("^ string_of_typ(typ') ^ ")\n");
+      | UnSolved typ_ls -> 
+        ("unsolved: (" ^ string_of_int(var) ^ ") ("^ string_of_typ_ls(typ_ls) ^ ")\n");
+    ) ^ string_of_results(tl);
+  )
 ;;
 
 let rec string_of_exp(exp: Exp.t) =
@@ -39,7 +60,7 @@ let rec print_cons(constraints: Constraints.t) =
   match constraints with
   | [] -> ();
   | hd::tl -> (
-    let (typ1,typ2) = hd in Printf.printf "%s\n" (string_of_typ(typ1)^" == "^ string_of_typ(typ2));
+    let (typ1,typ2) = hd in Printf.printf "%s\n" (string_of_typ(subtyp_to_typ typ1)^" == "^ string_of_typ(subtyp_to_typ typ2));
     print_cons(tl);
   )
 ;;
@@ -63,11 +84,14 @@ let solve (ctx: Ctx.t) (e: Exp.t) =
     print_cons cons;
     Printf.printf "\n+ unify results: (<hole_id>) (<type>)\n";
     match Impl.unify cons with
-    | None -> Printf.printf "%s\n" "@@@ ERROR: unify error @@@"
-    | Some subs -> ( 
-      print_subs subs;
-      let new_typ = Impl.apply subs typ in
-      Printf.printf "+ final result of infer typ:\n %s\n" (string_of_typ new_typ);
-    )
+    | Failure results -> 
+      Printf.printf "%s\n" "@@@ unify Failure @@@";
+      Printf.printf "%s\n" (string_of_results results);
+    | Success results -> 
+    Printf.printf "%s\n" "@@@ unify Success @@@";
+    Printf.printf "%s\n" (string_of_results results);
+(*       let new_typ = Impl.apply subs typ in
+      Printf.printf "+ final result of infer typ:\n %s\n" (string_of_typ new_typ); *)
+    
   )
 ;;
