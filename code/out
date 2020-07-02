@@ -20,26 +20,69 @@ unsolved: (2) (TNum, TNum->THole[4],  )
 =============
 
 ======[1]======
-EXP:   λx:THole[2].x + 5
+EXP:   λx:THole[2].x x
 CONTEXT:
-f : TNum->THole[1]
-g : TNum->TNum->THole[2]
 
 + syn/ana result typ:
- THole[2]->TNum
+ THole[2]->THole[4]
 
 + constraints:
-TNum == THole[2]
-TNum == TNum
+THole[2] == THole[3]->THole[4]
+THole[3] == THole[2]
 
 + unify results: (<hole_id>) (<type>)
-@@@ unify Success @@@
-solved: (2) (TNum)
+@@@ unify Failure @@@
 
 
 =============
 
 ======[2]======
+EXP:   λx:THole[3].f g x
+CONTEXT:
+f : TNum->THole[1]
+g : TNum->TNum->THole[2]
+
++ syn/ana result typ:
+ THole[3]->THole[1]
+
++ constraints:
+TNum->TNum == THole[3]
+TNum == THole[2]
+
++ unify results: (<hole_id>) (<type>)
+@@@ unify Success @@@
+solved: (2) (TNum)
+solved: (3) (TNum->TNum)
+
+
+=============
+
+======[3]======
+EXP:   λx:THole[3].f g x 1
+CONTEXT:
+f : TNum->THole[1]
+g : TNum->TNum->THole[2]
+
++ syn/ana result typ:
+ THole[3]->THole[1]
+
++ constraints:
+THole[3] == THole[4]->THole[5]
+THole[4] == TNum
+TNum->TNum == THole[5]
+TNum == THole[2]
+
++ unify results: (<hole_id>) (<type>)
+@@@ unify Success @@@
+solved: (2) (TNum)
+solved: (5) (TNum->TNum)
+solved: (4) (TNum)
+solved: (3) (TNum->TNum->TNum)
+
+
+=============
+
+======[4]======
 EXP:   5 + 5 + (|[0]|)
 CONTEXT:
 
@@ -59,7 +102,7 @@ solved: (0) (TNum)
 
 =============
 
-======[3]======
+======[5]======
 EXP:   λx:THole[2].x + 5
 CONTEXT:
 
@@ -77,7 +120,7 @@ solved: (2) (TNum)
 
 =============
 
-======[4]======
+======[6]======
 EXP:   λx:THole[2].x 5
 CONTEXT:
 
@@ -96,7 +139,7 @@ solved: (2) (TNum->THole[4])
 
 =============
 
-======[5]======
+======[7]======
 EXP:   λx:TNum->TNum.x 5
 CONTEXT:
 
@@ -112,7 +155,7 @@ TNum == TNum
 
 =============
 
-======[6]======
+======[8]======
 EXP:   (|[0]|):TNum->TNum
 CONTEXT:
 
@@ -129,7 +172,7 @@ solved: (0) (TNum->TNum)
 
 =============
 
-======[7]======
+======[9]======
 EXP:   λx.1 + x:TNum->TNum
 CONTEXT:
 
@@ -147,7 +190,7 @@ TNum == TNum
 
 =============
 
-======[8]======
+======[10]======
 EXP:   x 1
 CONTEXT:
 x : TNum->TNum

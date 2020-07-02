@@ -14,11 +14,13 @@ module Typ = struct
         | THole of TypeInferenceVar.t
         | TNum
         | TArrow of t * t
+
     type unify_result = 
         | Solved of t
         | UnSolved of (t list)
+
     type unify_results  = (TypeInferenceVar.t * unify_result) list
-    type subs = (TypeInferenceVar.t * t) list
+
     let type_variable = ref (0)
 
     (* generates a new unique type variable *)

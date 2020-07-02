@@ -19,6 +19,7 @@ let rec subtyp_to_typ (t: SubTyp.t): Typ.t =
     | STArrow (t1, t2) -> TArrow(subtyp_to_typ t1, subtyp_to_typ t2)
   )
 ;;
+
 let get_match_arrow_typ (t: Typ.t): (Typ.t * Constraints.t) option = 
   match t with
   | THole _ -> (
@@ -172,12 +173,23 @@ type result =
   | Success of Typ.unify_results
   | Failure of Typ.unify_results
 
-let rec to_solution_ls (typvar_set: TypeInferenceVar.t list) (typ_ls: Typ.t list): Typ.unify_results = 
+let rec to_unsolved_ls (typvar_set: TypeInferenceVar.t list) (typ_ls: Typ.t list): Typ.unify_results = 
   match typvar_set with
   | [] -> []
-  | hd::tl -> [(hd, Typ.UnSolved typ_ls)] @ (to_solution_ls tl typ_ls)
+  | hd::tl -> [(hd, Typ.UnSolved typ_ls)] @ (to_unsolved_ls tl typ_ls)
 ;;
 
+let rec is_in_dom (v: TypeInferenceVar.t) (t: SubTyp.t): bool =
+  match t with
+  | HoleSubs (_, typ)
+  | Primitive typ -> (
+    match typ with
+    | STHole v' -> v' == v
+    | STNum -> false
+    | STArrow (t1, t2) -> (is_in_dom v t1) || (is_in_dom v t2)
+  )
+;;
+    
 let rec unify (constraints: Constraints.t) : result =
   match constraints with
   | [] -> Success []
@@ -187,41 +199,60 @@ let rec unify (constraints: Constraints.t) : result =
     | Success unify_results1 -> (
       match unify_one (apply unify_results1 x) (apply unify_results1 y) with
       | Failure unify_results2 -> Failure unify_results2
-      | Success unify_results2 -> Success (unify_results1@unify_results2)
+      | Success unify_results2 -> Success (unify_results1 @ unify_results2)
     )
 and unify_one (t1: SubTyp.t) (t2: SubTyp.t) : result =
     match (t1, t2) with
     | (Primitive typ_1, Primitive typ_2) -> (
+
       match (typ_1, typ_2) with
       | (STNum, STNum) -> Success []
-      | (STHole x, _) -> Success [(x, Solved (subtyp_to_typ t2))]
-      | (_, STHole x) -> Success [(x, Solved (subtyp_to_typ t1))]
+      | (STHole x, _) -> 
+          if (is_in_dom x t2) then (Failure []) 
+          else (Success [(x, Solved (subtyp_to_typ t2))])
+      | (_, STHole x) -> 
+          if (is_in_dom x t1) then (Failure []) 
+          else (Success [(x, Solved (subtyp_to_typ t1))])
       | (STArrow(a, b), STArrow(x, y)) -> unify [(a, x); (b, y)]
       | _ -> Failure []
+
     )
+
     | (Primitive typ_2, HoleSubs(typvar_set, typ_1))
     | (HoleSubs(typvar_set, typ_1), Primitive typ_2) -> (
+
       match (typ_1, typ_2) with
       | (STNum, STNum) -> Success []
-      | (STHole x, _) -> Success [(x, Solved (subtyp_to_typ t2))]
-      | (_, STHole x) -> Success [(x, Solved (subtyp_to_typ t1))]
+      | (STHole x, _) -> 
+          if (is_in_dom x t2) then (Failure []) 
+          else (Success [(x, Solved (subtyp_to_typ t2))])
+      | (_, STHole x) -> 
+          if (is_in_dom x t1) then (Failure []) 
+          else (Success [(x, Solved (subtyp_to_typ t1))])
       | (STArrow(a, b), STArrow(x, y)) -> unify [(a, x); (b, y)]
       | _ -> (
         let typ_ls = [(subtyp_to_typ t1); (subtyp_to_typ t2)] in
         let typvar_ls = TypeInfVarSet.elements typvar_set in
-        Failure (to_solution_ls typvar_ls typ_ls)
+        Failure (to_unsolved_ls typvar_ls typ_ls)
+
       )
     )
     | (HoleSubs(typvar_set_1, typ_1), HoleSubs(typvar_set_2, typ_2)) -> (
+
       match (typ_1, typ_2) with
       | (STNum, STNum) -> Success []
-      | (STHole x, _) -> Success [(x, Solved (subtyp_to_typ t2))]
-      | (_, STHole x) -> Success [(x, Solved (subtyp_to_typ t1))]
+      | (STHole x, _) -> 
+          if (is_in_dom x t2) then (Failure []) 
+          else (Success [(x, Solved (subtyp_to_typ t2))])
+      | (_, STHole x) -> 
+          if (is_in_dom x t1) then (Failure []) 
+          else (Success [(x, Solved (subtyp_to_typ t1))])
       | (STArrow(a, b), STArrow(x, y)) -> unify [(a, x); (b, y)]
       | _ -> ( 
         let typ_ls = [(subtyp_to_typ t1); (subtyp_to_typ t2)] in
         let typvar_ls = TypeInfVarSet.elements (TypeInfVarSet.inter typvar_set_1 typvar_set_2) in
-        Failure (to_solution_ls typvar_ls typ_ls)
+        Failure (to_unsolved_ls typvar_ls typ_ls)
+
       )
     )
   ;;
