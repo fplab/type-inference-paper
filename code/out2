@@ -13,8 +13,11 @@ TNum == TNum
 THole[3] == TNum
 
 + unify results: (<hole_id>) (<type>)
-@@@ unify Failure @@@
-unsolved: (2) (TNum, TNum->THole[4],  )
+
+@@@variable@@@: 5
+solved: (2) (THole[3]->THole[4])
+solved: (2) (TNum)
+solved: (3) (TNum)
 
 
 =============
@@ -31,7 +34,9 @@ THole[2] == THole[3]->THole[4]
 THole[3] == THole[2]
 
 + unify results: (<hole_id>) (<type>)
-@@@ unify Failure @@@
+
+@@@variable@@@: 5
+solved: (2) (THole[3]->THole[4])
 
 
 =============
@@ -49,7 +54,9 @@ THole[1] == THole[2]->THole[3]
 THole[2] == THole[1]
 
 + unify results: (<hole_id>) (<type>)
-@@@ unify Failure @@@
+
+@@@variable@@@: 4
+solved: (1) (THole[2]->THole[3])
 
 
 =============
@@ -69,11 +76,12 @@ THole[3] == THole[4]->THole[5]
 THole[4] == TNum
 
 + unify results: (<hole_id>) (<type>)
-@@@ unify Success @@@
-solved: (4) (TNum)
-solved: (3) (TNum->THole[5])
+
+@@@variable@@@: 6
+solved: (1) (THole[2]->THole[3])
 solved: (2) (TNum)
-solved: (1) (TNum->TNum->THole[5])
+solved: (3) (THole[4]->THole[5])
+solved: (4) (TNum)
 
 
 =============
@@ -96,13 +104,13 @@ THole[6] == THole[7]->THole[8]
 THole[7] == THole[2]
 
 + unify results: (<hole_id>) (<type>)
-@@@ unify Success @@@
-solved: (7) (THole[2])
-solved: (6) (THole[2]->THole[8])
-solved: (5) (TNum)
-solved: (4) (TNum->THole[2]->THole[8])
+
+@@@variable@@@: 9
+solved: (1) (THole[3]->THole[4])
 solved: (3) (TNum)
-solved: (1) (TNum->TNum->THole[2]->THole[8])
+solved: (4) (THole[5]->THole[6])
+solved: (5) (TNum)
+solved: (6) (THole[7]->THole[8])
 
 
 =============
@@ -121,9 +129,10 @@ TNum->TNum == THole[3]
 TNum == THole[2]
 
 + unify results: (<hole_id>) (<type>)
-@@@ unify Success @@@
-solved: (2) (TNum)
+
+@@@variable@@@: 4
 solved: (3) (TNum->TNum)
+solved: (2) (TNum)
 
 
 =============
@@ -144,11 +153,12 @@ TNum->TNum == THole[5]
 TNum == THole[2]
 
 + unify results: (<hole_id>) (<type>)
-@@@ unify Success @@@
-solved: (2) (TNum)
-solved: (5) (TNum->TNum)
+
+@@@variable@@@: 6
+solved: (3) (THole[4]->THole[5])
 solved: (4) (TNum)
-solved: (3) (TNum->TNum->TNum)
+solved: (5) (TNum->TNum)
+solved: (2) (TNum)
 
 
 =============
@@ -167,7 +177,8 @@ TNum == TNum
 TNum == THole[0]
 
 + unify results: (<hole_id>) (<type>)
-@@@ unify Success @@@
+
+@@@variable@@@: 1
 solved: (0) (TNum)
 
 
@@ -185,7 +196,8 @@ TNum == THole[2]
 TNum == TNum
 
 + unify results: (<hole_id>) (<type>)
-@@@ unify Success @@@
+
+@@@variable@@@: 3
 solved: (2) (TNum)
 
 
@@ -203,9 +215,10 @@ THole[2] == THole[3]->THole[4]
 THole[3] == TNum
 
 + unify results: (<hole_id>) (<type>)
-@@@ unify Success @@@
+
+@@@variable@@@: 5
+solved: (2) (THole[3]->THole[4])
 solved: (3) (TNum)
-solved: (2) (TNum->THole[4])
 
 
 =============
@@ -221,7 +234,8 @@ CONTEXT:
 TNum == TNum
 
 + unify results: (<hole_id>) (<type>)
-@@@ unify Success @@@
+
+@@@variable@@@: 0
 
 
 =============
@@ -237,7 +251,8 @@ CONTEXT:
 TNum->TNum == THole[0]
 
 + unify results: (<hole_id>) (<type>)
-@@@ unify Success @@@
+
+@@@variable@@@: 1
 solved: (0) (TNum->TNum)
 
 
@@ -256,7 +271,8 @@ TNum == TNum
 TNum == TNum
 
 + unify results: (<hole_id>) (<type>)
-@@@ unify Success @@@
+
+@@@variable@@@: 0
 
 
 =============
@@ -273,7 +289,8 @@ x : TNum->TNum
 TNum == TNum
 
 + unify results: (<hole_id>) (<type>)
-@@@ unify Success @@@
+
+@@@variable@@@: 0
 
 
 =============

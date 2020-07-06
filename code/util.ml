@@ -1,15 +1,5 @@
 open Syntax
 
-let rec subtyp_to_typ (t: SubTyp.t): Typ.t = 
-  match t with 
-  | HoleSubs (_, typ)
-  | Primitive typ -> (
-    match typ with
-    | STHole var -> THole var
-    | STNum -> TNum
-    | STArrow (t1, t2) -> TArrow(subtyp_to_typ t1, subtyp_to_typ t2)
-  )
-;;
 let rec string_of_typ(typ:Typ.t) =
   match typ with
   | THole var ->  "THole["^string_of_int(var)^"]"
@@ -60,7 +50,7 @@ let rec print_cons(constraints: Constraints.t) =
   match constraints with
   | [] -> ();
   | hd::tl -> (
-    let (typ1,typ2) = hd in Printf.printf "%s\n" (string_of_typ(subtyp_to_typ typ1)^" == "^ string_of_typ(subtyp_to_typ typ2));
+    let (typ1,typ2) = hd in Printf.printf "%s\n" (string_of_typ(typ1)^" == "^ string_of_typ(typ2));
     print_cons(tl);
   )
 ;;
@@ -75,7 +65,32 @@ let rec print_ctx(ctx: Ctx.t) =
   )
 ;;
 
+let rec update_type_variable (ctx: Ctx.t) (e: Exp.t): unit =
+  match e with
+  | EVar x ->(
+    match Ctx.lookup ctx x with
+    | None -> ();
+    | Some(typ) -> Typ.load_type_variable typ;
+    )
+  | ELam (_, exp) -> update_type_variable ctx exp;
+  | ELamAnn (_, ty_in, exp) -> (
+    Typ.load_type_variable(ty_in);
+    update_type_variable ctx exp;
+  )
+  | EBinOp (e1, _, e2) -> (
+    update_type_variable ctx e1;
+    update_type_variable ctx e2;
+  )
+  | ENumLiteral _ -> ();
+  | EAsc (exp, typ) -> (
+    Typ.load_type_variable(typ);
+    update_type_variable ctx exp;
+  )
+  | EEmptyHole _
+  | EExpHole _ -> ();
+;;
 let solve (ctx: Ctx.t) (e: Exp.t) = 
+  update_type_variable ctx e;
   match Impl.syn ctx e with
   | None -> Printf.printf "%s" "ERROR\n: syn/ana error"
   | Some (typ,cons) -> (
@@ -83,12 +98,9 @@ let solve (ctx: Ctx.t) (e: Exp.t) =
     Printf.printf "\n+ constraints:\n";
     print_cons cons;
     Printf.printf "\n+ unify results: (<hole_id>) (<type>)\n";
-    match Impl.unify cons with
-    | Failure results -> 
-      Printf.printf "%s\n" "@@@ unify Failure @@@";
-      Printf.printf "%s\n" (string_of_results results);
-    | Success results -> 
-    Printf.printf "%s\n" "@@@ unify Success @@@";
+    let var_ls = TypeInferenceVar.group_create !Typ.type_variable in
+    Printf.printf "\n@@@variable@@@: %s\n" (string_of_int !Typ.type_variable);
+    let results = Impl.unify cons var_ls in
     Printf.printf "%s\n" (string_of_results results);
 (*       let new_typ = Impl.apply subs typ in
       Printf.printf "+ final result of infer typ:\n %s\n" (string_of_typ new_typ); *)

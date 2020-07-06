@@ -7,6 +7,9 @@ let parse = Myparse.parse;;
 let testcases: (Ctx.t * Exp.t) list = [
   (Ctx.empty, parse "fun (x:Hole[2]) -> x (x+5)");
   (Ctx.empty, parse "fun (x:Hole[2]) -> x x");
+  ([("x",THole 1);], parse "x x");
+  ([("x",THole 1);], parse "x 1 1");
+  ([("x",THole 1); ("y",THole 2);], parse "x 1 1 y");
   ([("f",TArrow(TNum,THole 1));("g",TArrow(TArrow(TNum, TNum),THole 2))], parse "fun (x:Hole[3]) -> f (g x)");
   ([("f",TArrow(TNum,THole 1));("g",TArrow(TArrow(TNum, TNum),THole 2))], parse "fun (x:Hole[3]) -> f (g (x 1))");
   (Ctx.empty, parse "5+5+(|0|)");
@@ -15,7 +18,7 @@ let testcases: (Ctx.t * Exp.t) list = [
   (Ctx.empty, parse "fun (x:Num->Num) -> x 5");
   (Ctx.empty, EAsc (parse "(|0|)", TArrow(TNum,TNum)));
   (Ctx.empty, EAsc (parse "fun x -> 1+x", TArrow(TNum,TNum)));
-  (Ctx.extend Ctx.empty ("x", TArrow(TNum,TNum)), parse "x 1");
+  ([("x", TArrow(TNum,TNum));], parse "x 1");
 ]
 ;;
 
