@@ -88,15 +88,16 @@ module Typ = struct
             if (v == var1 || v == var2) then (erase_results var1 var2 tl)
             else hd::(erase_results var1 var2 tl)
 
+    let rec merge_typ_lst (ls1: t list) (ls2: t list) =
+        match ls1 with
+        | [] -> ls2
+        | hd::tl ->  
+            if (in_dom ls2 hd) then 
+            (merge_typ_lst tl ls2) else
+            (merge_typ_lst tl (ls2)@[hd])
+    ;;
     let  merge_unsolved_ls (var1: TypeInferenceVar.t) (ls1: t list) (var2: TypeInferenceVar.t) (ls2: t list) (unify_results: unify_results): unify_results = 
-        let rec merge_typ_lst (ls1: t list) (ls2: t list) =
-            match ls1 with
-            | [] -> ls2
-            | hd::tl ->  
-                if (in_dom ls2 hd) then 
-                (merge_typ_lst tl ls2) else
-                (merge_typ_lst tl (ls2)@[hd])
-        in  let unsolved_ls =  merge_typ_lst ls1 ls2 in
+        let unsolved_ls =  merge_typ_lst ls1 ls2 in
         (erase_results var1 var2 unify_results) @ [(var1, UnSolved unsolved_ls); (var2, UnSolved unsolved_ls)]
     ;;
     let type_variable = ref (0)

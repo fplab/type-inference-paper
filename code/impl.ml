@@ -125,61 +125,45 @@ let rec unify (constraints: Constraints.t) (holes_repl_set: TypeInferenceVar.hol
     (* generate substitutions of the rest of the list *)
     let r2 = unify xs holes_repl_set in
     (* resolve the LHS and RHS of the constraints from the previous substitutions *)
-    let (_, result) = unify_one x y r2 holes_repl_set in result
+    let r1 = unify_one x y r2 holes_repl_set in 
+    r1 @ r2
 and unify_one (t1: Typ.t) (t2: Typ.t) (partial_results: Typ.unify_results) (holes_repl_set: TypeInferenceVar.holes_repl_set)
-  : Typ.unify_result * Typ.unify_results =
+  : Typ.unify_results =
     match ((t1, t2)) with
-    | (TNum, TNum) -> (Solved TNum, partial_results)
+    | (TNum, TNum) -> []
     | (THole v1, THole v2) -> (
+      TypeInferenceVar.union holes_repl_set v1 v2;
       match (Typ.find_result v1 partial_results, Typ.find_result v2 partial_results) with
-      | (None, None) -> 
-        TypeInferenceVar.union holes_repl_set v1 v2; 
-        (Some t1, partial_results)
-      | (Some Solved typ, None) -> 
-        TypeInferenceVar.union holes_repl_set v1 v2; 
-        (Some typ, [(v2, Typ.Solved typ)]@ partial_results)
-      | (None, Some Solved typ) -> 
-        TypeInferenceVar.union holes_repl_set v1 v2; 
-        (Some typ,[(v1, Typ.Solved typ)]@ partial_results)
-      | (Some UnSolved ls, None) -> 
-        (None, [(v2, Typ.UnSolved ls)]@ partial_results)
-      | (None, Some UnSolved ls) -> 
-        (None, [(v1, Typ.UnSolved ls)]@ partial_results)
+      | (None, None) ->  [(v1, Typ.Solved t2)]
+      | (Some Solved typ, None) -> unify_one typ t2 partial_results;
+      | (None, Some Solved typ) -> unify_one typ t1 partial_results;
+      | (Some UnSolved ls, None) -> [(v2, Typ.UnSolved ls)]
+      | (None, Some UnSolved ls) -> [(v1, Typ.UnSolved ls)]
       | (Some typ1, Some typ2) -> (
         match (typ1, typ2) with
-        | (UnSolved ls, Solved typ) -> 
-          (None, Typ.merge_unsolved_ls v1 ls v2 [typ] partial_results)
-        | (Solved typ, UnSolved ls) -> 
-          (None, Typ.merge_unsolved_ls v1 [typ] v2 ls partial_results)
+        | (UnSolved ls, Solved typ) | (Solved typ, UnSolved ls) -> 
+          let result = UnSolved (Typ.merge_typ_lst ls [typ]) in
+          [(v1, result); (v2, result)]
         | (UnSolved ls1, UnSolved ls2) -> 
-          (None, Typ.merge_unsolved_ls v1 ls1 v2 ls2 partial_results)
-        | (Solved TNum, Solved TNum) -> 
-          TypeInferenceVar.union holes_repl_set v1 v2;
-          (Some TNum, partial_results)
+          let result = UnSolved (Typ.merge_typ_lst ls1 ls2) in
+          [(v1, result); (v2, result)]
+        | (Solved TNum, Solved TNum) -> []
         | (Solved TArrow (ta1, ta2), Solved TArrow (ta3, ta4)) -> 
-          TypeInferenceVar.union holes_repl_set v1 v2;
-          let (ta1', re1) = unify_one ta1 ta3 partial_results holes_repl_set in
-          let (ta2', re2) = unify_one ta2 ta4 re1 holes_repl_set in (
-            match (ta1', ta2') with
-            | (None, None) ->
-          )
-          if (suc1 && suc2) then (true, Typ.erase_results v1 v2 re2)
-          else (false,Typ.merge_unsolved_ls v1 [typ1] v2 [typ2] re2)
+          unify [(ta1,ta3);(ta2,ta4)] holes_repl_set;
         | (Solved THole _, _) | (_, Solved THole _) -> raise Impossible
         | (Solved typ1, Solved typ2)-> 
           let group1 = TypeInferenceVar.get_group holes_repl_set v1 in
           let group2 = TypeInferenceVar.get_group holes_repl_set v2 in
           let invalid_holes_ls = TypeInferenceVar.group_inter group1 group2 in
-          let partial_results' =  Typ.erase_results v1 v2 partial_results in
           TypeInferenceVar.disconnect_ls holes_repl_set invalid_holes_ls;
-          (to_unsolved_ls invalid_holes_ls [typ1;typ2])@ partial_results'
+          to_unsolved_ls invalid_holes_ls [typ1;typ2]
       )
     )
     | (TArrow (ta1, ta2), TArrow (ta3, ta4)) -> unify [(ta1, ta3); (ta2, ta4)] holes_repl_set
     | (THole v, typ) | (typ, THole v)->
         match (Typ.find_result v partial_results, typ) with
-        | (Solved TNum, TNum) -> partial_results
+        | (Solved TNum, TNum) -> []
         | (Solved TArrow(ta1,ta2), TArrow (ta3, ta4)) -> unify [(ta1, ta3); (ta2, ta4)] holes_repl_set
-        [(v, Typ.Solved typ)]@ partial_results
+        | 
     | _ -> raise Impossible;
   ;;
