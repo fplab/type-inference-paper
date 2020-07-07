@@ -112,27 +112,54 @@ let rec is_in_dom (v: TypeInferenceVar.t) (t: Typ.t) : bool =
     | TArrow (t1, t2) -> (is_in_dom v t1) || (is_in_dom v t2) 
 ;;
 
-let typ' = substitute typ partial_results in
-if (is_in_dom v2 typ') then (false,[(v1, Typ.UnSolved [typ', t2]); (v2, Typ.UnSolved [typ', t2])])
-else (true,[(v1, Typ.Solved typ'); (v2, Typ.Solved typ')])
+let rec substitute (u: Typ.unify_result) (x: TypeInferenceVar.t) (t: Typ.t) : Typ.t =
+  match u with
+  | Solved u_typ ->(
+    match t with
+    | TNum -> t
+    | THole v -> if v = x then u else t
+    | TArrow(t1, t2) -> TArrow(substitute u x t1, substitute u x t2)
+  )
+  | UnSolved _ -> t
+;;
 
+let apply (subs: Typ.unify_results) (t: Typ.t) : Typ.t =
+  List.fold_right (fun (x, u) t -> substitute u x t) subs t
+;;
+let rec find_result (var: TypeInferenceVar.t) (unify_results: unify_results): unify_result option = 
+  match unify_results with
+  | [] -> None
+  | hd::tl -> 
+      let (v, result) = hd in
+      if (v == var) then (Some result)
+      else (find_result var tl)
+;;
+let merge_result = (r1: Typ.unify_result) (r2:Typ.unify_result):Typ.unify_result =
+
+let rec add_results (new_results: Typ.unify_results) (old_results: Typ.unify_results): Typ.unify_results =
+  match old_results with
+  | [] -> new_results
+  | (hd_var, hd_typ)::tl -> (
+    match find_result hd_var new_results with
+    | Some (_, new_typ) ->
+  )
 let rec unify (constraints: Constraints.t) (holes_repl_set: TypeInferenceVar.holes_repl_set) 
   : bool*Typ.unify_results =
   match constraints with
   | [] -> []
   | (x, y) :: xs ->
     (* generate substitutions of the rest of the list *)
-    let (suc2,r2) = unify xs holes_repl_set in
+    let (suc2,r2) = unify xs holes_repl_set sol in
     (* resolve the LHS and RHS of the constraints from the previous substitutions *)
-    let (suc1,r1) = unify_one x y r2 holes_repl_set in 
+    let (suc1,r1) = unify_one x y r2 holes_repl_set sol in 
     (suc2 && suc1, r1 @ r2)
-and unify_one (t1: Typ.t) (t2: Typ.t) (partial_results: Typ.unify_results) (holes_repl_set: TypeInferenceVar.holes_repl_set)
+and unify_one (t1: Typ.t) (t2: Typ.t) (partial_results: Typ.unify_results) (holes_repl_set: TypeInferenceVar.holes_repl_set) 
   : Typ.unify_result option * Typ.unify_results =
     match ((t1, t2)) with
     | (TNum, TNum) ->(Solved TNum, [])
     | (THole v1, THole v2) -> (
       TypeInferenceVar.union holes_repl_set v1 v2;
-      match (Typ.find_result v1 partial_results, Typ.find_result v2 partial_results) with
+      match (find_result v1 partial_results, find_result v2 partial_results) with
       | (None, None) -> 
         if v1<v2 then (Solved t2,[(v1, Typ.Solved t2)])
         else if v1>v2 then (Solved t1,[(v2, Typ.Solved t1)])
@@ -195,7 +222,7 @@ and unify_one (t1: Typ.t) (t2: Typ.t) (partial_results: Typ.unify_results) (hole
     | (THole v, typ) | (typ, THole v)-> 
       if (is_in_dom v typ) then [(v, UnSolved [(substitute typ partial_results)])]
       else (
-        match (Typ.find_result v partial_results) with
+        match (find_result v partial_results) with
         | (Some Solved typ1) -> 
           match unify_one typ1 typ partial_results with
           | (Solved typ', result) -> (Solved typ', [(v, Solved typ')] @ result)

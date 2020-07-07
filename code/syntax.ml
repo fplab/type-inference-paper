@@ -51,20 +51,14 @@ module Typ = struct
         | UnSolved of (t list)
 
     type unify_results  = (TypeInferenceVar.t * unify_result) list
-
+    (* type solution = t array;
+    let solution_init n = Array.init n (fun i -> THole i); *)
     let rec in_dom lst typ = 
         match lst with
         | [] -> false
         | hd::tl -> hd==typ || (in_dom tl typ)
     ;;
-    let rec find_result (var: TypeInferenceVar.t) (unify_results: unify_results): unify_result option = 
-        match unify_results with
-        | [] -> None
-        | hd::tl -> 
-            let (v, result) = hd in
-            if (v == var) then (Some result)
-            else (find_result var tl)
-    ;;
+    
     let rec add_to_unsolved_ls (var: TypeInferenceVar.t) (typ: t) (unify_results: unify_results): unify_results = 
         match unify_results with
         | [] -> []
