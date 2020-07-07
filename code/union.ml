@@ -11,11 +11,7 @@ module UnionFind = struct
     rank = Array.make size 0;
     size = size; }
   ;;
-(*   let extend_to uf n =
-    { parent = Array.append uf.parent (Array.init (n - uf.size) (fun i -> i+ uf.size));
-    rank = Array.make n 0;
-    size = n; } *)
-
+  
   let rec find uf i =
     let pi = uf.parent.(i) in
     if pi == i then

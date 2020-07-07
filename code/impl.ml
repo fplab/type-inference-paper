@@ -193,15 +193,16 @@ and unify_one (t1: Typ.t) (t2: Typ.t) (partial_results: Typ.unify_results) (hole
           )
     )
     | (THole v, typ) | (typ, THole v)-> 
-      if (is_in_dom v typ) then [(v, UnSolved [typ])]
+      if (is_in_dom v typ) then [(v, UnSolved [(substitute typ partial_results)])]
       else (
         match (Typ.find_result v partial_results) with
-        | (Some Solved typ1) -> unify_one typ1 typ partial_results;
+        | (Some Solved typ1) -> 
+          match unify_one typ1 typ partial_results with
+          | (Solved typ', result) -> (Solved typ', [(v, Solved typ')] @ result)
+          | (UnSolved typ_ls, result) -> (UnSolved typ_ls, [(v, UnSolved typ_ls)] @ result)
         | (Some UnSolved ls) -> 
-          [(v, UnSolved (Typ.merge_typ_lst ls [typ])); (v2, result)]
-        | (Some Solved TNum, TNum) -> []
-        | (Solved TArrow(ta1,ta2), TArrow (ta3, ta4)) -> unify [(ta1, ta3); (ta2, ta4)] holes_repl_set
-        | 
+          [(v, UnSolved (Typ.merge_typ_lst ls [(substitute typ partial_results)]));]
+        | (None) -> let typ' = substitute typ partial_results in (Solved typ', [(v, Solved typ')])
       )
     | _ -> raise Impossible;
   ;;
