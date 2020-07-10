@@ -95,16 +95,6 @@ and ana (ctx: Ctx.t) (e: Exp.t) (ty: Typ.t): Constraints.t option =
 ;;
 
 
-(* type result =
-  | Success of Typ.unify_results
-  | Failure of Typ.unify_results *)
-
-let rec to_unsolved_ls (typvar_set: TypeInferenceVar.t list) (typ_ls: Typ.t list): Typ.unify_results = 
-  match typvar_set with
-  | [] -> []
-  | hd::tl -> [(hd, Typ.UnSolved typ_ls)] @ (to_unsolved_ls tl typ_ls)
-;;
-
 let rec is_in_dom (v: TypeInferenceVar.t) (t: Typ.t) : bool =
   match t with
     | THole v' -> v' == v 
@@ -127,18 +117,6 @@ let apply (subs: Typ.unify_results) (t: Typ.t) : Typ.t =
   List.fold_right (fun (x, u) t -> substitute u x t) subs t
 ;;
 
-(* let rec find_result (var: TypeInferenceVar.t) (unify_results: unify_results): unify_result option = 
-  match unify_results with
-  | [] -> None
-  | hd::tl -> 
-      let (v, result) = hd in
-      if (v == var) then (Some result)
-      else (find_result var tl)
-;; *)
-
-let max (var_1: TypeInferenceVar.t) (var_2: TypeInferenceVar.t) =
-  if var_1 > var_2 then var_1 else var_2
-;;
 
 let rec add_result (new_result: TypeInferenceVar.t*Typ.unify_result) (old_results: Typ.unify_results): Typ.unify_results =
   match old_results with
@@ -207,11 +185,6 @@ and unify_one (t1: Typ.t) (t2: Typ.t) (partial_results: Typ.unify_results)
             | (UnSolved typ_ls, result) -> (Solved (THole v), add_result (v, Typ.UnSolved typ_ls) result)
           )
         )
-       (* else (
-        match (unify_one subs_v (apply partial_results t) partial_results) with
-        | (Solved typ', result) -> (Solved typ', add_result (v, Typ.Solved typ') result)
-        | (UnSolved typ_ls, result) -> (Solved (THole v), add_result (v, Typ.UnSolved typ_ls) result)
-      ) *)
     | (typ_1, typ_2) -> 
       let typ_1' = apply partial_results typ_1 in
       let typ_2' = apply partial_results typ_2 in
