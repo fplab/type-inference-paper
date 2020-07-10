@@ -157,11 +157,7 @@ and unify_one (t1: Typ.t) (t2: Typ.t) (partial_results: Typ.unify_results)
     match ((t1, t2)) with
     | (TNum, TNum) ->(Solved TNum, [])
     | (TArrow (ta1, ta2), TArrow (ta3, ta4)) -> (
-      let ta1' = apply partial_results ta1 in
-      let ta2' = apply partial_results ta2 in
-      let ta3' = apply partial_results ta3 in
-      let ta4' = apply partial_results ta4 in
-      let (suc, results) = unify [(ta1',ta3');(ta2',ta4')] in
+      let (suc, results) = unify [(ta1,ta3);(ta2,ta4)] in
       let result' = merge_results results partial_results in
           if suc then (
             let typ' = apply result' t1 in
@@ -175,6 +171,7 @@ and unify_one (t1: Typ.t) (t2: Typ.t) (partial_results: Typ.unify_results)
     | (THole v, t) | (t, THole v)-> 
       let subs_v = apply partial_results (THole v) in
       let typ = apply partial_results t in
+        (* detect recursive case *)
         if (is_in_dom v typ) then (Solved (THole v), [(v, UnSolved [typ; THole v])])
         else (
           match subs_v with

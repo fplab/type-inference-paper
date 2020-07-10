@@ -1,1 +1,1 @@
-syntax.ml: List Union UnionFind
+syntax.ml: List

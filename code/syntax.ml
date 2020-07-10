@@ -1,4 +1,3 @@
-open Union
 module Identifier = struct
     type t = string
 end
