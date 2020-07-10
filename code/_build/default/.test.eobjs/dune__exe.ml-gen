@@ -10,6 +10,9 @@ module Myparse = Dune__exe__Myparse
 (** @canonical Dune__exe.Parser *)
 module Parser = Dune__exe__Parser
 
+(** @canonical Dune__exe.Simple *)
+module Simple = Dune__exe__Simple
+
 (** @canonical Dune__exe.Start *)
 module Start = Dune__exe__Start
 

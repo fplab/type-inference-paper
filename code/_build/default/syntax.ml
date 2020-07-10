@@ -51,20 +51,14 @@ module Typ = struct
         | UnSolved of (t list)
 
     type unify_results  = (TypeInferenceVar.t * unify_result) list
-
+    (* type solution = t array;
+    let solution_init n = Array.init n (fun i -> THole i); *)
     let rec in_dom lst typ = 
         match lst with
         | [] -> false
         | hd::tl -> hd==typ || (in_dom tl typ)
     ;;
-    let rec find_result (var: TypeInferenceVar.t) (unify_results: unify_results): unify_result option = 
-        match unify_results with
-        | [] -> None
-        | hd::tl -> 
-            let (v, result) = hd in
-            if (v == var) then (Some result)
-            else (find_result var tl)
-    ;;
+    
     let rec add_to_unsolved_ls (var: TypeInferenceVar.t) (typ: t) (unify_results: unify_results): unify_results = 
         match unify_results with
         | [] -> []
@@ -88,18 +82,22 @@ module Typ = struct
             if (v == var1 || v == var2) then (erase_results var1 var2 tl)
             else hd::(erase_results var1 var2 tl)
 
+    let add_to_typ_lst  (typ: t) (ls: t list)  =
+        if (in_dom ls typ) then ls else typ::ls
+    ;;
+    let rec merge_typ_lst (ls1: t list) (ls2: t list) =
+        match ls1 with
+        | [] -> ls2
+        | hd::tl ->  
+            if (in_dom ls2 hd) then 
+            (merge_typ_lst tl ls2) else
+            (hd::(merge_typ_lst tl ls2))
+    ;;
     let  merge_unsolved_ls (var1: TypeInferenceVar.t) (ls1: t list) (var2: TypeInferenceVar.t) (ls2: t list) (unify_results: unify_results): unify_results = 
-        let rec merge_typ_lst (ls1: t list) (ls2: t list) =
-            match ls1 with
-            | [] -> ls2
-            | hd::tl ->  
-                if (in_dom ls2 hd) then 
-                (merge_typ_lst tl ls2) else
-                (merge_typ_lst tl (ls2)@[hd])
-        in  let unsolved_ls =  merge_typ_lst ls1 ls2 in
+        let unsolved_ls =  merge_typ_lst ls1 ls2 in
         (erase_results var1 var2 unify_results) @ [(var1, UnSolved unsolved_ls); (var2, UnSolved unsolved_ls)]
     ;;
-    let type_variable = ref (0)
+    let type_variable = ref (0);;
 
     (* generates a new unique type variable *)
     let gen_new_type_var () =
