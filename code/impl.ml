@@ -59,6 +59,78 @@ let rec syn (ctx: Ctx.t) (e: Exp.t): (Typ.t * Constraints.t) option =
     | None -> None
     | Some (_, cons) -> Some (THole (Typ.gen_new_type_var()),cons)
   )
+  | EIf (e1, e2, e3) -> (
+    match ana ctx e1 TBool with
+    | None -> None
+    | Some cons1 -> (
+      match syn ctx e2 with
+      | None -> None
+      | Some (typ2, cons2) -> (
+        match syn ctx e3 with
+        | None -> None
+        | Some (typ3, cons3) -> Some (typ2, cons1 @ cons2 @ cons3 @[(typ2, typ3)])
+      )
+    )
+  )
+  | ELet (x, None, e1, e2) -> (
+    match syn ctx e1 with
+    | None -> None
+    | Some (typ1, cons1) -> (
+      match syn (Ctx.extend ctx (x, typ1)) e2 with
+      | None -> None
+      | Some (typ2, cons2) -> Some (typ2, cons1 @ cons2)
+    )
+  )
+  | ELet (x, Some typ, e1, e2) -> (
+    match ana ctx e1 typ with
+    | None -> None
+    | Some cons1 -> (
+      match syn (Ctx.extend ctx (x, typ)) e2 with
+      | None -> None
+      | Some (typ2, cons2) -> Some (typ2, cons1 @ cons2)
+    )
+  )
+  | EPair (e1, e2) -> (
+    match syn ctx e1 with
+    | None -> None
+    | Some (typ1, cons1) -> (
+      match syn ctx e2 with
+      | None -> None
+      | Some (typ2, cons2) -> Some (TProd(typ1, typ2), cons1 @ cons2)
+    )
+  )
+  | ELetPair (x, y, e1, e2) -> (
+    match syn ctx e1 with
+    | Some(TProd(typ1, typ2), cons1) -> (
+      match syn (Ctx.extend (Ctx.extend ctx (x, typ1)) (y, typ2)) e2 with
+      | None -> None
+      | Some (typ, cons2) -> Some (typ, cons1 @ cons2)
+    )
+    | _ -> None
+  )
+  | EPrjL e -> (
+    match syn ctx e with
+    | Some(TProd(typ1, _), cons) ->  Some (typ1, cons)
+    | _ -> None
+  )
+  | EPrjR e -> (
+    match syn ctx e with
+    | Some(TProd(_, typ2), cons) ->  Some (typ2, cons)
+    | _ -> None
+  )
+  | ECase (e, x, e1, y, e2) -> (
+    match syn ctx e with
+    | Some(TSum(typ1, typ2), cons1) ->  (
+      match syn (Ctx.extend ctx (x, typ1)) e1 with
+      | None -> None
+      | Some (typ_x, cons2) -> (
+        match syn (Ctx.extend ctx (y, typ2)) e2 with
+        | None -> None
+        | Some (typ_y, cons3) -> Some(typ_x, cons1@cons2@cons3@[(typ_x, typ_y)])
+      )
+    )
+    | _ -> None
+  )
 and ana (ctx: Ctx.t) (e: Exp.t) (ty: Typ.t): Constraints.t option =
   match e with
   | ELam (x, exp) -> (
@@ -81,6 +153,86 @@ and ana (ctx: Ctx.t) (e: Exp.t) (ty: Typ.t): Constraints.t option =
     )
     | _ -> raise Impossible
   ) 
+  | EIf (e1, e2, e3) -> (
+    match ana ctx e1 TBool with
+    | None -> None
+    | Some cons1 -> (
+      match ana ctx e2 ty with
+      | None -> None
+      | Some cons2 -> (
+        match ana ctx e3 ty with
+        | None -> None
+        | Some cons3 -> Some (cons1 @ cons2 @ cons3)
+      )
+    )
+  )
+  | ELet (x, None, e1, e2) -> (
+    match syn ctx e1 with
+    | None -> None
+    | Some (typ1, cons1) -> (
+      match ana (Ctx.extend ctx (x, typ1)) e2 ty with
+      | None -> None
+      | Some cons2 -> Some (cons1 @ cons2)
+    )
+  )
+  | ELet (x, Some typ, e1, e2) -> (
+    match ana ctx e1 typ with
+    | None -> None
+    | Some cons1 -> (
+      match ana (Ctx.extend ctx (x, typ)) e2 ty with
+      | None -> None
+      | Some cons2 -> Some (cons1 @ cons2)
+    )
+  )
+  | EPair (e1, e2) -> (
+    match ty with
+    | TProd(typ1, typ2) ->(
+      match ana ctx e1 typ1 with
+      | None -> None
+      | Some cons1 -> (
+        match ana ctx e2 typ2 with
+        | None -> None
+        | Some cons2 -> Some (cons1 @ cons2)
+      )
+    )
+    | _ -> None
+  )
+  | ELetPair (x, y, e1, e2) -> (
+    match syn ctx e1 with
+    | Some(TProd(typ1, typ2), cons1) -> (
+      match ana (Ctx.extend (Ctx.extend ctx (x, typ1)) (y, typ2)) e2 ty with
+      | None -> None
+      | Some cons2 -> Some (cons1 @ cons2)
+    )
+    | _ -> None
+  )
+  | EInjL e -> (
+    match ty with
+    | TSum (typ1, _) -> (
+      ana ctx e typ1
+    )
+    | _ -> None
+  )
+  | EInjR e -> (
+    match ty with
+    | TSum (typ1, typ2) -> (
+      ana ctx e typ2
+    )
+    | _ -> None
+  )
+  | ECase (e, x, e1, y, e2) -> (
+    match syn ctx e with
+    | Some(TSum(typ1, typ2), cons1) ->  (
+      match ana (Ctx.extend ctx (x, typ1)) e1 ty with
+      | None -> None
+      | Some (cons2) -> (
+        match ana (Ctx.extend ctx (y, typ2)) e2 ty with
+        | None -> None
+        | Some (cons3) -> Some(cons1@cons2@cons3)
+      )
+    )
+    | _ -> None
+  )
   | EVar _
   | EBinOp _ 
   | ENumLiteral _
@@ -99,7 +251,9 @@ let rec is_in_dom (v: TypeInferenceVar.t) (t: Typ.t) : bool =
   match t with
     | THole v' -> v' == v 
     | TNum -> false
-    | TArrow (t1, t2) -> (is_in_dom v t1) || (is_in_dom v t2) 
+    | TArrow (t1, t2) 
+    | TProd (t1, t2)
+    | TSum (t1, t2) -> (is_in_dom v t1) || (is_in_dom v t2) 
 ;;
 
 let rec substitute (u: Typ.unify_result) (x: TypeInferenceVar.t) (t: Typ.t) : Typ.t =
@@ -109,6 +263,8 @@ let rec substitute (u: Typ.unify_result) (x: TypeInferenceVar.t) (t: Typ.t) : Ty
     | TNum -> t
     | THole v -> if v = x then u_typ else t
     | TArrow(t1, t2) -> TArrow(substitute u x t1, substitute u x t2)
+    | TProd (t1, t2) -> TProd(substitute u x t1, substitute u x t2)
+    | TSum (t1, t2) -> TSum(substitute u x t1, substitute u x t2)
   )
   | UnSolved _ -> t
 ;;
@@ -141,49 +297,55 @@ let rec merge_results (new_results: Typ.unify_results) (old_results: Typ.unify_r
 ;;
 
 let rec unify (constraints: Constraints.t)
-  : bool*Typ.unify_results =
+  :  bool*Typ.unify_results =
   match constraints with
   | [] -> (true, [])
   | (x, y) :: xs ->
     (* generate substitutions of the rest of the list *)
-    let (suc2,r2) = unify xs in
+    let (suc2, r2) = unify xs in
     (* resolve the LHS and RHS of the constraints from the previous substitutions *)
-    let (sol,r1) = unify_one x y r2 in 
-    match sol with
-    | Solved _-> (suc2, merge_results r1 r2)
-    | UnSolved _-> (false, merge_results r1 r2)
+    let (suc1, r1) = unify_one x y r2 in 
+    (suc2 && suc1, merge_results r1 r2)
 and unify_one (t1: Typ.t) (t2: Typ.t) (partial_results: Typ.unify_results)
-  : Typ.unify_result * Typ.unify_results =
+  : bool * Typ.unify_results  =
     match ((t1, t2)) with
-    | (TNum, TNum) ->(Solved TNum, [])
-    | (TArrow (ta1, ta2), TArrow (ta3, ta4)) -> (
-      let (suc, results) = unify [(ta1,ta3);(ta2,ta4)] in
-      let result' = merge_results results partial_results in
-          if suc then (
-            let typ' = apply result' t1 in
-            (Solved typ', results)
-          ) else (
-            let typ_1 = apply result' t1 in
-            let typ_2 = apply result' t2 in
-            (UnSolved ([typ_1; typ_2]), results)
-          )
+    | (TNum, TNum) ->  (true, [])
+    | (TArrow (ty1, ty2), TArrow (ty3, ty4)) 
+    | (TProd (ty1, ty2), TProd (ty3,ty4)) -> (
+      unify [(ty1,ty3);(ty2,ty4)]
+    )
+    | (TSum (ty1, ty2), TSum (ty3,ty4)) -> (
+      (* TBD *)
     )
     | (THole v, t) | (t, THole v)-> 
       let subs_v = apply partial_results (THole v) in
       let typ = apply partial_results t in
         (* detect recursive case *)
-        if (is_in_dom v typ) then (Solved (THole v), [(v, UnSolved [typ; THole v])])
+        if (is_in_dom v typ) then (false, [(v, UnSolved [typ; THole v])])
         else (
           match subs_v with
-          | THole _ -> (Solved typ, [(v, Solved typ)])
+          | THole _ -> (true, [(v, Solved typ)])
           | _ -> (
             match (unify_one subs_v typ partial_results) with
-            | (Solved typ', result) -> (Solved typ', add_result (v, Typ.Solved typ') result)
-            | (UnSolved typ_ls, result) -> (Solved (THole v), add_result (v, Typ.UnSolved typ_ls) result)
+            | (true, result) ->  (true, add_result (v, Typ.Solved typ) result)
+            | (false, result) -> (false, add_result (v, Typ.UnSolved([subs_v; typ])) result)
           )
         )
-    | (typ_1, typ_2) -> 
-      let typ_1' = apply partial_results typ_1 in
-      let typ_2' = apply partial_results typ_2 in
-      (UnSolved [typ_1'; typ_2'], [])
+    | (_, _) -> 
+      (false, [])
   ;;
+
+(* let  generate_sol (constraints: Constraints.t): Typ.unify_results =
+  let (_, results) = unify constraints in
+  let rec subs_results (results: Typ.unify_results): Typ.unify_results = (
+    match results with
+    | [] -> []
+    | (hd_var, Solved hd_typ)::tl -> (
+      (hd_var, Solved (apply results hd_typ))::(subs_results tl)
+    )
+    | (hd_var, UnSolved hd_typ_ls)::tl -> (
+      (hd_var, UnSolved (List.map (apply results) hd_typ_ls))::(subs_results tl)
+    )
+  ) in (subs_results results)
+;;
+ *)

@@ -12,6 +12,8 @@ module Typ = struct
         | THole of TypeInferenceVar.t
         | TNum
         | TArrow of t * t
+        | TProd of t * t
+        | TSum of t * t
 
     type unify_result = 
         | Solved of t
@@ -51,7 +53,10 @@ module Typ = struct
     let rec load_type_variable (t: t) =
         match t with
         | THole id -> type_variable:= TypeInferenceVar.recent (id+1) !type_variable
+        | TBool
         | TNum -> ()
+        | TProd (ty1,ty2)
+        | TSum (ty1,ty2)
         | TArrow (ty1,ty2)-> (
         load_type_variable(ty1);
         load_type_variable(ty2);
@@ -74,6 +79,15 @@ module Exp = struct
         | EAsc of t * Typ.t
         | EEmptyHole of hole_id
         | EExpHole of hole_id * t
+        | EIf of t * t * t
+        | ELet of Identifier.t * Typ.t option * t * t
+        | EPair of t * t
+        | ELetPair of Identifier.t * Identifier.t * t * t
+        | EPrjL of t
+        | EPrjR of t
+        | EInjL of t
+        | EInjR of t
+        | ECase of t * Identifier.t * t * Identifier.t * t
 end
 
 

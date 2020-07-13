@@ -100,7 +100,7 @@ let solve (ctx: Ctx.t) (e: Exp.t) =
     Printf.printf "\n+ unify results: (<hole_id>) (<type>)\n";
     (* let var_ls = TypeInferenceVar.group_create !Typ.type_variable in
     Printf.printf "\n@@@variable@@@: %s\n" (string_of_int !Typ.type_variable); *)
-    let (_, results )=   Impl.unify cons in 
+    let (_, results) =   Impl.unify cons in 
     Printf.printf "%s\n" (string_of_results results); 
 (*       let new_typ = Impl.apply subs typ in
       Printf.printf "+ final result of infer typ:\n %s\n" (string_of_typ new_typ); *)

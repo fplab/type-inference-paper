@@ -29,22 +29,56 @@ and token = parse
     { token lexbuf }
 | '\n'
     { EOL }
+| ".0"
+    { LPRJ }
+| ".1"
+    { RPRJ }
 | ['0'-'9']+ as i
     { INT (int_of_string i) }
 | '+'
     { PLUS }
+| '*'
+    { TIMES }
 | '('
     { LPAREN }
 | ')'
     { RPAREN }
+| ','
+    { COMMA }
+| 'L'
+    { L }
+| 'R'
+    { R }
+| "case"
+    { CASE }
+| "of"
+    { OF }
+| "if"
+    { IF }
+| "then"
+    { THEN }
+| "else"
+    { ELSE }
+| "let"
+    { LET }
 | ':'
     { OFTYPE }
+| "be"
+    { BE }
+| "in"
+    { IN }
 | "->"
     { ARROW }
 | "fun"
     { FUN }
+| "True"
+    { BOOLLIT (true) }
+| "False"
+    { BOOLLIT (false) }
 | "Num"
     { NUM }
+| "Bool"
+    { BOOL }
 | "Hole"
     { HOLE }
 | "(|"
