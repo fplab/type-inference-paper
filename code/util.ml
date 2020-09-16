@@ -4,7 +4,10 @@ let rec string_of_typ(typ:Typ.t) =
   match typ with
   | THole var ->  "THole["^string_of_int(var)^"]"
   | TNum -> "TNum"
+  | TBool -> "TBool"
   | TArrow (t1,t2) -> string_of_typ(t1) ^ "->"^ string_of_typ(t2)
+  | TSum (t1,t2) -> string_of_typ(t1) ^ "+"^ string_of_typ(t2)
+  | TProd (t1,t2) -> string_of_typ(t1) ^ "*"^ string_of_typ(t2)
 ;;
 let rec string_of_typ_ls(typ_ls:Typ.t list) =
   match typ_ls with
@@ -38,9 +41,20 @@ let rec string_of_exp(exp: Exp.t) =
     | OpPlus -> string_of_exp(exp1)^" + "^string_of_exp(exp2)
   )
   | ENumLiteral num -> string_of_int(num)
+  | EBoolLiteral boo -> string_of_bool(boo)
   | EAsc (exp,typ) -> string_of_exp(exp)^":"^string_of_typ(typ)
   | EEmptyHole hole_id -> "(|["^string_of_int(hole_id)^"]|)"
   | EExpHole (hole_id, exp)->"(|["^string_of_int(hole_id)^"]"^string_of_exp(exp)^"|)"
+  | EIf(e1,e2,e3) -> "if "^string_of_exp(e1)^" then "^string_of_exp(e2)^" else "^string_of_exp(e3)
+  | ELet(x,Some typ, e1, e2) -> "let "^x^":"^string_of_typ(typ)^" = "^string_of_exp(e1)^" in "^string_of_exp(e2)
+  | ELet(x,None, e1, e2) -> "let "^x^" = "^string_of_exp(e1)^" in "^string_of_exp(e2)
+  | EPair(e1,e2) -> "("^string_of_exp(e1)^" , "^string_of_exp(e2)^")"
+  | ELetPair (x,y,e1,e2) -> "let ("^x^" , "^y^") = "^string_of_exp(e1)^" in "^string_of_exp(e2)
+  | EPrjL e -> "["^string_of_exp(e)^"].0"
+  | EPrjR e -> "["^string_of_exp(e)^"].1"
+  | EInjL e -> "L["^string_of_exp(e)^"]"
+  | EInjR e -> "R["^string_of_exp(e)^"]"
+  | ECase (e1, x, e2, y, e3) -> "case "^string_of_exp(e1)^" of L["^x^"] -> "^string_of_exp(e2)^"else R["^y^"] -> "^string_of_exp(e3)
 ;;
 
 let print_exp(exp: Exp.t) = Printf.printf "EXP:  %s\n" (string_of_exp exp)
@@ -81,13 +95,41 @@ let rec update_type_variable (ctx: Ctx.t) (e: Exp.t): unit =
     update_type_variable ctx e1;
     update_type_variable ctx e2;
   )
-  | ENumLiteral _ -> ();
+  | ENumLiteral _ 
+  | EBoolLiteral _ -> ();
   | EAsc (exp, typ) -> (
     Typ.load_type_variable(typ);
     update_type_variable ctx exp;
   )
   | EEmptyHole _
   | EExpHole _ -> ();
+  | EIf(e1,e2,e3) -> (
+    update_type_variable ctx e1;
+    update_type_variable ctx e2;
+    update_type_variable ctx e3;
+  )
+  | ELet(_,Some typ, e1, e2) -> (
+    Typ.load_type_variable(typ);
+    update_type_variable ctx e1;
+    update_type_variable ctx e2;
+  )
+  | ELet(_,None, e1, e2) 
+  | EPair(e1,e2) 
+  | ELetPair (_,_,e1,e2) -> (
+    update_type_variable ctx e1;
+    update_type_variable ctx e2;
+  )
+  | EPrjL e 
+  | EPrjR e 
+  | EInjL e 
+  | EInjR e ->(
+    update_type_variable ctx e;
+  )
+  | ECase (e1, _, e2, _, e3) -> (
+    update_type_variable ctx e1;
+    update_type_variable ctx e2;
+    update_type_variable ctx e3;
+  )
 ;;
 let solve (ctx: Ctx.t) (e: Exp.t) = 
   update_type_variable ctx e;

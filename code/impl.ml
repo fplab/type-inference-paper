@@ -15,6 +15,17 @@ let get_match_arrow_typ (t: Typ.t): (Typ.t * Constraints.t) option =
   | _ -> None
 ;;
 
+let rec consistent (t1: Typ.t) (t2: Typ.t) : bool = 
+  match (t1,t2) with
+  | (THole _ , _)
+  | (_ , THole _)
+  | (TNum, TNum)
+  | (TBool, TBool) -> true
+  | (TArrow (t1, t2), TArrow (t3, t4))
+  | (TProd (t1, t2), TProd (t3, t4))
+  | (TSum (t1, t2), TSum (t3, t4)) -> (consistent t1 t3) && (consistent t2 t4)
+  | _ -> false
+;;
 
 let rec syn (ctx: Ctx.t) (e: Exp.t): (Typ.t * Constraints.t) option =
   match e with
@@ -48,6 +59,7 @@ let rec syn (ctx: Ctx.t) (e: Exp.t): (Typ.t * Constraints.t) option =
         )
     )
   | ENumLiteral _ -> Some (TNum, [])
+  | EBoolLiteral _ -> Some (TBool, [])
   | EAsc (exp, typ) -> (
       match ana ctx exp typ with
       | None -> None
@@ -131,6 +143,8 @@ let rec syn (ctx: Ctx.t) (e: Exp.t): (Typ.t * Constraints.t) option =
     )
     | _ -> None
   )
+  | EInjL _
+  | EInjR _ -> None
 and ana (ctx: Ctx.t) (e: Exp.t) (ty: Typ.t): Constraints.t option =
   match e with
   | ELam (x, exp) -> (
@@ -215,7 +229,7 @@ and ana (ctx: Ctx.t) (e: Exp.t) (ty: Typ.t): Constraints.t option =
   )
   | EInjR e -> (
     match ty with
-    | TSum (typ1, typ2) -> (
+    | TSum (_, typ2) -> (
       ana ctx e typ2
     )
     | _ -> None
@@ -236,13 +250,18 @@ and ana (ctx: Ctx.t) (e: Exp.t) (ty: Typ.t): Constraints.t option =
   | EVar _
   | EBinOp _ 
   | ENumLiteral _
+  | EBoolLiteral _
   | EAsc _
   | EEmptyHole _
-  | EExpHole _ ->
+  | EExpHole _ 
+  | EPrjL _
+  | EPrjR _ ->
     (* subsumption *)
       (match syn ctx e with
         | None -> None
-        | Some (ty', cons) -> Some (cons@[(ty, ty')])
+        | Some (ty', cons) -> 
+        if (consistent ty' ty) then Some (cons@[(ty, ty')])
+        else None
       )
 ;;
 
@@ -250,7 +269,8 @@ and ana (ctx: Ctx.t) (e: Exp.t) (ty: Typ.t): Constraints.t option =
 let rec is_in_dom (v: TypeInferenceVar.t) (t: Typ.t) : bool =
   match t with
     | THole v' -> v' == v 
-    | TNum -> false
+    | TNum 
+    | TBool -> false
     | TArrow (t1, t2) 
     | TProd (t1, t2)
     | TSum (t1, t2) -> (is_in_dom v t1) || (is_in_dom v t2) 
@@ -260,7 +280,8 @@ let rec substitute (u: Typ.unify_result) (x: TypeInferenceVar.t) (t: Typ.t) : Ty
   match u with
   | Solved u_typ ->(
     match t with
-    | TNum -> t
+    | TNum 
+    | TBool -> t
     | THole v -> if v = x then u_typ else t
     | TArrow(t1, t2) -> TArrow(substitute u x t1, substitute u x t2)
     | TProd (t1, t2) -> TProd(substitute u x t1, substitute u x t2)
@@ -296,6 +317,42 @@ let rec merge_results (new_results: Typ.unify_results) (old_results: Typ.unify_r
   | hd::tl -> merge_results tl (add_result hd old_results)
 ;;
 
+(*     hole3 
+    hole1 num -> hole3
+    hole2 num -> bool // [num,bool] // [num -> bool, num -> float] //hole3 -> bool
+    hole1 ~ hole2
+    1 [num->hole3, hole2]
+    --> hole1 ~ [num->num, hole2]     [num->hole3,hole2]
+    --> hole1 ~ [num, hole2], hole2 ~ [bool] *)
+
+
+    hole 0 : num
+                  hole 0 = solved [num]
+    hole 1 ~ hole 0
+                  hole 1 = solved [hole 0]
+    hole 0 ~ bool
+                  hole 0 = Unsolved [num, bool]
+                  hole 1 = solved [hole 0]
+    hole 2 ~ hole 1
+                  hole 0 = Unsolved [num, bool]
+                  hole 1 = solved [hole 0]
+                  hole 2 = solved [hole 1]
+    hole 2 ~ bool 
+                  hole 0 = Unsolved [num, bool]
+                  hole 1 = solved [hole 0]
+                  hole 2 = solved [hole 1]
+                  
+    hole 0 : num
+    hole 1 ~ hole 0
+    hole 2 : num -> hole0       /num
+    hole 3 : num -> bool
+    hole 2 ~ hole 3 
+                hole 0 : unsolved [num, bool]
+                hole 2 : [num -> hole 0]
+                hole 3 : solved [num -> bool]
+    hole 4: num -> hole 2
+    hole 4 ~ hole 1
+
 let rec unify (constraints: Constraints.t)
   :  bool*Typ.unify_results =
   match constraints with
@@ -311,13 +368,11 @@ and unify_one (t1: Typ.t) (t2: Typ.t) (partial_results: Typ.unify_results)
     match ((t1, t2)) with
     | (TNum, TNum) ->  (true, [])
     | (TArrow (ty1, ty2), TArrow (ty3, ty4)) 
-    | (TProd (ty1, ty2), TProd (ty3,ty4)) -> (
+    | (TProd (ty1, ty2), TProd (ty3,ty4)) 
+    | (TSum (ty1, ty2), TSum (ty3,ty4))-> (
       unify [(ty1,ty3);(ty2,ty4)]
     )
-    | (TSum (ty1, ty2), TSum (ty3,ty4)) -> (
-      (* TBD *)
-    )
-    | (THole v, t) | (t, THole v)-> 
+    | (THole v, t) | (t, THole v) -> 
       let subs_v = apply partial_results (THole v) in
       let typ = apply partial_results t in
         (* detect recursive case *)
@@ -328,7 +383,7 @@ and unify_one (t1: Typ.t) (t2: Typ.t) (partial_results: Typ.unify_results)
           | _ -> (
             match (unify_one subs_v typ partial_results) with
             | (true, result) ->  (true, add_result (v, Typ.Solved typ) result)
-            | (false, result) -> (false, add_result (v, Typ.UnSolved([subs_v; typ])) result)
+            | (false, result) -> (false, add_result (v, Typ.UnSolved([//subs_v; t //typ])) result)
           )
         )
     | (_, _) -> 

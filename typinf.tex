@@ -49,6 +49,14 @@ Figure ~\ref{fig:ana-syn} defines a bidirectional typing system extended with ty
             \consexptyp{\Gamma}{(e_1 + e_2)}{\tnum}{C_1 \cup C_2}
           }
     \end{equation}
+    \begin{equation}
+        \inferrule[]{
+            \ananc{\Gamma}{e_1}{\tnum}\\
+            \ananc{\Gamma}{e_2}{\tnum}
+          }{
+            \consexptypnc{\Gamma}{(e_1 + e_2)}{\tnum}
+          }
+    \end{equation}
     \begin{equation}\label{rule:syn-asc}
         \inferrule[]{
             \ana{\Gamma}{e}{\tau}{C}

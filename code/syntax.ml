@@ -10,6 +10,7 @@ end
 module Typ = struct
     type t =
         | THole of TypeInferenceVar.t
+        | TBool
         | TNum
         | TArrow of t * t
         | TProd of t * t
@@ -75,6 +76,7 @@ module Exp = struct
         | ELam of Identifier.t * t
         | ELamAnn of Identifier.t * Typ.t * t
         | EBinOp of t * binop * t
+        | EBoolLiteral of bool
         | ENumLiteral of int
         | EAsc of t * Typ.t
         | EEmptyHole of hole_id
