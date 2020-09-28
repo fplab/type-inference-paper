@@ -329,10 +329,14 @@ let rec merge_results (new_results: Typ.unify_results) (old_results: Typ.unify_r
     hole 0 : num
                   hole 0 = solved [num]
     hole 1 ~ hole 0
-                  hole 1 = solved [hole 0]
+                  hole 0 = solved [num]
+                  hole 1 = solved [num]
+    hole2 ~ hole 1
     hole 0 ~ bool
                   hole 0 = Unsolved [num, bool]
                   hole 1 = solved [hole 0]
+    hole3 ~ hole 0 
+                hole 3 = solved [hole 0]
     hole 2 ~ hole 1
                   hole 0 = Unsolved [num, bool]
                   hole 1 = solved [hole 0]
@@ -341,7 +345,7 @@ let rec merge_results (new_results: Typ.unify_results) (old_results: Typ.unify_r
                   hole 0 = Unsolved [num, bool]
                   hole 1 = solved [hole 0]
                   hole 2 = solved [hole 1]
-                  
+
     hole 0 : num
     hole 1 ~ hole 0
     hole 2 : num -> hole0       /num

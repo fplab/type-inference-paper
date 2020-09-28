@@ -22,6 +22,7 @@ module Typ = struct
 
     type unify_results  = (TypeInferenceVar.t * unify_result) list
 
+    let consistent typ
     let rec in_dom lst typ = 
         match lst with
         | [] -> false
@@ -124,4 +125,18 @@ module Constraints = struct
   type consistent = Typ.t * Typ.t
 
   type t = consistent list
+end
+
+module Solver = struct 
+    type hole_eq = TypeInferenceVar.t * (Typ.t list)
+    type hole_eqs = hole_eq list
+
+    let rec lookup (hole_var : TypeInferenceVar.t) (eqs : hole_eqs) : (Typ.t list) option =
+        match eqs with
+        | [] -> None
+        | hd::tl -> (
+            let (hole_eq_var, hole_typ_ls) = hd in if hole_eq_var == hole_var 
+            then Some(hole_typ_ls) 
+            else (lookup hole_var tl)
+        )
 end
