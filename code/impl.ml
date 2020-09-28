@@ -317,45 +317,6 @@ let rec merge_results (new_results: Typ.unify_results) (old_results: Typ.unify_r
   | hd::tl -> merge_results tl (add_result hd old_results)
 ;;
 
-(*     hole3 
-    hole1 num -> hole3
-    hole2 num -> bool // [num,bool] // [num -> bool, num -> float] //hole3 -> bool
-    hole1 ~ hole2
-    1 [num->hole3, hole2]
-    --> hole1 ~ [num->num, hole2]     [num->hole3,hole2]
-    --> hole1 ~ [num, hole2], hole2 ~ [bool] *)
-
-
-    hole 0 : num
-                  hole 0 = solved [num]
-    hole 1 ~ hole 0
-                  hole 0 = solved [num]
-                  hole 1 = solved [num]
-    hole2 ~ hole 1
-    hole 0 ~ bool
-                  hole 0 = Unsolved [num, bool]
-                  hole 1 = solved [hole 0]
-    hole3 ~ hole 0 
-                hole 3 = solved [hole 0]
-    hole 2 ~ hole 1
-                  hole 0 = Unsolved [num, bool]
-                  hole 1 = solved [hole 0]
-                  hole 2 = solved [hole 1]
-    hole 2 ~ bool 
-                  hole 0 = Unsolved [num, bool]
-                  hole 1 = solved [hole 0]
-                  hole 2 = solved [hole 1]
-
-    hole 0 : num
-    hole 1 ~ hole 0
-    hole 2 : num -> hole0       /num
-    hole 3 : num -> bool
-    hole 2 ~ hole 3 
-                hole 0 : unsolved [num, bool]
-                hole 2 : [num -> hole 0]
-                hole 3 : solved [num -> bool]
-    hole 4: num -> hole 2
-    hole 4 ~ hole 1
 
 let rec unify (constraints: Constraints.t)
   :  bool*Typ.unify_results =
@@ -394,6 +355,20 @@ and unify_one (t1: Typ.t) (t2: Typ.t) (partial_results: Typ.unify_results)
       (false, [])
   ;;
 
+let rec gen_hole_eqs (constraints: Constraints.t) (eqs: Solver.hole_eqs): Solver.hole_eqs =
+  match constraints with
+  | [] -> eqs
+  | hd::tl -> (
+    match hd with 
+    | (Hole v, typ)
+    | (typ, Hole v) -> gen_hole_eqs tl (Solver.update_typ_in_hole_eq eqs v typ)
+    | (TArrow (ty1, ty2), TArrow (ty3, ty4)) 
+    | (TProd (ty1, ty2), TProd (ty3,ty4)) 
+    | (TSum (ty1, ty2), TSum (ty3,ty4)) -> (
+      (gen_hole_eqs )
+    )
+  )
+  
 (* let  generate_sol (constraints: Constraints.t): Typ.unify_results =
   let (_, results) = unify constraints in
   let rec subs_results (results: Typ.unify_results): Typ.unify_results = (

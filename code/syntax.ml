@@ -22,7 +22,8 @@ module Typ = struct
 
     type unify_results  = (TypeInferenceVar.t * unify_result) list
 
-    let consistent typ
+    
+
     let rec in_dom lst typ = 
         match lst with
         | [] -> false
@@ -138,5 +139,17 @@ module Solver = struct
             let (hole_eq_var, hole_typ_ls) = hd in if hole_eq_var == hole_var 
             then Some(hole_typ_ls) 
             else (lookup hole_var tl)
+        )
+    
+    let rec update_typ_in_hole_eq (eqs : hole_eqs) (hole_var : TypeInferenceVar.t) (typ: Typ.t): hole_eqs =
+        match eqs with
+        | [] -> []
+        | hd::tl -> (
+            let (hole_eq_var, hole_typ_ls) = hd in if hole_eq_var == hole_var 
+            then (
+                if Typ.in_dom hole_typ_ls typ then hd::tl
+                else (hole_eq_var, [typ, ...hole_typ_ls])::tl
+            )
+            else hd::(update_typ_in_hole_eq tl hole_var typ)
         )
 end
