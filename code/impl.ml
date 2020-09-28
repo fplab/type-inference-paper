@@ -361,11 +361,11 @@ let rec gen_hole_eqs (constraints: Constraints.t) (eqs: Solver.hole_eqs): Solver
   | hd::tl -> (
     match hd with 
     | (Hole v, typ)
-    | (typ, Hole v) -> gen_hole_eqs tl (Solver.update_typ_in_hole_eq eqs v typ)
+    | (typ, Hole v) -> gen_hole_eqs tl (Solver.update_typ_in_hole_eqs eqs v typ)
     | (TArrow (ty1, ty2), TArrow (ty3, ty4)) 
     | (TProd (ty1, ty2), TProd (ty3,ty4)) 
     | (TSum (ty1, ty2), TSum (ty3,ty4)) -> (
-      (gen_hole_eqs )
+      gen_hole_eqs ([(ty1,ty3); (ty2, ty4)]@tl) eqs
     )
   )
   

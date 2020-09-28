@@ -141,7 +141,7 @@ module Solver = struct
             else (lookup hole_var tl)
         )
     
-    let rec update_typ_in_hole_eq (eqs : hole_eqs) (hole_var : TypeInferenceVar.t) (typ: Typ.t): hole_eqs =
+    let rec update_typ_in_hole_eqs (eqs : hole_eqs) (hole_var : TypeInferenceVar.t) (typ: Typ.t): hole_eqs =
         match eqs with
         | [] -> []
         | hd::tl -> (
@@ -150,6 +150,10 @@ module Solver = struct
                 if Typ.in_dom hole_typ_ls typ then hd::tl
                 else (hole_eq_var, [typ, ...hole_typ_ls])::tl
             )
-            else hd::(update_typ_in_hole_eq tl hole_var typ)
+            else hd::(update_typ_in_hole_eqs tl hole_var typ)
         )
+    let rec merge_hole_eqs (eqs1 : hole_eqs) (eqs2 : hole_eqs): hole_eqs =
+        match eqs1 with 
+        | [] -> eqs2
+        | (hd_v, hd_typ)::tl -> merge_hole_eqs tl (update_typ_in_hole_eqs eqs2 hd_v hd_typ)
 end
