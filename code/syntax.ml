@@ -131,7 +131,11 @@ end
 module Solver = struct 
     type hole_eq = TypeInferenceVar.t * (Typ.t list)
     type hole_eqs = hole_eq list
-
+    type result = 
+        | Solved of (t list)
+        | UnSolved of (t list)
+    type results = result list
+    
     let rec lookup (hole_var : TypeInferenceVar.t) (eqs : hole_eqs) : (Typ.t list) option =
         match eqs with
         | [] -> None

@@ -80,7 +80,9 @@ let rec syn (ctx: Ctx.t) (e: Exp.t): (Typ.t * Constraints.t) option =
       | Some (typ2, cons2) -> (
         match syn ctx e3 with
         | None -> None
-        | Some (typ3, cons3) -> Some (typ2, cons1 @ cons2 @ cons3 @[(typ2, typ3)])
+        | Some (typ3, cons3) -> 
+          if consistent typ2 typ3 then Some (typ2, cons1 @ cons2 @ cons3 @[(typ2, typ3)])
+          else None
       )
     )
   )
@@ -138,7 +140,10 @@ let rec syn (ctx: Ctx.t) (e: Exp.t): (Typ.t * Constraints.t) option =
       | Some (typ_x, cons2) -> (
         match syn (Ctx.extend ctx (y, typ2)) e2 with
         | None -> None
-        | Some (typ_y, cons3) -> Some(typ_x, cons1@cons2@cons3@[(typ_x, typ_y)])
+        | Some (typ_y, cons3) -> (
+          if consistent typ_x typ_y then Some(typ_x, cons1@cons2@cons3@[(typ_x, typ_y)])
+          else None
+          )
       )
     )
     | _ -> None
@@ -163,7 +168,9 @@ and ana (ctx: Ctx.t) (e: Exp.t) (ty: Typ.t): Constraints.t option =
     | Some (TArrow (ty_in, ty_out), cons1) -> (
       match ana (Ctx.extend ctx (x, ty_in')) exp ty_out with
       | None -> None
-      | Some cons2 -> Some (cons1@cons2@[(ty_in, ty_in')])
+      | Some cons2 -> 
+      if consistent ty_in ty_in' then Some (cons1@cons2@[(ty_in, ty_in')])
+      else None
     )
     | _ -> raise Impossible
   ) 
@@ -368,7 +375,40 @@ let rec gen_hole_eqs (constraints: Constraints.t) (eqs: Solver.hole_eqs): Solver
       gen_hole_eqs ([(ty1,ty3); (ty2, ty4)]@tl) eqs
     )
   )
-  
+
+let rec solve_eqs (eqs: Solver.hole_eqs): Solver.hole_eqs =
+  match eqs with
+  | [] -> []
+  | (hole_v, v_typ_ls)::tl -> (
+    []
+  )
+and check_consistent_ls (eqs: Solver.hole_eqs) (typls: Typ.t list): bool =
+  match typls with
+  | [] -> true
+  | hd::tl -> check_consistent_with_ls eqs tl hd
+and check_consistent_with_ls (eqs: Solver.hole_eqs) (typls: Typ.t list) (typ: Typ.t): bool =
+  match typls with
+  | [] -> true
+  | hd::tl -> (consistent_in_eqs eqs typ hd) && (check_consistent_with_ls tl typ)
+and consistent_in_eqs (eqs: Solver.hole_eqs) (typ1: Typ.t) (typ2: Typ.t): bool =
+  match (typ1, typ2) with
+  | (THole v1 , THole v2) -> (
+    match (Solver.lookup v1 eqs, Solver.lookup v2 eqs) with 
+    | (None, None) -> true
+    | (None, Some ls)
+    | (Some ls, None) -> check_consistent_ls ls
+    | (Some ls, Some ls) ->
+
+
+  )
+  | (THole v , typ)
+  | (typ , THole v)
+  | (TNum, TNum)
+  | (TBool, TBool) -> true
+  | (TArrow (t1, t2), TArrow (t3, t4))
+  | (TProd (t1, t2), TProd (t3, t4))
+  | (TSum (t1, t2), TSum (t3, t4)) 
+  | _ -> false
 (* let  generate_sol (constraints: Constraints.t): Typ.unify_results =
   let (_, results) = unify constraints in
   let rec subs_results (results: Typ.unify_results): Typ.unify_results = (
