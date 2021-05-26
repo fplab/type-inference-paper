@@ -3,16 +3,16 @@ exception Impossible
 open Syntax
 
 
-let get_match_arrow_typ (t: Typ.t): (Typ.t * Constraints.t) option = 
+let get_match_arrow_typ (t: Typ.t): (Typ.t option * Constraints.t) = 
   match t with
   | THole _ -> (
     let var_in = Typ.gen_new_type_var() in 
     let var_out = Typ.gen_new_type_var() in
     let arrow_typ = Typ.TArrow (THole(var_in),THole(var_out)) in
-    Some (arrow_typ,[(t, arrow_typ)])
+    (Some arrow_typ,[(t, arrow_typ)])
     )
-  | TArrow (_,_) -> Some (t, [])
-  | _ -> None
+  | TArrow (_,_) -> (Some t, [])
+  | _ -> None, []
 ;;
 
 let rec consistent (t1: Typ.t) (t2: Typ.t) : bool = 
@@ -27,49 +27,60 @@ let rec consistent (t1: Typ.t) (t2: Typ.t) : bool =
   | _ -> false
 ;;
 
-let rec syn (ctx: Ctx.t) (e: Exp.t): (Typ.t * Constraints.t) option =
+(*edit syn to return constraints always to ensure ability to run unify *)
+let rec syn (ctx: Ctx.t) (e: Exp.t): (Typ.t option * Constraints.t) =
   match e with
   | EVar x -> (
     match Ctx.lookup ctx x with
-    | None -> None
-    | Some(typ) -> Some (typ, [])
+    | None -> None, []
+    | Some(typ) -> (Some typ, [])
   )
-  | ELam (_, _) -> None
+  | ELam (_, _) -> None, []
   | ELamAnn (x, ty1, e2) -> (
       match syn (Ctx.extend ctx (x, ty1)) e2 with
-      | None -> None
-      | Some (ty2, cons) -> Some (TArrow (ty1, ty2),cons) )
+      | None, cons -> None, cons
+      | Some(ty2), cons -> (Some (TArrow (ty1, ty2)),cons) )
   | EBinOp (e1, OpPlus, e2) -> (
       match (ana ctx e1 Typ.TNum, ana ctx e2 Typ.TNum) with
-      | (None, _) 
-      | (_, None) -> None
-      | (Some cons1, Some cons2) -> Some (TNum, cons1@cons2) )
-  | EBinOp (e1, OpAp, e2) -> (
-      match (syn ctx e1) with
-      | None -> None
-      | Some (typ_e1, cons1) -> (
-          match get_match_arrow_typ typ_e1 with
-          | None -> None
-          | Some ((TArrow (ty_in, ty_out)), cons2) -> (
-            match ana ctx e2 ty_in with
-            | None -> None
-            | Some cons3 -> Some (ty_out, cons1@cons2@cons3)
-          )
+      | (true, cons1), (true, cons2) -> (Some TNum, cons1@cons2)
+      | ((_, cons1), (_, cons2)) -> (None, cons1@cons2)
+  )
+  | EBinOp (e1, OpAp, e2) -> ( (* ask Raef about this, should you still continue if synthesis on e1 fails? matched arrow type hole -> hole?*)
+      let ty_in, ty_out, cons12 = ( match (syn ctx e1) with
+      | None, cons1 ->
+        match get_match_arrow_typ (THole 0) with
+          | None -> 
+            Printf.printf "ap ma arrow error";
+            None, cons1
+          | Some (TArrow (ty_in, ty_out)), cons2 -> ty_in, ty_out, cons1@cons2
           | _ -> raise Impossible
-        )
+      | Some typ_e1, cons1 ->
+          match get_match_arrow_typ typ_e1 with
+          | None -> 
+            Printf.printf "ap ma arrow error";
+            None, cons1
+          | Some (TArrow (ty_in, ty_out)), cons2 -> ty_in, ty_out, cons1@cons2
+          | _ -> raise Impossible
+      ) in
+      match ana ctx e2 ty_in with
+      | false, cons3 -> 
+        Printf.printf "ap input type analysis error";
+        None, cons12@cons3
+      | true, cons3 -> (Some ty_out, cons12@cons3)
     )
-  | ENumLiteral _ -> Some (TNum, [])
-  | EBoolLiteral _ -> Some (TBool, [])
+  | ENumLiteral _ ->  (Some TNum, [])
+  
+  | EBoolLiteral _ -> (Some TBool, [])
   | EAsc (exp, typ) -> (
       match ana ctx exp typ with
-      | None -> None
-      | Some cons -> Some (typ, cons)
+      | false, cons -> None, cons
+      | true, cons -> (Some typ, cons)
   )
-  | EEmptyHole _ -> Some (THole (Typ.gen_new_type_var()),[])
+  | EEmptyHole _ -> (Some (THole (Typ.gen_new_type_var())),[])
   | EExpHole (_, e2) -> (
     match syn ctx e2 with
-    | None -> None
-    | Some (_, cons) -> Some (THole (Typ.gen_new_type_var()),cons)
+    | None, cons -> None, cons
+    | (Some _, cons) -> (Some (THole (Typ.gen_new_type_var())),cons)
   )
   | EIf (e1, e2, e3) -> (
     match ana ctx e1 TBool with
@@ -95,7 +106,9 @@ let rec syn (ctx: Ctx.t) (e: Exp.t): (Typ.t * Constraints.t) option =
   )
   | ELet (x, Some typ, e1, e2) -> (
     match ana ctx e1 typ with
-    | None -> None
+    | (None, cons1) -> (
+      (*currently, ana effectively returns options of type constraints.t; should always return them? *)
+    )
     | Some cons1 -> (
       match syn (Ctx.extend ctx (x, typ)) e2 with
       | None -> None
@@ -104,48 +117,78 @@ let rec syn (ctx: Ctx.t) (e: Exp.t): (Typ.t * Constraints.t) option =
   )
   | EPair (e1, e2) -> (
     match syn ctx e1 with
-    | None -> None
-    | Some (typ1, cons1) -> (
+    | (None, cons1) -> (
+      match syn ctx e1 with 
+      | (None, cons2) -> (None, cons1 @ cons2)
+      | (Some(typ2), cons2) -> (None, cons1 @ cons2)
+    )
+    | (Some (typ1), cons1) -> (
       match syn ctx e2 with
-      | None -> None
-      | Some (typ2, cons2) -> Some (TProd(typ1, typ2), cons1 @ cons2)
+      | (None, cons2) -> (None, cons1 @ cons2)
+      | (Some (typ2), cons2) -> (Some (TProd(typ1, typ2)), cons1 @ cons2)
     )
   )
   | ELetPair (x, y, e1, e2) -> (
     match syn ctx e1 with
-    | Some(TProd(typ1, typ2), cons1) -> (
+    | (Some(TProd(typ1, typ2)), cons1) -> (
       match syn (Ctx.extend (Ctx.extend ctx (x, typ1)) (y, typ2)) e2 with
-      | None -> None
-      | Some (typ, cons2) -> Some (typ, cons1 @ cons2)
+      | (None, cons2) -> (None, cons1 @ cons2)
+      | (Some (typ), cons2) -> (Some (typ), cons1 @ cons2)
     )
-    | _ -> None
+    | (None, cons1) -> (
+      (*the expression e1 did not synthesize a type so the let pair will not either. continue as if it did syn Hole * Hole *)
+      let (typ1, typ2) = (Typ.Hole, Typ.Hole) in
+      match syn (Ctx.extend (Ctx.extend ctx (x, typ1)) (y, typ2)) e2 with
+      | (None, cons2) -> (None, cons1 @ cons2)
+      | (Some (typ), cons2) -> (None, cons1 @ cons2)
+    )
   )
   | EPrjL e -> (
     match syn ctx e with
-    | Some(TProd(typ1, _), cons) ->  Some (typ1, cons)
-    | _ -> None
+    | (Some(TProd(typ1, _)), cons) ->  (Some (typ1), cons)
+    | (None, cons) -> (None, cons)
   )
   | EPrjR e -> (
     match syn ctx e with
-    | Some(TProd(_, typ2), cons) ->  Some (typ2, cons)
-    | _ -> None
+    | (Some(TProd(_, typ2)), cons) ->  (Some (typ2), cons)
+    | (None, cons) -> (None, cons)
   )
   | ECase (e, x, e1, y, e2) -> (
     match syn ctx e with
-    | Some(TSum(typ1, typ2), cons1) ->  (
+    | (Some(TSum(typ1, typ2)), cons1) ->  (
       match syn (Ctx.extend ctx (x, typ1)) e1 with
-      | None -> None
+      | (None, cons2) -> (
+        (*current approach: if the branch fails to syn a type, treat it as hole type in the ctrs *)
+        let typ_x = Typ.Hole in
+        match syn (Ctx.extend ctx (y, typ2)) e2 with
+        | (None, cons3) -> (None, cons1@cons2@cons3@[(typ_x, Typ.Hole)])
+        | (Some(typ_y), cons3) -> (None, cons1@cons2@cons3@[(typ_x, typ_y)])
+      )
       | Some (typ_x, cons2) -> (
         match syn (Ctx.extend ctx (y, typ2)) e2 with
-        | None -> None
-        | Some (typ_y, cons3) -> Some(typ_x, cons1@cons2@cons3@[(typ_x, typ_y)])
+        | (None, cons3) -> (None, cons1@cons2@cons3@[(typ_x, Typ.Hole)])
+        | (Some (typ_y), cons3) -> (Some(typ_x), cons1@cons2@cons3@[(typ_x, typ_y)])
       )
     )
-    | _ -> None
+    | (None, cons) -> (
+      (*syn has failed, but continue generating constraints *)
+      match syn (Ctx.extend ctx (x, typ1)) e1 with
+      | (None, cons2) -> (
+        let typ_x = Typ.Hole in
+        match syn (Ctx.extend ctx (y, typ2)) e2 with
+        | (None, cons3) -> (None, cons1@cons2@cons3@[(typ_x, Typ.Hole)])
+        | (Some(typ_y), cons3) -> (None, cons1@cons2@cons3@[(typ_x, typ_y)])
+      )
+      | Some (typ_x, cons2) -> (
+        match syn (Ctx.extend ctx (y, typ2)) e2 with
+        | (None, cons3) -> (None, cons1@cons2@cons3@[(typ_x, Typ.Hole)])
+        | (Some (typ_y), cons3) -> (None, cons1@cons2@cons3@[(typ_x, typ_y)])
+      )
+    )
   )
   | EInjL _
-  | EInjR _ -> None
-and ana (ctx: Ctx.t) (e: Exp.t) (ty: Typ.t): Constraints.t option =
+  | EInjR _ -> (None, [])
+and ana (ctx: Ctx.t) (e: Exp.t) (ty: Typ.t): (bool * Constraints.t) =
   match e with
   | ELam (x, exp) -> (
     match get_match_arrow_typ ty with
@@ -323,7 +366,7 @@ let rec merge_results (new_results: Typ.unify_results) (old_results: Typ.unify_r
     hole1 ~ hole2
     1 [num->hole3, hole2]
     --> hole1 ~ [num->num, hole2]     [num->hole3,hole2]
-    --> hole1 ~ [num, hole2], hole2 ~ [bool] *)
+    --> hole1 ~ [num, hole2], hole2 ~ [bool]
 
 
     hole 0 : num
@@ -352,6 +395,7 @@ let rec merge_results (new_results: Typ.unify_results) (old_results: Typ.unify_r
                 hole 3 : solved [num -> bool]
     hole 4: num -> hole 2
     hole 4 ~ hole 1
+  *)
 
 let rec unify (constraints: Constraints.t)
   :  bool*Typ.unify_results =
@@ -366,7 +410,8 @@ let rec unify (constraints: Constraints.t)
 and unify_one (t1: Typ.t) (t2: Typ.t) (partial_results: Typ.unify_results)
   : bool * Typ.unify_results  =
     match ((t1, t2)) with
-    | (TNum, TNum) ->  (true, [])
+    | (TNum, TNum) 
+    | (TBool, TBool) ->  (true, [])
     | (TArrow (ty1, ty2), TArrow (ty3, ty4)) 
     | (TProd (ty1, ty2), TProd (ty3,ty4)) 
     | (TSum (ty1, ty2), TSum (ty3,ty4))-> (
@@ -383,7 +428,7 @@ and unify_one (t1: Typ.t) (t2: Typ.t) (partial_results: Typ.unify_results)
           | _ -> (
             match (unify_one subs_v typ partial_results) with
             | (true, result) ->  (true, add_result (v, Typ.Solved typ) result)
-            | (false, result) -> (false, add_result (v, Typ.UnSolved([//subs_v; t //typ])) result)
+            | (false, result) -> (false, add_result (v, Typ.UnSolved([subs_v; typ])) result)
           )
         )
     | (_, _) -> 

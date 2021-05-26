@@ -5,11 +5,11 @@ let parse = Myparse.parse;;
 
 (* TBD *)
 let testcases: (Ctx.t * Exp.t) list = [
-  (Ctx.empty, parse "let (x,y) be ((|0|), 1) in x+1");
-
+  (Ctx.empty, parse "let (x,y) be ((|0|), 1) in x+1"); (* true, [solved (0) Tnum] *)
+  
   ([("f",TArrow(TNum,THole 2));("g",TArrow(TBool,THole 3))], 
     parse "let z be (|0|) in fun (x:Hole[2]) -> if z then f x else g x ");
-
+  
   (Ctx.empty, parse "let x be (|0|) in x+1");
   (Ctx.empty, parse "let x be True in x+1");
   ([("e1",TSum(THole 1,THole 2));], parse "case e1 of L(x) -> x+1 else R(y) -> (if y then 1 else 0)");
@@ -29,6 +29,14 @@ let testcases: (Ctx.t * Exp.t) list = [
   (Ctx.empty, EAsc (parse "(|0|)", TArrow(TNum,TNum)));
   (Ctx.empty, EAsc (parse "fun x -> 1+x", TArrow(TNum,TNum)));
   ([("x", TArrow(TNum,TNum));], parse "x 1");
+
+  (Ctx.empty, ELet ("x", (Some (THole 2)), (EBoolLiteral true), (parse "x + 1")));
+  (* (Ctx.empty, parse "let x:Hole[2] be true in x + 1") *)
+  (*empty context, then let x : (|0|) = (|1|) in case x with true => x + 1 and false => x + 2 *)
+  (* (Ctx.empty, parse "let x be (|0|) in (case x of true -> x+1 else false -> x+2)"); *)
+  (* (Ctx.empty, parse "((|1|) ((|0|) +1))  * 4"); *)
+  (* (Ctx.empty, parse "let f:Hole[3]->Hole[4] be fun (x:Hole[5]) -> ((|2|) x) + 1 in f"); *)
+  (Ctx.empty, parse "let f:Bool->Hole[4] be fun x -> x + 1 in f true");
 ]
 ;;
 
