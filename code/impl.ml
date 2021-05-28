@@ -323,7 +323,7 @@ let rec merge_results (new_results: Typ.unify_results) (old_results: Typ.unify_r
     hole1 ~ hole2
     1 [num->hole3, hole2]
     --> hole1 ~ [num->num, hole2]     [num->hole3,hole2]
-    --> hole1 ~ [num, hole2], hole2 ~ [bool] *)
+    --> hole1 ~ [num, hole2], hole2 ~ [bool]
 
 
     hole 0 : num
@@ -352,6 +352,7 @@ let rec merge_results (new_results: Typ.unify_results) (old_results: Typ.unify_r
                 hole 3 : solved [num -> bool]
     hole 4: num -> hole 2
     hole 4 ~ hole 1
+  *)
 
 let rec unify (constraints: Constraints.t)
   :  bool*Typ.unify_results =
@@ -366,7 +367,8 @@ let rec unify (constraints: Constraints.t)
 and unify_one (t1: Typ.t) (t2: Typ.t) (partial_results: Typ.unify_results)
   : bool * Typ.unify_results  =
     match ((t1, t2)) with
-    | (TNum, TNum) ->  (true, [])
+    | (TNum, TNum) 
+    | (TBool, TBool) ->  (true, [])
     | (TArrow (ty1, ty2), TArrow (ty3, ty4)) 
     | (TProd (ty1, ty2), TProd (ty3,ty4)) 
     | (TSum (ty1, ty2), TSum (ty3,ty4))-> (
@@ -383,7 +385,7 @@ and unify_one (t1: Typ.t) (t2: Typ.t) (partial_results: Typ.unify_results)
           | _ -> (
             match (unify_one subs_v typ partial_results) with
             | (true, result) ->  (true, add_result (v, Typ.Solved typ) result)
-            | (false, result) -> (false, add_result (v, Typ.UnSolved([//subs_v; t //typ])) result)
+            | (false, result) -> (false, add_result (v, Typ.UnSolved([subs_v; typ])) result)
           )
         )
     | (_, _) -> 
