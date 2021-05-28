@@ -31,12 +31,22 @@ let testcases: (Ctx.t * Exp.t) list = [
   ([("x", TArrow(TNum,TNum));], parse "x 1");
 
   (Ctx.empty, ELet ("x", (Some (THole 2)), (EBoolLiteral true), (parse "x + 1")));
-  (* (Ctx.empty, parse "let x:Hole[2] be true in x + 1") *)
-  (*empty context, then let x : (|0|) = (|1|) in case x with true => x + 1 and false => x + 2 *)
-  (* (Ctx.empty, parse "let x be (|0|) in (case x of true -> x+1 else false -> x+2)"); *)
-  (* (Ctx.empty, parse "((|1|) ((|0|) +1))  * 4"); *)
-  (* (Ctx.empty, parse "let f:Hole[3]->Hole[4] be fun (x:Hole[5]) -> ((|2|) x) + 1 in f"); *)
-  (Ctx.empty, parse "let f:Bool->Hole[4] be fun x -> x + 1 in f true");
+
+  (*([("f", TArrow(TNum,TNum));("g", TArrow(TBool,TNum));("z", TBool);], 
+    parse "let h be (fun (m:Hole[7]) -> (if z then f m else g m in h)");*)
+  ([("f", TArrow(THole 2, TNum));], parse "let (x,y) be ((|0|), (|1|)) in f x + f (y + 2) ");
+  ([("f", TArrow(THole 2, TNum));], parse "let (x,y) be ((|0|), (|1|)) in x y + y ");
+  ([("f", TArrow(THole 2, TNum));], parse "let (x,y) be ((|0|), (|1|)) in x + 2 + y 2 true");
+  ([("f", TArrow(THole 2, TNum));], parse "let (x,y) be ((|0|), (|1|)) in x + 2 + y true + y 3");
+  (*([("f", TArrow(THole 2, TNum));], parse "let (x,y) be ((|0|), (|1|)) in (if x then y x else y 3)");*)
+  (Ctx.empty, parse "let f:Hole[0] be fun (x:Hole[1]) -> x in f 2");
+  (Ctx.empty, EBinOp(EBinOp(EEmptyHole(0), OpAp, EBinOp(EEmptyHole(1), OpPlus, ENumLiteral(1))), OpPlus, ENumLiteral(4)));
+  (Ctx.empty, parse "let f:Hole[4] be fun (x:Hole[5]) -> ((|2|) x)+1 in f");
+  (Ctx.empty, ELet ("f", (Some (THole 0)), (ELam ("x", (EVar "x"))), (EPair ((EBinOp ((EVar "f"), OpAp, (EBoolLiteral true))), (EBinOp ((EVar "f"), OpAp, (ENumLiteral 1)))))));
+  (Ctx.empty, ELet ("f", (Some (TArrow (THole 0,THole 1))), (ELam ("x", (EVar "x"))), (EPair ((EBinOp ((EVar "f"), OpAp, (EBoolLiteral true))), (EBinOp ((EVar "f"), OpAp, (ENumLiteral 1)))))));
+  (Ctx.empty, ELet ("x", (Some (TSum(THole 0, THole 1))), parse "(|1|)", parse "case x of L(x) -> (if x then 1 else 1) else R(x) -> x+1"));
+  (* (Ctx.empty, ELet ("x", (Some (TSum(THole 0, THole 1))), parse "(|1|)", parse "case x of L(x) -> (if x then 1 else 1) else R(x) -> x+1")); *)
+  (Ctx.empty, ELet ("x", (Some (THole 0)), parse "(|1|)", parse "case x of L(x) -> 1 else R(x) -> 1"));
 ]
 ;;
 
