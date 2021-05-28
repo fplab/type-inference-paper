@@ -31,13 +31,38 @@ let testcases: (Ctx.t * Exp.t) list = [
 
   (Ctx.empty, ELet ("x", (Some (THole 2)), (EBoolLiteral true), (parse "x + 1")));
 
-  (*([("f", TArrow(TNum,TNum));("g", TArrow(TBool,TNum));("z", TBool);], 
-    parse "let h be (fun (m:Hole[7]) -> (if z then f m else g m in h)");*)
-  ([("f", TArrow(THole 2, TNum));], parse "let (x,y) be ((|0|), (|1|)) in f x + f (y + 2) ");
+  (*New test cases begin *)
+  ([("f", TArrow(TNum,TNum));("g", TArrow(TBool,TNum));("z", TBool);], 
+    parse "let h be fun (m:Hole[7]) -> (if z then f m else g m) in h");
+  (* Notice that all of these use hole,hole for the assignment of the x,y! Matched product and matched sum are unimplemented*)
+  ([("f", TArrow(THole 2, TNum));], parse "let (x,y) be ((|0|), (|1|)) in let z be y+2 in f x + f z");
   ([("f", TArrow(THole 2, TNum));], parse "let (x,y) be ((|0|), (|1|)) in x y + y ");
-  ([("f", TArrow(THole 2, TNum));], parse "let (x,y) be ((|0|), (|1|)) in x + 2 + y 2 true");
-  ([("f", TArrow(THole 2, TNum));], parse "let (x,y) be ((|0|), (|1|)) in x + 2 + y true + y 3");
-  (*([("f", TArrow(THole 2, TNum));], parse "let (x,y) be ((|0|), (|1|)) in (if x then y x else y 3)");*)
+  (Ctx.empty, 
+  ELetPair("x", "y", EPair(EEmptyHole(0), EEmptyHole(1)), 
+    EBinOp(
+      EBinOp(
+        EBinOp(
+          EBinOp(EVar("y"), OpAp, EVar("x")), 
+          OpAp,
+          EBoolLiteral(true)
+        ),
+        OpPlus,
+        EVar("x")
+      ), 
+      OpPlus, 
+      ENumLiteral(3)
+    )
+  ));
+  (*switching the ordering of the branches somewhat alters the final solution/constraint set (but in a correct way)
+    every use of a hole as a function generates two new type holes for the matched arrow used; all such uses
+    must be consistent for a solution since the original THole must be equivalent to both.
+    The first branch will spawn THole[1] |>_ THole[2] -> THole[3] == THole[1]
+    The second will spawn THole[1] |>_ THole[4] -> THole[5] == THole[1]
+    In the first example, THole[2] == THole[0] since branch 1 contains an application on x
+    In the second, THole[2] == TNum since branch 1 contains an application on 3
+    Similar results occur for THole[4]. *)
+  ([("f", TArrow(THole 2, TNum));], parse "let (x,y) be ((|0|), (|1|)) in (if x then (y x) else (y 3))");
+  ([("f", TArrow(THole 2, TNum));], parse "let (x,y) be ((|0|), (|1|)) in (if x then (y 3) else (y x))");
   (Ctx.empty, parse "let f:Hole[0] be fun (x:Hole[1]) -> x in f 2");
   (Ctx.empty, EBinOp(EBinOp(EEmptyHole(0), OpAp, EBinOp(EEmptyHole(1), OpPlus, ENumLiteral(1))), OpPlus, ENumLiteral(4)));
   (Ctx.empty, parse "let f:Hole[4] be fun (x:Hole[5]) -> ((|2|) x)+1 in f");
