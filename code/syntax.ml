@@ -149,12 +149,19 @@ module Solver = struct
         match eqs with
         | [] -> []
         | hd::tl -> (
-            let (hole_eq_var, hole_typ_ls) = hd in if hole_eq_var == hole_var 
-            then (
-                if Typ.in_dom hole_typ_ls typ then hd::tl
-                else (hole_eq_var, [typ, ...hole_typ_ls])::tl
+            let (hole_eq_var, hole_typ_ls) = hd in 
+            if (hole_eq_var == hole_var) then (
+                if (Typ.in_dom hole_typ_ls typ) then (
+                    hd::tl
+                )
+                else (
+                    (*buggy; something about brackets? *)
+                    (hole_eq_var, [typ, ...hole_typ_ls])::tl
+                )
             )
-            else hd::(update_typ_in_hole_eqs tl hole_var typ)
+            else (
+                hd::(update_typ_in_hole_eqs tl hole_var typ)
+            )
         )
     let rec merge_hole_eqs (eqs1 : hole_eqs) (eqs2 : hole_eqs): hole_eqs =
         match eqs1 with 

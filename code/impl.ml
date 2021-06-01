@@ -355,7 +355,8 @@ and unify_one (t1: Typ.t) (t2: Typ.t) (partial_results: Typ.unify_results)
           | _ -> (
             match (unify_one subs_v typ partial_results) with
             | (true, result) ->  (true, add_result (v, Typ.Solved typ) result)
-            | (false, result) -> (false, add_result (v, Typ.UnSolved([//subs_v; t //typ])) result)
+            (*old ver: \\subs_v; t \\typ   maybe Zoe wanted to change the way unsolved accumulated things? *)
+            | (false, result) -> (false, add_result (v, Typ.UnSolved([subs_v; typ])) result)
           )
         )
     | (_, _) -> 
@@ -376,20 +377,30 @@ let rec gen_hole_eqs (constraints: Constraints.t) (eqs: Solver.hole_eqs): Solver
     )
   )
 
+(*takes a list of TVars each with a list of of associated Typ.t's
+and returns _________________?
+The function is made but never used anywhere, even in a comment...
+Ask Anand: to use our final unification result to generate type information, do we repeatedly apply our mgu
+sub until the result matches the input? *)
 let rec solve_eqs (eqs: Solver.hole_eqs): Solver.hole_eqs =
   match eqs with
   | [] -> []
   | (hole_v, v_typ_ls)::tl -> (
+    (*WIP it would seem; mutual rec seems similar to Hazel block->line->opseq->operand/operator model for rec *)
     []
   )
 and check_consistent_ls (eqs: Solver.hole_eqs) (typls: Typ.t list): bool =
   match typls with
   | [] -> true
   | hd::tl -> check_consistent_with_ls eqs tl hd
+(*if the head type is consistent with the rest of the list given the hole eqns? 
+true if eqns are true for the every elt of the rest*)
 and check_consistent_with_ls (eqs: Solver.hole_eqs) (typls: Typ.t list) (typ: Typ.t): bool =
   match typls with
   | [] -> true
   | hd::tl -> (consistent_in_eqs eqs typ hd) && (check_consistent_with_ls tl typ)
+(* where two types are consistent in eqs if they have at least one hole where if both are holes consistency 
+is checked for their list of associated types (and if both have a list, that's currently undefined :/) *)
 and consistent_in_eqs (eqs: Solver.hole_eqs) (typ1: Typ.t) (typ2: Typ.t): bool =
   match (typ1, typ2) with
   | (THole v1 , THole v2) -> (
@@ -398,8 +409,6 @@ and consistent_in_eqs (eqs: Solver.hole_eqs) (typ1: Typ.t) (typ2: Typ.t): bool =
     | (None, Some ls)
     | (Some ls, None) -> check_consistent_ls ls
     | (Some ls, Some ls) ->
-
-
   )
   | (THole v , typ)
   | (typ , THole v)
@@ -409,6 +418,11 @@ and consistent_in_eqs (eqs: Solver.hole_eqs) (typ1: Typ.t) (typ2: Typ.t): bool =
   | (TProd (t1, t2), TProd (t3, t4))
   | (TSum (t1, t2), TSum (t3, t4)) 
   | _ -> false
+
+
+(*this appears to be a function that generates the mgu then substitutes them in; should it continuously sub till equal? 
+  see case 22, 27 in test output*)
+
 (* let  generate_sol (constraints: Constraints.t): Typ.unify_results =
   let (_, results) = unify constraints in
   let rec subs_results (results: Typ.unify_results): Typ.unify_results = (
