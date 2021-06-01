@@ -7,6 +7,7 @@ module TypeInferenceVar = struct
     let recent (var_1:t) (var_2:t) = max var_1 var_2;; 
 end
 
+(*Only missing types: Float and list*)
 module Typ = struct
     type t =
         | THole of TypeInferenceVar.t
@@ -69,8 +70,10 @@ module Exp = struct
 
     type hole_id = int
 
+    (* Need to consider: OpDiv, OpTimes, OpMinus, and float operators if float added; rules should be the same *)
     type binop = OpAp | OpPlus
 
+    (*Floatlit, ListNil, ApPalette (?), Invalid text. Probably no interesting or new constraint rules for these*)
     type t =
         | EVar of Identifier.t
         | ELam of Identifier.t * t

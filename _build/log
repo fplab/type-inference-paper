@@ -1,10 +1,10 @@
-# dune build ./exec
+# dune build test.exe
 # OCAMLPARAM: unset
 # Workspace root: /home/maroofr/type-inference-paper
-$ /usr/bin/nproc > /tmp/dune1fd4d5.output 2> /dev/null
+$ /usr/bin/nproc > /tmp/dunef44937.output 2> /dev/null
 # Auto-detected concurrency: 4
 # disable binary cache
-$ /home/maroofr/.opam/ocaml-base-compiler.4.08.1/bin/ocamlc.opt -config > /tmp/dune6057e0.output
+$ /home/maroofr/.opam/ocaml-base-compiler.4.08.1/bin/ocamlc.opt -config > /tmp/dune338217.output
 # Dune context:
 #  { name = "default"
 #  ; kind = "default"
@@ -35,7 +35,12 @@ $ /home/maroofr/.opam/ocaml-base-compiler.4.08.1/bin/ocamlc.opt -config > /tmp/d
 #          "/home/maroofr/.opam/ocaml-base-compiler.4.08.1/bin/ocamlmklib.opt"
 #  ; env =
 #      map
-#        { "INSIDE_DUNE" : "/home/maroofr/type-inference-paper/_build/default"
+#        { "DUNE_OCAML_HARDCODED" :
+#            "/home/maroofr/.opam/ocaml-base-compiler.4.08.1/lib"
+#        ; "DUNE_OCAML_STDLIB" :
+#            "/home/maroofr/.opam/ocaml-base-compiler.4.08.1/lib/ocaml"
+#        ; "DUNE_SOURCEROOT" : "/home/maroofr/type-inference-paper"
+#        ; "INSIDE_DUNE" : "/home/maroofr/type-inference-paper/_build/default"
 #        ; "OCAMLFIND_IGNORE_DUPS_IN" :
 #            "/home/maroofr/type-inference-paper/_build/install/default/lib"
 #        ; "OCAMLPATH" :

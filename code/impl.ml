@@ -303,8 +303,16 @@ let rec add_result (new_result: TypeInferenceVar.t*Typ.unify_result) (old_result
     if hd_var == new_var then (
       match (hd_typ, new_typ) with
       | (Solved _, Solved _)
+      (*if we newly discover a variable as unsolved or find any new solution for it,
+      update it to have the new type (which will already have associated a list of the conflicts/the resolved val)
+      NOTE: this may cause interesting behavior where one thing overwrites another even if technically equivalent?
+            TBD: can you have multiple solutions for a variable where both are solved but different, noting
+            that this can be run on partial solutions*)
       | (Solved _, UnSolved _) -> (hd_var, new_typ)::tl
+      (*if two unsolved results are generated, the variable is associated with the conflicts of both; merge the type lists of both for its type *)
       | (UnSolved ls_old, UnSolved ls_new) -> (hd_var, UnSolved (Typ.merge_typ_lst ls_old ls_new))::tl
+      (*if it was unsolved previously and found to be solved in another instance, it must still be unsolved. add the type solved to the list
+      of conflicting types in the variable's list of unsolved*)
       | (UnSolved ls_old, Solved typ) -> (hd_var, UnSolved (Typ.add_to_typ_lst typ ls_old))::tl
     )
     else (hd_var, hd_typ)::(add_result new_result tl)
