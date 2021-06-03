@@ -302,6 +302,7 @@ let apply (subs: Typ.unify_results) (t: Typ.t) : Typ.t =
 ;;
 
 
+(*Discuss this and maybe why it works as it does in context of Zoe maybe shifting away from this to the Solver update method *)
 let rec add_result (new_result: TypeInferenceVar.t*Typ.unify_result) (old_results: Typ.unify_results): Typ.unify_results =
   match old_results with
   | [] -> new_result::[]
@@ -345,6 +346,28 @@ and unify_one (t1: Typ.t) (t2: Typ.t) (partial_results: Typ.unify_results)
       unify [(ty1,ty3);(ty2,ty4)]
     )
     | (THole v, t) | (t, THole v) -> 
+      (*for sake of clarity, a recomparison to the TAPL unify formulation
+      rest is identical save for the hole case. In tapl, if two type variables are posited equal
+      then you assert that the variable is equivalent to the other value (variable or literal)
+      and update your constraint set by substituting this assertion (replacing all instances of the variable with the other value) 
+      and composing the resultant substitution with the equivalnce you used in updating. In other words, endeavor to solve
+      the mgu for the current constraint set where all constraints relating to the hole variable v are substituted with the type t
+      and compose the resultant mgu with (v, t) consistency equivalence.*)
+      
+      (*Zoe's version:
+      applies current results to both the variable and compared type. 
+      if the variable remains a hole, it is consistent; return the new result
+      if the variable is anything else, then attempt to unify the substituted type with the constraint typ t
+        if this succeeds, with whatever list of generated consistencies, add the result that the hole v is consistent with typ
+        if this fails, add the result that this hole failed to be consistent with the attempted consistency in the unsolved list
+          zoe's commenting out instead was placing the substituted type that resulted in the inconsistency. 
+            Why? see discussion of possibilities below*)
+
+      (* According to Siek: general version
+      Literally just returns that the type variable has the other one substituted for it
+      I imagine TAPL's extra stuff is for efficiency 
+      It looks like Zoe might've followed the general formulation while simply adapting the logic from where it posits equality
+      by substitution to incorporate more consistency logic so it doesn't pass invalid constraints on by substitution*)
       let subs_v = apply partial_results (THole v) in
       let typ = apply partial_results t in
         (* detect recursive case *)
@@ -355,7 +378,11 @@ and unify_one (t1: Typ.t) (t2: Typ.t) (partial_results: Typ.unify_results)
           | _ -> (
             match (unify_one subs_v typ partial_results) with
             | (true, result) ->  (true, add_result (v, Typ.Solved typ) result)
-            (*old ver: \\subs_v; t \\typ   maybe Zoe wanted to change the way unsolved accumulated things? *)
+            (*old ver: \\subs_v; t \\typ   maybe Zoe wanted to change the way unsolved accumulated things? 
+            it would seem so based on the new-algs in this branch. i think she may have been phasing out add result
+            in favor of using Solver.update_typ_in_hole_eq and then running solve_eqs after instead of 'solving' every update
+            after all, if she meant to 'comment out' subs_v and typ for just t, maybe she wnted to add the type as is without processing
+            to be assessed later. kinda like generating a list of things holes have to be equal to*)
             | (false, result) -> (false, add_result (v, Typ.UnSolved([subs_v; typ])) result)
           )
         )
@@ -414,6 +441,7 @@ and consistent_in_eqs (eqs: Solver.hole_eqs) (typ1: Typ.t) (typ2: Typ.t): bool =
   | (typ , THole v)
   | (TNum, TNum)
   | (TBool, TBool) -> true
+  (*why do all of these chart to false? *)
   | (TArrow (t1, t2), TArrow (t3, t4))
   | (TProd (t1, t2), TProd (t3, t4))
   | (TSum (t1, t2), TSum (t3, t4)) 

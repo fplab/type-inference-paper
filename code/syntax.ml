@@ -145,6 +145,7 @@ module Solver = struct
             else (lookup hole_var tl)
         )
     
+    (*adds a type to the list of type equivalences if it is not already in the domain of it *)
     let rec update_typ_in_hole_eqs (eqs : hole_eqs) (hole_var : TypeInferenceVar.t) (typ: Typ.t): hole_eqs =
         match eqs with
         | [] -> []
@@ -155,7 +156,8 @@ module Solver = struct
                     hd::tl
                 )
                 else (
-                    (*buggy; something about brackets? *)
+                    (*buggy; something about brackets? 
+                    if not in the domain then add it to the list of types*)
                     (hole_eq_var, [typ, ...hole_typ_ls])::tl
                 )
             )
