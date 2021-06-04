@@ -22,7 +22,23 @@ module Typ = struct
 
     type unify_results  = (TypeInferenceVar.t * unify_result) list
 
-    
+    (*New helper to extract the list of variables from unify_results *)
+    let extract_var_list (results: unify_results): TypeInferenceVar.t list =
+        let extract_var (result: (TypeInferenceVar.t * unify_result)): TypeInferenceVar.t =
+            match result with
+            | (var, _) -> var
+        in
+        List.map extract_var results
+    ;;
+
+    (*New helper to extract a list results from unify_results *)
+    let extract_result_list (results: unify_results): unify_result list =
+        let extract_result (result: (TypeInferenceVar.t * unify_result)): unify_result = 
+            match result with
+            | (_, result) -> result
+        in
+        List.map extract_result results
+    ;;
 
     let rec in_dom lst typ = 
         match lst with

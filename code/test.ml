@@ -29,6 +29,7 @@ let testcases: (Ctx.t * Exp.t) list = [
   (Ctx.empty, EAsc (parse "(|0|)", TArrow(TNum,TNum)));
   (Ctx.empty, EAsc (parse "fun x -> 1+x", TArrow(TNum,TNum)));
   ([("x", TArrow(TNum,TNum));], parse "x 1");
+  (Ctx.empty, parse "let x be (|0|) in (|1|)");
 ]
 ;;
 
