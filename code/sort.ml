@@ -55,6 +55,8 @@ let top_sort_and_sub (results: Typ.unify_results)
 
 (* recurses on the root node specified and recursively adjusts each solution to its most basic (most independent/literal) value*)
 (* each call returns the current adjusted set of results and the unify_result associated with the recursed upon node *)
+(*if a node's children are known to be inconsistent, all nodes receiving data from this should know *)
+(*however, all subtrees may still be able to be resolved further, even if parents cannot *)
 let rec sub_on_root_by_dependence (results: Typ.unify_results) (root: Typ.t)
     : (Typ.unify_results * Typ.unify_result) = 
     (* If at a leaf node, return self *)
@@ -72,27 +74,30 @@ let rec sub_on_root_by_dependence (results: Typ.unify_results) (root: Typ.t)
             match unif_res with
             | Solved ty -> (
                 let (results, resolved_ty) = sub_on_root_by_dependence results ty in
+                (*INCORRECT: needs to check if the result was unsolved and adjust accordingly if so *)
                 sub_inf_var_for_child results var (Solved resolved_ty)
             )
             | Unsolved tys -> (
-                (*if its children are known to be inconsistent, all nodes receiving data from this should know *)
-                (*however, all subtrees may still be able to be resolved further, even if parents cannot *)
+                (*the following function accumulates the current state of the unify results and list set
+                by taking the current state and a new child's type and updating the state by recursing on the type *)
                 let recurse_and_accumulate (acc: (Typ.unify_results * (Typ.t list) list)) (ty: Typ.t)
                     : (Typ.unify_results * (Typ.t list) list) =
                     let (curr_results, curr_list) = acc in
                     let (updated_results, unify_res) = sub_on_root_by_dependence results ty in
-                    let ty_results : Typ.t list = 
+                    let ty_results = 
                         match unify_res with
                         | Solved single_ty -> [single_ty]
                         | UnSolved tys -> tys
                     in
                     (updated_results, ty_results @ cur_list)
+                in
                 let (results, inconsistency_set) = List.fold_left recurse_and_acc (results, []) tys in
                 (results, (smallest_inconsistent_set inconsistency_set))
             )
         )
         | None -> raise Impossible (* list of unification results itself was used to generate variable names used; must be present *)
     )
+(* a common instance for recursive types *)
 and sub_two_of_constructor (ctr: (Typ.t -> Typ.t) -> Typ.t) (ty1: Typ.t) (ty2: Typ.2)
     : (Typ.unify_results * Typ.unify_result) =
     let (results, result_ty1) = sub_on_root_by_dependence results ty1 in

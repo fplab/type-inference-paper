@@ -23,9 +23,9 @@ module Typ = struct
     type unify_results  = (TypeInferenceVar.t * unify_result) list
 
     (*New helpers to construct recursive types *)
-    let mk_arrow (ty1: Typ.t) (ty2: Typ.t): Typ.t = TArrow (ty1, ty2);;
-    let mk_prod (ty1: Typ.t) (ty2: Typ.t): Typ.t = TProd (ty1, ty2);;
-    let mk_sum (ty1: Typ.t) (ty2: Typ.t): Typ.t = TSum (ty1, ty2);;
+    let mk_arrow (ty1: t) (ty2: t): t = TArrow (ty1, ty2);;
+    let mk_prod (ty1: t) (ty2: t): t = TProd (ty1, ty2);;
+    let mk_sum (ty1: t) (ty2: t): t = TSum (ty1, ty2);;
 
     (*New helpers to extract the list of variables from unify_results *)
     let extract_var (result: (TypeInferenceVar.t * unify_result)): TypeInferenceVar.t =
