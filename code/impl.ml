@@ -290,6 +290,7 @@ let rec substitute (u: Typ.unify_result) (x: TypeInferenceVar.t) (t: Typ.t) : Ty
   | UnSolved _ -> t
 ;;
 
+(*Does fold right apply last of list of subs first or first last *)
 let apply (subs: Typ.unify_results) (t: Typ.t) : Typ.t =
   List.fold_right (fun (x, u) t -> substitute u x t) subs t
 ;;
@@ -399,6 +400,9 @@ and unify_one (t1: Typ.t) (t2: Typ.t) (partial_results: Typ.unify_results)
     | (_, _) -> 
       (false, [])
   ;;
+
+(*!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!! *)
+(*apply last generated substitutions of the mgu last *)
 
 (* let  generate_sol (constraints: Constraints.t): Typ.unify_results =
   let (_, results) = unify constraints in
