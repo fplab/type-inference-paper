@@ -57,6 +57,14 @@ let top_sort_and_sub (results: Typ.unify_results)
 (* each call returns the current adjusted set of results and the unify_result associated with the recursed upon node *)
 (*if a node's children are known to be inconsistent, all nodes receiving data from this should know *)
 (*however, all subtrees may still be able to be resolved further, even if parents cannot *)
+(*
+currently all UnSolved instances due to inconsistencies will be propogated upward
+ex:     THole 0 = Solved THole 1
+        THole 1 =  UnSolved TNum TBool
+    will resolve to
+        THole 0 = UnSolved TNum TBool
+        THole 1 = UnSolved TNum TBool
+*)
 let rec sub_on_root_by_dependence (results: Typ.unify_results) (root: Typ.t)
     : (Typ.unify_results * Typ.unify_result) = 
     (* If at a leaf node, return self *)
@@ -74,14 +82,6 @@ let rec sub_on_root_by_dependence (results: Typ.unify_results) (root: Typ.t)
             match unif_res with
             | Solved ty -> (
                 let (results, result_ty) = sub_on_root_by_dependence results ty in
-                (*
-                currently all UnSolved instances due to inconsistencies will be propogated upward
-                ex:     THole 0 = Solved THole 1
-                        THole 1 =  UnSolved TNum TBool
-                    will resolve to
-                        THole 0 = UnSolved TNum TBool
-                        THole 1 = UnSolved TNum TBool
-                *)
                 sub_inf_var_for_child results var result_ty
             )
             | Unsolved tys -> (
@@ -119,6 +119,7 @@ and sub_two_of_constructor (ctr: (Typ.t -> Typ.t) -> Typ.t) (ty1: Typ.t) (ty2: T
     (results, updated_unify_result)
 ;;
 
+(* Appends the item to the list only if the item is not consistent with any items in the list *)
 let cat_if_inconsistent_for_all (target_list: Typ.t list) (item: Typ.t)
     : Typ.t list =
     let any_is_consistent (acc: bool) (ty: Typ.t): bool = 
@@ -134,11 +135,13 @@ let cat_if_inconsistent_for_all (target_list: Typ.t list) (item: Typ.t)
     )
 ;;
 
+(* Combines a pair of lists by adding elements from l2 only if they are inconsistent with those currently added/in l1 *)
 let smallest_inconsistent_pair (l1: Typ.t list) (l2: Typ.t list)
     : Typ.t list =
     List.fold_left cat_if_inconsistent_for_all l1 l2
 ;;
 
+(* A generalized version of smallest_inconsistent_pair that simply concatenates the tail of a list set to be used in pair *)
 let smallest_inconsistent_set (list_set: (Typ.t list) list)
     : Typ.t list =
     match list_set with
