@@ -409,6 +409,7 @@ and returns _________________?
 The function is made but never used anywhere, even in a comment...
 Ask Anand: to use our final unification result to generate type information, do we repeatedly apply our mgu
 sub until the result matches the input? *)
+(*
 let rec solve_eqs (eqs: Solver.hole_eqs): Solver.hole_eqs =
   match eqs with
   | [] -> []
@@ -446,7 +447,7 @@ and consistent_in_eqs (eqs: Solver.hole_eqs) (typ1: Typ.t) (typ2: Typ.t): bool =
   | (TProd (t1, t2), TProd (t3, t4))
   | (TSum (t1, t2), TSum (t3, t4)) 
   | _ -> false
-
+*)
 
 (*this appears to be a function that generates the mgu then substitutes them in; should it continuously sub till equal? 
   see case 22, 27 in test output*)
