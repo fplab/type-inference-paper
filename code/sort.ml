@@ -73,9 +73,16 @@ let rec sub_on_root_by_dependence (results: Typ.unify_results) (root: Typ.t)
         | Some unif_res -> (
             match unif_res with
             | Solved ty -> (
-                let (results, resolved_ty) = sub_on_root_by_dependence results ty in
-                (*INCORRECT: needs to check if the result was unsolved and adjust accordingly if so *)
-                sub_inf_var_for_child results var (Solved resolved_ty)
+                let (results, result_ty) = sub_on_root_by_dependence results ty in
+                (*
+                currently all UnSolved instances due to inconsistencies will be propogated upward
+                ex:     THole 0 = Solved THole 1
+                        THole 1 =  UnSolved TNum TBool
+                    will resolve to
+                        THole 0 = UnSolved TNum TBool
+                        THole 1 = UnSolved TNum TBool
+                *)
+                sub_inf_var_for_child results var result_ty
             )
             | Unsolved tys -> (
                 (*the following function accumulates the current state of the unify results and list set
@@ -98,16 +105,16 @@ let rec sub_on_root_by_dependence (results: Typ.unify_results) (root: Typ.t)
         | None -> raise Impossible (* list of unification results itself was used to generate variable names used; must be present *)
     )
 (* a common instance for recursive types *)
-and sub_two_of_constructor (ctr: (Typ.t -> Typ.t) -> Typ.t) (ty1: Typ.t) (ty2: Typ.2)
+and sub_two_of_constructor (ctr: (Typ.t -> Typ.t) -> Typ.t) (ty1: Typ.t) (ty2: Typ.t)
     : (Typ.unify_results * Typ.unify_result) =
     let (results, result_ty1) = sub_on_root_by_dependence results ty1 in
     let (results, result_ty2) = sub_on_root_by_dependence results ty2 in
     let updated_unify_result =
         match (resolved_ty1, resolved_ty2) with
         | ((Solved resolved_ty1), (Solved resolved_ty2)) -> Solved (ctr resolved_ty1 resolved_ty2)
-        | ((UnSolved tys), (Solved resolved_ty2)) -> UnSolved cat_if_inconsistent_for_all resolved_ty2 tys
-        | ((Solved resolved_ty1), (UnSolved tys)) -> Unsolved cat_if_inconsistent_for_all resolved_ty1 tys
-        | ((UnSolved tys1), (UnSolved tys2)) -> UnSolved smallest_inconsistent_pair tys1 tys2
+        | ((UnSolved tys), (Solved resolved_ty2)) -> UnSolved (cat_if_inconsistent_for_all resolved_ty2 tys)
+        | ((Solved resolved_ty1), (UnSolved tys)) -> Unsolved (cat_if_inconsistent_for_all resolved_ty1 tys)
+        | ((UnSolved tys1), (UnSolved tys2)) -> UnSolved (smallest_inconsistent_pair tys1 tys2)
     in
     (results, updated_unify_result)
 ;;
