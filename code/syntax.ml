@@ -22,22 +22,42 @@ module Typ = struct
 
     type unify_results  = (TypeInferenceVar.t * unify_result) list
 
-    (*New helper to extract the list of variables from unify_results *)
+    (*New helpers to construct recursive types *)
+    let mk_arrow (ty1: Typ.t) (ty2: Typ.t): Typ.t = TArrow (ty1, ty2);;
+    let mk_prod (ty1: Typ.t) (ty2: Typ.t): Typ.t = TProd (ty1, ty2);;
+    let mk_sum (ty1: Typ.t) (ty2: Typ.t): Typ.t = TSum (ty1, ty2);;
+
+    (*New helpers to extract the list of variables from unify_results *)
+    let extract_var (result: (TypeInferenceVar.t * unify_result)): TypeInferenceVar.t =
+        match result with
+        | (var, _) -> var
+    ;;
+
     let extract_var_list (results: unify_results): TypeInferenceVar.t list =
-        let extract_var (result: (TypeInferenceVar.t * unify_result)): TypeInferenceVar.t =
-            match result with
-            | (var, _) -> var
-        in
         List.map extract_var results
     ;;
 
-    (*New helper to extract a list results from unify_results *)
-    let extract_result_list (results: unify_results): unify_result list =
-        let extract_result (result: (TypeInferenceVar.t * unify_result)): unify_result = 
-            match result with
-            | (_, result) -> result
-        in
+    (*New helpers to extract a list results from unify_results *)
+    let extract_result (result: (TypeInferenceVar.t * unify_result)): unify_result = 
+        match result with
+        | (_, result) -> result
+    ;;
+
+    let extract_result_list (results: unify_results): unify_result list = 
         List.map extract_result results
+    ;;
+
+    (*Moved consistency to be a typ function *)
+    let rec consistent (t1: t) (t2: t) : bool = 
+    match (t1,t2) with
+    | (THole _ , _)
+    | (_ , THole _)
+    | (TNum, TNum)
+    | (TBool, TBool) -> true
+    | (TArrow (t1, t2), TArrow (t3, t4))
+    | (TProd (t1, t2), TProd (t3, t4))
+    | (TSum (t1, t2), TSum (t3, t4)) -> (consistent t1 t3) && (consistent t2 t4)
+    | _ -> false
     ;;
 
     let rec in_dom lst typ = 

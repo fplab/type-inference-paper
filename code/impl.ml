@@ -15,18 +15,6 @@ let get_match_arrow_typ (t: Typ.t): (Typ.t * Constraints.t) option =
   | _ -> None
 ;;
 
-let rec consistent (t1: Typ.t) (t2: Typ.t) : bool = 
-  match (t1,t2) with
-  | (THole _ , _)
-  | (_ , THole _)
-  | (TNum, TNum)
-  | (TBool, TBool) -> true
-  | (TArrow (t1, t2), TArrow (t3, t4))
-  | (TProd (t1, t2), TProd (t3, t4))
-  | (TSum (t1, t2), TSum (t3, t4)) -> (consistent t1 t3) && (consistent t2 t4)
-  | _ -> false
-;;
-
 let rec syn (ctx: Ctx.t) (e: Exp.t): (Typ.t * Constraints.t) option =
   match e with
   | EVar x -> (
@@ -81,7 +69,7 @@ let rec syn (ctx: Ctx.t) (e: Exp.t): (Typ.t * Constraints.t) option =
         match syn ctx e3 with
         | None -> None
         | Some (typ3, cons3) -> 
-          if consistent typ2 typ3 then Some (typ2, cons1 @ cons2 @ cons3 @[(typ2, typ3)])
+          if Typ.consistent typ2 typ3 then Some (typ2, cons1 @ cons2 @ cons3 @[(typ2, typ3)])
           else None
       )
     )
@@ -141,7 +129,7 @@ let rec syn (ctx: Ctx.t) (e: Exp.t): (Typ.t * Constraints.t) option =
         match syn (Ctx.extend ctx (y, typ2)) e2 with
         | None -> None
         | Some (typ_y, cons3) -> (
-          if consistent typ_x typ_y then Some(typ_x, cons1@cons2@cons3@[(typ_x, typ_y)])
+          if Typ.consistent typ_x typ_y then Some(typ_x, cons1@cons2@cons3@[(typ_x, typ_y)])
           else None
           )
       )
@@ -169,7 +157,7 @@ and ana (ctx: Ctx.t) (e: Exp.t) (ty: Typ.t): Constraints.t option =
       match ana (Ctx.extend ctx (x, ty_in')) exp ty_out with
       | None -> None
       | Some cons2 -> 
-      if consistent ty_in ty_in' then Some (cons1@cons2@[(ty_in, ty_in')])
+      if Typ.consistent ty_in ty_in' then Some (cons1@cons2@[(ty_in, ty_in')])
       else None
     )
     | _ -> raise Impossible
@@ -267,7 +255,7 @@ and ana (ctx: Ctx.t) (e: Exp.t) (ty: Typ.t): Constraints.t option =
       (match syn ctx e with
         | None -> None
         | Some (ty', cons) -> 
-        if (consistent ty' ty) then Some (cons@[(ty, ty')])
+        if (Typ.consistent ty' ty) then Some (cons@[(ty, ty')])
         else None
       )
 ;;
