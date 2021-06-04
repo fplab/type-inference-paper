@@ -390,6 +390,7 @@ and unify_one (t1: Typ.t) (t2: Typ.t) (partial_results: Typ.unify_results)
       (false, [])
   ;;
 
+(*
 let rec gen_hole_eqs (constraints: Constraints.t) (eqs: Solver.hole_eqs): Solver.hole_eqs =
   match constraints with
   | [] -> eqs
@@ -403,6 +404,7 @@ let rec gen_hole_eqs (constraints: Constraints.t) (eqs: Solver.hole_eqs): Solver
       gen_hole_eqs ([(ty1,ty3); (ty2, ty4)]@tl) eqs
     )
   )
+*)
 
 (*takes a list of TVars each with a list of of associated Typ.t's
 and returns _________________?

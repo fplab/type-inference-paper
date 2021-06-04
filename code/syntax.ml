@@ -128,6 +128,7 @@ module Constraints = struct
   type t = consistent list
 end
 
+(*
 module Solver = struct 
     type hole_eq = TypeInferenceVar.t * (Typ.t list)
     type hole_eqs = hole_eq list
@@ -171,3 +172,4 @@ module Solver = struct
         | [] -> eqs2
         | (hd_v, hd_typ)::tl -> merge_hole_eqs tl (update_typ_in_hole_eqs eqs2 hd_v hd_typ)
 end
+*)
