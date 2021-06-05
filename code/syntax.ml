@@ -47,6 +47,16 @@ module Typ = struct
         List.map extract_result results
     ;;
 
+    (* A function that checks if the given type is a Hole of the var id or is a recursive type involving the var id*)
+    let rec contains_var (var: TypeInferenceVar.t) (ty: t): bool =
+        match ty with
+        | TArrow (ty1, ty2)
+        | TProd (ty1, ty2)
+        | TSum (ty1, ty2) -> (contains_var ty1) || contains_var ty2
+        | THole ty_var -> (ty_var == var)
+        | _ -> false
+    ;;
+
     (*Moved consistency to be a typ function *)
     let rec consistent (t1: t) (t2: t) : bool = 
     match (t1,t2) with

@@ -15,19 +15,17 @@ open Syntax
 (* checks if the type of var is used to determine the type of any other type infernce variable *)
 let inf_var_is_depended_upon (var: TypeInferenceVar.t) (result_list: Typ.unify_result list)
     : bool =
-    let is_var (ty: Typ.t): bool = 
+    let result_contains_var (result: Typ.unify_result): bool =
         match ty with
-        | Hole ty_var -> (ty_var == var)
-        | _ -> false
+        | Solved ty -> (Typ.contains_var ty)
+        | Unsolved tys -> (List.exists Typ.contains_var tys)
     in
-    let contains_var (result: Typ.unify_result): bool =
-        match ty with
-        | Solved ty -> (is_var ty)
-        | Unsolved tys -> (List.exists is_var tys)
-    in
-    List.exists contains_var result_list
+    List.exists result_contains_var result_list
 ;;
 
+(* checks  *)
+let is_var
+;;
 (*current code assumes a hole won't solve to itself (ie no loops). It would seem the code does so, but unclear! *)
 (*Performs a topological sort on the unify results by interpreting it as an adjacency list *)
 (*Performs substitution in order based on type dependencies *)
@@ -167,10 +165,12 @@ let rec retrieve_results_for_inf_var (results: Typ.unify_results) (var: TypeInfe
         retrieve_results_for_inf_var tl var
     )
 
-(*Iterates through unify_results to replace all instances of target with ty. Isolates target from the tree *)
+(*Iterates through unify_results to replace all instances of target with ty. 
+    Isolates target from the tree in that no references to it exist in any referenced types*)
 (*Of note:  We don't need to explicitly change the inference var itself to have child as its result as 
             prev rec calls will have already made any nodes being subbed one away from the leaves (and 
-            hence already containing their exact result, hence it being the resolved child) *)
+            hence already containing their exact result, hence it being the resolved child)
+        we do lol. fix this!*)
 let sub_inf_var_for_child (results: Typ.unify_results) (target: TypeInferenceVar.t) (child: Typ.unify_result)
     : Typ.unify_results = 
     (*Map. 
