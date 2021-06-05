@@ -1,6 +1,17 @@
 exception Impossible
 open Syntax
 
+(*
+    AN EFFICIENCY NOTICE: List.map is NOT tail recursive. 
+    An alternative that is tail recursive is List.rev (List.rev_map f l)
+    However, this is (obviously) of a higher constant in its unsimplified complexity.
+    If stack space is a concern, List.map can be swapped for the rev version.
+
+    Another non tail recursive operation is @. This may be fine, but if possible, 
+    use the smaller list first or try to use the simple item::list instead of [item] @ list
+    (cat is length of the first argument)
+ *)
+
 (* checks if the type of var is used to determine the type of any other type infernce variable *)
 let inf_var_is_depended_upon (var: TypeInferenceVar.t) (result_list: Typ.unify_result list)
     : bool =
@@ -12,14 +23,9 @@ let inf_var_is_depended_upon (var: TypeInferenceVar.t) (result_list: Typ.unify_r
     let contains_var (result: Typ.unify_result): bool =
         match ty with
         | Solved ty -> (is_var ty)
-        | Unsolved tys -> (
-            let conjunct_is_var (acc: bool) (ty: Typ.t): bool = 
-                (acc || (is_var ty)) 
-            in
-            List.fold_left conjunct_is_var false equiv_list
-        )
+        | Unsolved tys -> (List.exists is_var tys)
     in
-    List.fold_left contains_var false result_list
+    List.exists contains_var result_list
 ;;
 
 (*current code assumes a hole won't solve to itself (ie no loops). It would seem the code does so, but unclear! *)
@@ -122,13 +128,7 @@ and sub_two_of_constructor (ctr: (Typ.t -> Typ.t) -> Typ.t) (ty1: Typ.t) (ty2: T
 (* Appends the item to the list only if the item is not consistent with any items in the list *)
 let cat_if_inconsistent_for_all (target_list: Typ.t list) (item: Typ.t)
     : Typ.t list =
-    let any_is_consistent (acc: bool) (ty: Typ.t): bool = 
-        acc || (Typ.consistent item ty)
-    in
-    let any_consistent_for_all = 
-        List.fold_left any_is_consistent false target_list 
-    in
-    if (any_consistent_for_all) then (
+    if (List.exists (Typ.consistent item) target_list) then (
         target_list
     ) else (
         item::target_list
@@ -168,8 +168,68 @@ let rec retrieve_results_for_inf_var (results: Typ.unify_results) (var: TypeInfe
     )
 
 (*Iterates through unify_results to replace all instances of target with ty. Isolates target from the tree *)
+(*Of note:  We don't need to explicitly change the inference var itself to have child as its result as 
+            prev rec calls will have already made any nodes being subbed one away from the leaves (and 
+            hence already containing their exact result, hence it being the resolved child) *)
 let sub_inf_var_for_child (results: Typ.unify_results) (target: TypeInferenceVar.t) (child: Typ.unify_result)
     : Typ.unify_results = 
-    
+    (*Map. 
+    Perform a function (described indented) that maps (TypeInferenceVar.t * Typ.unify_result) 
+    to a new such type value adjusted as described below
+        For each elt of the results list extract the results in the var * unify_result item
+            Manage the unify_result status
+                If the type in the result status matches: (cases below in terms of scrutinized result)
+                    If currently Solved target and substituting a child that is Solved,
+                    simply replace the unify_result status with the child value
+
+                    If currently Solved target and substituting a child that is UnSolved, 
+                    change to UnSolved by simply replacing the unify_result status
+                    with the child's (this is okay as Solved only has one type: the child)
+
+                    If currently UnSolved with a list containing target and substituting a 
+                    child that is Solved, remove the var id. Next, cat the type contained in 
+                    the child's Solved status with the Unsolved type list through using
+                    cat_if_inconsistent_for_all
+
+                    If currently UnSolved with a list containing target and substituting a child
+                    that is UnSolved, remove the var id. Next, merge the UnSolved lists through
+                    smallest_inconsistent_pair.
+                If the type doesn't match:
+                    Move on to the next variable *)
+    let sub_on_res (var_with_res: (TypeInferenceVar.t * Typ.unify_result))
+        : (TypeInferenceVar.t * Typ.unify_result) =
+        let (var, result) = var_with_res in
+        match result with
+        | Solved var_typ -> 
+            if (var_typ == target) then (
+                (var, child)
+            )
+            else (
+                (var, result)
+            )
+        | UnSolved var_typs ->
+            (*filter but if you remove something, set a flag to true 
+            issue: need to account for recursive types containing target and replacing internal instances as well*)
+            (*potential solution: 
+            if Solved typ, replace the target within the recursive/base type with every possible soltuion (if child is Solved,
+            this is just one; if UnSolved, all types in the typ list)
+            If UnSolved typs, do the following
+            based on all instances containing (whether recursively or literally) the target, create a list of 
+            the types containing the target. For every such type, generate a corresponding type for every substitution 
+            possible in the list of inconsistencies of the child and add to a list. run smallest_inconsistent_pair. *)
+    in
     results
 ;;
+
+(*
+(* special version of filter*)
+let rec filter_and_flag (pred: 'a -> bool) (l: 'a list)
+    : bool * 'a list =
+    match l with
+    | [] -> (false, [])
+    | hd::tl -> 
+        if (pred(hd)) (
+            ()
+        )
+;;
+*)
