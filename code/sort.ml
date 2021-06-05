@@ -23,10 +23,8 @@ let inf_var_is_depended_upon (var: TypeInferenceVar.t) (result_list: Typ.unify_r
     List.exists result_contains_var result_list
 ;;
 
-(* checks  *)
-let is_var
-;;
 (*current code assumes a hole won't solve to itself (ie no loops). It would seem the code does so, but unclear! *)
+(* cycle management not implemented yet *)
 (*Performs a topological sort on the unify results by interpreting it as an adjacency list *)
 (*Performs substitution in order based on type dependencies *)
 let top_sort_and_sub (results: Typ.unify_results)
@@ -155,25 +153,26 @@ let rec retrieve_results_for_inf_var (results: Typ.unify_results) (var: TypeInfe
     match results with
     | [] -> None
     | ((THole ty_var), result)::tl -> (
-        if (ty_var == var) then (
-            (Some result)
-        ) else (
-            retrieve_results_for_inf_var tl var
-        )
+        if (ty_var == var) then (Some result) else retrieve_results_for_inf_var tl var
     )
-    | _::tl -> (
-        retrieve_results_for_inf_var tl var
-    )
+    | _::tl -> retrieve_results_for_inf_var tl var
+;;
+
+(* Searches for instances of target within the type's tree structure and replaces if found *)
+let rec find_and_replace (target: TypeInferenceVar.t) (replacement: Typ.t) (ty: Typ.t)
+    : Typ.t =
+    let replace_target_in = find_and_replace target replacement in
+    match ty with
+    | TArrow (ty1, ty2) -> TArrow ((replace_target_in ty1) (replace_target_in ty1))
+    | TProd (ty1, ty2) -> TProd ((replace_target_in ty1) (replace_target_in ty1))
+    | TSum (ty1, ty2) -> TSum ((replace_target_in ty1) (replace_target_in ty1))
+    | THole ty_var -> if (ty_var == var) then replacement else ty
+    | _ -> ty
+;;
 
 (*Iterates through unify_results to replace all instances of target with ty. 
     Isolates target from the tree in that no references to it exist in any referenced types*)
-(*Of note:  We don't need to explicitly change the inference var itself to have child as its result as 
-            prev rec calls will have already made any nodes being subbed one away from the leaves (and 
-            hence already containing their exact result, hence it being the resolved child)
-        we do lol. fix this!*)
-let sub_inf_var_for_child (results: Typ.unify_results) (target: TypeInferenceVar.t) (child: Typ.unify_result)
-    : Typ.unify_results = 
-    (*Map. 
+(*Map. 
     Perform a function (described indented) that maps (TypeInferenceVar.t * Typ.unify_result) 
     to a new such type value adjusted as described below
         For each elt of the results list extract the results in the var * unify_result item
@@ -196,40 +195,52 @@ let sub_inf_var_for_child (results: Typ.unify_results) (target: TypeInferenceVar
                     smallest_inconsistent_pair.
                 If the type doesn't match:
                     Move on to the next variable *)
+let sub_inf_var_for_child (results: Typ.unify_results) (target: TypeInferenceVar.t) (child: Typ.unify_result)
+    : Typ.unify_results = 
     let sub_on_res (var_with_res: (TypeInferenceVar.t * Typ.unify_result))
         : (TypeInferenceVar.t * Typ.unify_result) =
         let (var, result) = var_with_res in
-        match result with
-        | Solved var_typ -> 
-            if (var_typ == target) then (
-                (var, child)
-            )
-            else (
-                (var, result)
-            )
-        | UnSolved var_typs ->
-            (*filter but if you remove something, set a flag to true 
-            issue: need to account for recursive types containing target and replacing internal instances as well*)
-            (*potential solution: 
-            if Solved typ, replace the target within the recursive/base type with every possible soltuion (if child is Solved,
-            this is just one; if UnSolved, all types in the typ list)
-            If UnSolved typs, do the following
-            based on all instances containing (whether recursively or literally) the target, create a list of 
-            the types containing the target. For every such type, generate a corresponding type for every substitution 
-            possible in the list of inconsistencies of the child and add to a list. run smallest_inconsistent_pair. *)
-    in
-    results
-;;
-
-(*
-(* special version of filter*)
-let rec filter_and_flag (pred: 'a -> bool) (l: 'a list)
-    : bool * 'a list =
-    match l with
-    | [] -> (false, [])
-    | hd::tl -> 
-        if (pred(hd)) (
-            ()
+        if (var == target) then (
+            (var, child)
         )
+        else (
+            let accumulate_unsolved_by_list (replacements: Typ.t list) (acc: Typ.t list) (base_ty: Typ.t)
+                : Typ.t list =
+                (*to avoid potential excessive computation *)
+                if (Typ.contains_var target base_ty) then (
+                    let accumulate_unsolved_by_single (acc_s: Typ.t list) (replacement_ty: Typ.t)
+                        : Typ.t list =
+                        (find_and_replace target replacement_ty base_ty)::acc_s
+                    in
+                    (*for efficiency in empty accumulator case*)
+                    let addition = (List.fold_left accumulate_unsolved_by_single [] replacements) in
+                    match acc with
+                    | [] -> addition
+                    | _ -> addition @ acc
+                ) else (
+                    base_ty::acc
+                )
+            in
+            match result with
+            | Solved var_ty -> (
+                match child with
+                | Solved child_ty -> (var, Solved (find_and_replace target child_ty var_ty))
+                | UnSolved child_tys -> (var, UnSolved (accumulate_unsolved_by_list child_tys [] var_ty))
+            )
+            | UnSolved var_tys -> (
+                (*note that they are already inconsistent without the type hole being replaced. inserting one only decreases their generality
+                and will not result in consistency*)
+                match child with
+                | Solved child_ty -> (
+                    let find_and_replace_wrapper (acc: Typ.t list) (ty: Typ.t): Typ.t list =
+                        (find_and_replace target child_ty ty)::acc
+                    in
+                    (var, UnSolved (List.fold_left find_and_replace_wrapper [] var_tys))
+                )
+                | UnSolved child_tys -> (var, UnSolved (List.fold_left (accumulate_unsolved_by_list child_tys) [] var_tys))
+            )
+        )
+    in
+    (*given how large sub_on_res is, it may be a bad idea to use it non tail recursively. hence, the rev method is used *)
+    List.rev(List.rev_map sub_on_res results)
 ;;
-*)
