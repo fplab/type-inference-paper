@@ -1,18 +1,39 @@
 exception Impossible
 open Syntax
 
-(*
-    AN EFFICIENCY NOTICE: List.map is NOT tail recursive. 
-    An alternative that is tail recursive is List.rev (List.rev_map f l)
-    However, this is (obviously) of a higher constant in its unsimplified complexity.
-    If stack space is a concern, List.map can be swapped for the rev version.
+(*From the Wikipedia page on Topological Sorts:
+"In computer science, a topological sort or topological ordering of a directed
+graph is a linear ordering of its vertices such that for every directed edge uv 
+from vertex u to vertex v, u comes before v in the ordering." 
+https://en.wikipedia.org/wiki/Topological_sorting
 
-    Another non tail recursive operation is @. This may be fine, but if possible, 
-    use the smaller list first or try to use the simple item::list instead of [item] @ list
-    (cat is length of the first argument)
- *)
+The DFS method guides the intuitions of this 'topological sort' of sorts.
+Instead of generating a list here, we simply use the access order to immediately perform
+relevant computations.
 
-(* checks if the type of var is used to determine the type of any other type infernce variable *)
+AN EFFICIENCY NOTICE:
+sub_on_root_by_dependence is not tail recursive.
+
+List.map is NOT tail recursive. 
+An alternative that is tail recursive is List.rev (List.rev_map f l)
+However, this is (obviously) of a higher constant in its unsimplified complexity.
+If stack space is a concern, List.map can be swapped for the rev version.
+
+Another non tail recursive operation is @. This may be fine, but if possible, 
+use the smaller list first or try to use the simple item::list instead of [item] @ list
+(cat is length of the first argument)
+*)
+
+(********************)
+(*current code assumes a hole won't solve to itself (ie no loops). It would seem the code does so, but unclear! *)
+(*cycle management not implemented yet; standard methods for detecting include methods that occur during the search
+like marking visited nodes. Anand mentioned algorithms that detect cycles as well. Whatever is done, ideally, should
+be able to resolve nodes not dependent on the cycle equivalence and ignore those involved or dependent on it. What is
+to be reported for such variables is TBD *)
+(********************)
+
+(* checks if the type of var is used to determine the type of any other type infernce variable
+    i.e. if the result type of any variable depends on var's result*)
 let inf_var_is_depended_upon (var: TypeInferenceVar.t) (result_list: Typ.unify_result list)
     : bool =
     let result_contains_var (result: Typ.unify_result): bool =
@@ -23,13 +44,11 @@ let inf_var_is_depended_upon (var: TypeInferenceVar.t) (result_list: Typ.unify_r
     List.exists result_contains_var result_list
 ;;
 
-(*current code assumes a hole won't solve to itself (ie no loops). It would seem the code does so, but unclear! *)
-(* cycle management not implemented yet *)
-(*Performs a topological sort on the unify results by interpreting it as an adjacency list *)
+(*Performs a topological sort on the unify results by interpreting it as an adjacency list*)
 (*Performs substitution in order based on type dependencies *)
 let top_sort_and_sub (results: Typ.unify_results)
     : Typ.unify_results = 
-    (* Find most dependent nodes; 
+    (*Find most dependent nodes; 
         a 'most dependent node' corresponds to a variable that no variables are dependent on*)
     let var_list = Typ.extract_var_list results in
     let result_list =  Typ.extract_result_list results in
@@ -42,36 +61,27 @@ let top_sort_and_sub (results: Typ.unify_results)
         | (var, true) -> None
         | (var, false) -> Some(THole var)
     in
-    (* generate the root list from all variables that are not depended upon *)
+    (*generate the root list from all variables that are not depended upon by filtering None's*)
     let root_list = List.filter_map wrap_not_depended vars_with_dependency in
-    (* 
-    update the unify_results by successively passing its current state to be resolved by substitution along each root node 
-        function:    acc -> list_item -> acc: sub_on_root_by_dependence
-        accumulator: unify_results, unify_result*^
-        list_item:   root_list
-    *^NOTE: the type in the accumulator is solely for efficiency within the function and its initial value has no effect
-    *)
+    (*update the unify_results by successively passing its current state to be resolved by substitution along each root node
+    NOTE: the type in the accumulator is solely for efficiency within the function and its initial value has no effect*)
     let (results, _) = List.fold_left sub_on_root_by_dependence (results, Solved TNum) root_list in
     results
 ;;
 
-(* recurses on the root node specified and recursively adjusts each solution to its most basic (most independent/literal) value*)
-(* each call returns the current adjusted set of results and the unify_result associated with the recursed upon node *)
-(*if a node's children are known to be inconsistent, all nodes receiving data from this should know *)
-(*however, all subtrees may still be able to be resolved further, even if parents cannot *)
+(*recurses on the root node specified and adjusts each var solution to its most basic (most independent/literal) value*)
+(*each call returns the current adjusted set of results and the unify_result associated with the recursed upon node *)
+(*if a node's children are known to be inconsistent, all dependent nodes will also be rendered UnSolved *)
 (*
-currently all UnSolved instances due to inconsistencies will be propogated upward
 ex:     THole 0 = Solved THole 1
         THole 1 =  UnSolved TNum TBool
     will resolve to
         THole 0 = UnSolved TNum TBool
         THole 1 = UnSolved TNum TBool
 *)
-let rec sub_on_root_by_dependence (results: Typ.unify_results) (root: Typ.t)
-    : (Typ.unify_results * Typ.unify_result) = 
-    (* If at a leaf node, return self *)
-    (* If at an intermediate node, use result of recursion of children to sub for self using
-    sub_inf_var_for_child. Return resultant list*)
+let rec sub_on_root_by_dependence (results_and_child_ty: Typ.unify_results) (root: Typ.t)
+    : (Typ.unify_results * Typ.unify_result) =
+    let (results, child_ty) = results_and_child_ty in
     match root with
     | TBool -> (results, TBool)
     | TNum -> (results, TNum)
@@ -84,7 +94,7 @@ let rec sub_on_root_by_dependence (results: Typ.unify_results) (root: Typ.t)
             match unif_res with
             | Solved ty -> (
                 let (results, result_ty) = sub_on_root_by_dependence results ty in
-                sub_inf_var_for_child results var result_ty
+                ((sub_inf_var_for_child results var result_ty), result_ty)
             )
             | Unsolved tys -> (
                 (*the following function accumulates the current state of the unify results and list set
@@ -101,18 +111,23 @@ let rec sub_on_root_by_dependence (results: Typ.unify_results) (root: Typ.t)
                     (updated_results, ty_results @ cur_list)
                 in
                 let (results, inconsistency_set) = List.fold_left recurse_and_acc (results, []) tys in
-                (results, (smallest_inconsistent_set inconsistency_set))
+                (*!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!! *)
+                (*FIX: May not even need smallest_inconsistent_set as they are already known inconsistent and subbing out ? wont make it 'more so' *)
+                let child_res = UnSolved (smallest_inconsistent_set inconsistency_set) in
+                ((sub_inf_var_for_chid results var child_res), child_res)
             )
         )
         | None -> raise Impossible (* list of unification results itself was used to generate variable names used; must be present *)
     )
 (* a common instance for recursive types *)
+ (*!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!! *)
+(*TO BE FIXED: shouldn't cat the type into the unsolved list! it forms an arrow type with each unsolved type!  *)
 and sub_two_of_constructor (ctr: (Typ.t -> Typ.t) -> Typ.t) (ty1: Typ.t) (ty2: Typ.t)
     : (Typ.unify_results * Typ.unify_result) =
     let (results, result_ty1) = sub_on_root_by_dependence results ty1 in
     let (results, result_ty2) = sub_on_root_by_dependence results ty2 in
     let updated_unify_result =
-        match (resolved_ty1, resolved_ty2) with
+        match (result_ty1, result_ty2) with
         | ((Solved resolved_ty1), (Solved resolved_ty2)) -> Solved (ctr resolved_ty1 resolved_ty2)
         | ((UnSolved tys), (Solved resolved_ty2)) -> UnSolved (cat_if_inconsistent_for_all resolved_ty2 tys)
         | ((Solved resolved_ty1), (UnSolved tys)) -> Unsolved (cat_if_inconsistent_for_all resolved_ty1 tys)
