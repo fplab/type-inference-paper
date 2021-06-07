@@ -12,7 +12,7 @@ Instead of generating a list here, we simply use the access order to immediately
 relevant computations.
 
 AN EFFICIENCY NOTICE:
-sub_on_root_by_dependence is not tail recursive.
+sub_on_root_by_dependence is NOT tail recursive.
 
 List.map is NOT tail recursive. 
 An alternative that is tail recursive is List.rev (List.rev_map f l)
@@ -48,8 +48,7 @@ let inf_var_is_depended_upon (var: TypeInferenceVar.t) (result_list: Typ.unify_r
 (*Performs substitution in order based on type dependencies *)
 let top_sort_and_sub (results: Typ.unify_results)
     : Typ.unify_results = 
-    (*Find most dependent nodes; 
-        a 'most dependent node' corresponds to a variable that no variables are dependent on*)
+    (*Find roots; corresponds to a variable that no variables are dependent on*)
     let var_list = Typ.extract_var_list results in
     let result_list =  Typ.extract_result_list results in
     let tuple_dependencies (var: TypeInferenceVar.t): (TypeInferenceVar.t * bool) = 
@@ -99,9 +98,8 @@ let rec sub_on_root_by_dependence (results_and_child_ty: Typ.unify_results) (roo
             | Unsolved tys -> (
                 (*the following function accumulates the current state of the unify results and list set
                 by taking the current state and a new child's type and updating the state by recursing on the type *)
-                (*I think this is just Typ.t list return type *)
-                let recurse_and_accumulate (acc: (Typ.unify_results * (Typ.t list) list)) (ty: Typ.t)
-                    : (Typ.unify_results * (Typ.t list) list) =
+                let recurse_and_accumulate (acc: (Typ.unify_results * (Typ.t list))) (ty: Typ.t)
+                    : (Typ.unify_results * (Typ.t list)) =
                     let (curr_results, curr_list) = acc in
                     let (updated_results, unify_res) = sub_on_root_by_dependence results ty in
                     let ty_results = 
@@ -109,34 +107,43 @@ let rec sub_on_root_by_dependence (results_and_child_ty: Typ.unify_results) (roo
                         | Solved single_ty -> [single_ty]
                         | UnSolved tys -> tys
                     in
-                    (updated_results, ty_results @ cur_list)
+                    (updated_results, ty_results @ curr_list)
                 in
-                let (results, inconsistency_set) = List.fold_left recurse_and_acc (results, []) tys in
-                (*!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!! *)
-                (*FIX: May not even need smallest_inconsistent_set as they are already known inconsistent and subbing out ? wont make it 'more so' *)
-                let child_res = UnSolved (smallest_inconsistent_set inconsistency_set) in
-                ((sub_inf_var_for_chid results var child_res), child_res)
+                let (results, inconsistency_list) = List.fold_left recurse_and_acc (results, []) tys in
+                let child_res =  UnSolved inconsistency_list in
+                ((sub_inf_var_for_child results var child_res), child_res)
             )
         )
         | None -> raise Impossible (* list of unification results itself was used to generate variable names used; must be present *)
     )
 (* a common instance for recursive types *)
- (*!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!! *)
-(*TO BE FIXED: shouldn't cat the type into the unsolved list! it forms an arrow type with each unsolved type!  *)
 and sub_two_of_constructor (ctr: (Typ.t -> Typ.t) -> Typ.t) (ty1: Typ.t) (ty2: Typ.t)
     : (Typ.unify_results * Typ.unify_result) =
     let (results, result_ty1) = sub_on_root_by_dependence results ty1 in
     let (results, result_ty2) = sub_on_root_by_dependence results ty2 in
+    let ctr_type (ctr: (Typ.t -> Typ.t) -> Typ.t) (const: Typ.t) (const_is_left: bool) (acc: Typ.t list) (variant: Typ.t)
+        : Typ.t list =
+        if (const_is_left) then (ctr const varaint)::acc else (ctr variant const)::acc
+    in
     let updated_unify_result =
         match (result_ty1, result_ty2) with
         | ((Solved resolved_ty1), (Solved resolved_ty2)) -> Solved (ctr resolved_ty1 resolved_ty2)
-        | ((UnSolved tys), (Solved resolved_ty2)) -> UnSolved (cat_if_inconsistent_for_all resolved_ty2 tys)
-        | ((Solved resolved_ty1), (UnSolved tys)) -> Unsolved (cat_if_inconsistent_for_all resolved_ty1 tys)
-        | ((UnSolved tys1), (UnSolved tys2)) -> UnSolved (smallest_inconsistent_pair tys1 tys2)
+        | ((UnSolved tys), (Solved resolved_ty2)) -> UnSolved (List.fold_left (ctr_type ctr resolved_ty2 false) [] tys)
+        | ((Solved resolved_ty1), (UnSolved tys)) -> Unsolved (List.fold_left (ctr_type ctr resolved_ty1 true) [] tys)
+        | ((UnSolved tys1), (UnSolved tys2)) -> (
+            let ctr_rec_tys (acc: Typ.t list) (const_of_left: Typ.t): Typ.t list = 
+                List.fold_left (ctr_type ctr const_of_left true) acc tys2
+            in
+            UnSolved (List.fold_left ctr_rec_tys [] tys1)
+        )
     in
     (results, updated_unify_result)
 ;;
 
+(*The following three functions do not seem to have use as of yet:
+    intended use: to remove any elements rendered consistent with others after a substitution
+    reason for lack thereof: only holes are substituted. If known as an inconsistent set, replacing 
+        holes will never increase consistency*)
 (* Appends the item to the list only if the item is not consistent with any items in the list *)
 let cat_if_inconsistent_for_all (target_list: Typ.t list) (item: Typ.t)
     : Typ.t list =
@@ -182,7 +189,7 @@ let rec find_and_replace (target: TypeInferenceVar.t) (replacement: Typ.t) (ty: 
     | TArrow (ty1, ty2) -> TArrow ((replace_target_in ty1) (replace_target_in ty1))
     | TProd (ty1, ty2) -> TProd ((replace_target_in ty1) (replace_target_in ty1))
     | TSum (ty1, ty2) -> TSum ((replace_target_in ty1) (replace_target_in ty1))
-    | THole ty_var -> if (ty_var == var) then replacement else ty
+    | THole ty_var -> if (ty_var == target) then replacement else ty
     | _ -> ty
 ;;
 
