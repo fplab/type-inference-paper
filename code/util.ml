@@ -145,6 +145,7 @@ let solve (ctx: Ctx.t) (e: Exp.t) =
     let (_, results) =   Impl.unify cons in 
     Printf.printf "%s\n" (string_of_results results); 
     (*calls to new topsort code *)
+    Printf.printf "\ntopologically simplified unify results:\n";
     let results = Sort.top_sort_and_sub results in
     Printf.printf "%s\n" (string_of_results results)
 (*       let new_typ = Impl.apply subs typ in

@@ -179,7 +179,11 @@ let rec sub_on_root_by_dependence (root: Typ.t) (results: Typ.unify_results)
                 ((sub_inf_var_for_child var child_res results), child_res)
             )
         )
-        | None -> raise Impossible (* list of unification results itself was used to generate variable names used; must be present *)
+        | None -> (
+            (*let out_str = "searched for " ^ string_of_int(var) ^ " but couldn't find it" in
+            Printf.printf "%s\n" out_str;*)
+            raise Impossible (* list of unification results itself was used to generate variable names used; must be present *)
+        )
     )
 (* a common instance for recursive types *)
 and sub_two_of_constructor (ctr: Typ.t -> Typ.t -> Typ.t) (ty1: Typ.t) (ty2: Typ.t) (results: Typ.unify_results)
