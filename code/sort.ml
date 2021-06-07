@@ -48,7 +48,7 @@ let inf_var_is_depended_upon (var: TypeInferenceVar.t) (result_list: Typ.unify_r
 (*Performs substitution in order based on type dependencies *)
 let top_sort_and_sub (results: Typ.unify_results)
     : Typ.unify_results = 
-    (*Find roots; corresponds to a variable that no variables are dependent on*)
+    (*Find roots; a root corresponds to a variable that no variables are dependent on (no incoming edges)*)
     let var_list = Typ.extract_var_list results in
     let result_list =  Typ.extract_result_list results in
     let tuple_dependencies (var: TypeInferenceVar.t): (TypeInferenceVar.t * bool) = 
@@ -62,9 +62,8 @@ let top_sort_and_sub (results: Typ.unify_results)
     in
     (*generate the root list from all variables that are not depended upon by filtering None's*)
     let root_list = List.filter_map wrap_not_depended vars_with_dependency in
-    (*update the unify_results by successively passing its current state to be resolved by substitution along each root node
-    NOTE: the type in the accumulator is solely for efficiency within the function and its initial value has no effect*)
-    let (results, _) = List.fold_left sub_on_root_by_dependence (results, Solved TNum) root_list in
+    (*update the unify_results by successively passing its current state to be resolved by substitution along each root node*)
+    let results = List.fold_left folding_sub_on_root results root_list in
     results
 ;;
 
@@ -78,9 +77,8 @@ ex:     THole 0 = Solved THole 1
         THole 0 = UnSolved TNum TBool
         THole 1 = UnSolved TNum TBool
 *)
-let rec sub_on_root_by_dependence (results_and_child_ty: Typ.unify_results) (root: Typ.t)
+let rec sub_on_root_by_dependence (results: Typ.unify_results) (root: Typ.t)
     : (Typ.unify_results * Typ.unify_result) =
-    let (results, child_ty) = results_and_child_ty in
     match root with
     | TBool -> (results, TBool)
     | TNum -> (results, TNum)
@@ -138,6 +136,12 @@ and sub_two_of_constructor (ctr: (Typ.t -> Typ.t) -> Typ.t) (ty1: Typ.t) (ty2: T
         )
     in
     (results, updated_unify_result)
+;;
+
+let folding_sub_on_root (acc_res: Typ.unify_results) (root: Typ.t)
+    : (Typ.unify_results) =
+    let (results, _) = sub_on_root_by_dependence acc_res root in
+    results
 ;;
 
 (* retrieve's an inference variables associated solution in the results list (if present) *)
@@ -232,9 +236,9 @@ let sub_inf_var_for_child (target: TypeInferenceVar.t) (child: Typ.unify_result)
 ;;
 
 (*The following three functions do not seem to have use as of yet:
-    old intended use: to remove any elements rendered consistent with others after a substitution
-    reason for lack thereof: only holes are substituted. If known as an inconsistent set, replacing 
-        holes will never increase consistency*)
+    - old intended use: to remove any elements rendered consistent with others after a substitution
+    - reason for lack thereof: only holes are substituted. If known as an inconsistent set, replacing 
+                            holes will never increase consistency*)
 
 (* Appends the item to the list only if the item is not consistent with any items in the list *)
 let cat_if_inconsistent_for_all (target_list: Typ.t list) (item: Typ.t)
