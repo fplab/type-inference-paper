@@ -44,6 +44,29 @@ let inf_var_is_depended_upon (var: TypeInferenceVar.t) (result_list: Typ.unify_r
     List.exists result_contains_var result_list
 ;;
 
+(* retrieve's an inference variables associated solution in the results list (if present) *)
+let rec retrieve_result_for_inf_var (var: TypeInferenceVar.t) (results: Typ.unify_results)
+    : Typ.unify_result option =
+    match results with
+    | [] -> None
+    | ((THole ty_var), result)::tl -> (
+        if (ty_var == var) then (Some result) else retrieve_result_for_inf_var var tl
+    )
+    | _::tl -> retrieve_result_for_inf_var var tl
+;;
+
+(* Searches for instances of target within the type's tree structure and replaces if found *)
+let rec find_and_replace (target: TypeInferenceVar.t) (replacement: Typ.t) (ty: Typ.t)
+    : Typ.t =
+    let replace_target_in = find_and_replace target replacement in
+    match ty with
+    | TArrow (ty1, ty2) -> TArrow ((replace_target_in ty1), (replace_target_in ty2))
+    | TProd (ty1, ty2) -> TProd ((replace_target_in ty1), (replace_target_in ty2))
+    | TSum (ty1, ty2) -> TSum ((replace_target_in ty1), (replace_target_in ty2))
+    | THole ty_var -> if (ty_var == target) then replacement else ty
+    | _ -> ty
+;;
+
 (*Performs a topological sort on the unify results by interpreting it as an adjacency list*)
 (*Performs substitution in order based on type dependencies *)
 let top_sort_and_sub (results: Typ.unify_results)
@@ -63,6 +86,11 @@ let top_sort_and_sub (results: Typ.unify_results)
     (*generate the root list from all variables that are not depended upon by filtering None's*)
     let root_list = List.filter_map wrap_not_depended vars_with_dependency in
     (*update the unify_results by successively passing its current state to be resolved by substitution along each root node*)
+    (*folding sub on root is a wrapped version of sub_on_root_by_dependence for fold_left*)
+    let folding_sub_on_root (acc_res: Typ.unify_results) (root: Typ.t): Typ.unify_results =
+        let (results, _) = sub_on_root_by_dependence acc_res root in
+        results
+    in
     let results = List.fold_left folding_sub_on_root results root_list in
     results
 ;;
@@ -138,35 +166,6 @@ and sub_two_of_constructor (ctr: (Typ.t -> Typ.t) -> Typ.t) (ty1: Typ.t) (ty2: T
     (results, updated_unify_result)
 ;;
 
-let folding_sub_on_root (acc_res: Typ.unify_results) (root: Typ.t)
-    : (Typ.unify_results) =
-    let (results, _) = sub_on_root_by_dependence acc_res root in
-    results
-;;
-
-(* retrieve's an inference variables associated solution in the results list (if present) *)
-let rec retrieve_result_for_inf_var (var: TypeInferenceVar.t) (results: Typ.unify_results)
-    : Typ.unify_result option =
-    match results with
-    | [] -> None
-    | ((THole ty_var), result)::tl -> (
-        if (ty_var == var) then (Some result) else retrieve_result_for_inf_var var tl
-    )
-    | _::tl -> retrieve_result_for_inf_var var tl
-;;
-
-(* Searches for instances of target within the type's tree structure and replaces if found *)
-let rec find_and_replace (target: TypeInferenceVar.t) (replacement: Typ.t) (ty: Typ.t)
-    : Typ.t =
-    let replace_target_in = find_and_replace target replacement in
-    match ty with
-    | TArrow (ty1, ty2) -> TArrow ((replace_target_in ty1), (replace_target_in ty2))
-    | TProd (ty1, ty2) -> TProd ((replace_target_in ty1), (replace_target_in ty2))
-    | TSum (ty1, ty2) -> TSum ((replace_target_in ty1), (replace_target_in ty2))
-    | THole ty_var -> if (ty_var == target) then replacement else ty
-    | _ -> ty
-;;
-
 (*Iterates through unify_results to replace all instances of target with ty. 
     Isolates target from the tree in that no references to it exist in any referenced types*)
 let sub_inf_var_for_child (target: TypeInferenceVar.t) (child: Typ.unify_result) (results: Typ.unify_results)
@@ -235,7 +234,7 @@ let sub_inf_var_for_child (target: TypeInferenceVar.t) (child: Typ.unify_result)
     List.rev(List.rev_map sub_on_res results)
 ;;
 
-(*The following three functions do not seem to have use as of yet:
+(*The following three functions do not seem to have use anymore:
     - old intended use: to remove any elements rendered consistent with others after a substitution
     - reason for lack thereof: only holes are substituted. If known as an inconsistent set, replacing 
                             holes will never increase consistency*)
