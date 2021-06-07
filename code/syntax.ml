@@ -52,7 +52,7 @@ module Typ = struct
         match ty with
         | TArrow (ty1, ty2)
         | TProd (ty1, ty2)
-        | TSum (ty1, ty2) -> (contains_var ty1) || (contains_var ty2)
+        | TSum (ty1, ty2) -> (contains_var var ty1) || (contains_var var ty2)
         | THole ty_var -> (ty_var == var)
         | _ -> false
     ;;

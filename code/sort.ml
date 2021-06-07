@@ -99,6 +99,7 @@ let rec sub_on_root_by_dependence (results_and_child_ty: Typ.unify_results) (roo
             | Unsolved tys -> (
                 (*the following function accumulates the current state of the unify results and list set
                 by taking the current state and a new child's type and updating the state by recursing on the type *)
+                (*I think this is just Typ.t list return type *)
                 let recurse_and_accumulate (acc: (Typ.unify_results * (Typ.t list) list)) (ty: Typ.t)
                     : (Typ.unify_results * (Typ.t list) list) =
                     let (curr_results, curr_list) = acc in
