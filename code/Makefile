@@ -11,4 +11,9 @@ bib:
 	pdflatex $(MAIN)
 
 clean: 
-	rm -f *.aux *.log *.out *.cmo *.cmi *.o $(MAIN).bbl main.blg main.pdf
+	rm -f *.aux *.log *.out *.cmo *.cmi *.o lexer.ml parser.ml parser.mli $(MAIN).bbl main.blg main.pdf
+
+debug_test:
+	ocamllex lexer.mll
+	menhir parser.mly
+	ocamlc -g syntax.ml parser.mli lexer.ml parser.ml myparse.ml impl.ml sort.ml util.ml test.ml
