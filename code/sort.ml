@@ -33,22 +33,6 @@ be able to resolve nodes not dependent on the cycle equivalence and ignore those
 to be reported for such variables is TBD *)
 (********************)
 
-(*the set of variables, from most distantly dependent to directly involved, leading to some independent cycle *)
-(*
-module Cycles = struct
-    type t = TypeInferenceVar.t list
-
-    let mk_cycle_paths (dep: TypeInferenceVar.t) (cycle: TypeInferenceVar.t): cycle_paths =
-        (dep::cycle::[])::[]
-    ;;
-
-    let extend_cycle_paths (dep: TypeInferenceVar.t) (paths: cycle_paths): cycle_paths = 
-        let prepend_dep (path: t): t = dep::path in
-        List.rev_map prepend_dep paths
-    ;;
-end
-*)
-
 module CycleTrack = struct
     type t = TypeInferenceVar.t list
 
@@ -184,7 +168,8 @@ let sub_inf_var_for_child (target: TypeInferenceVar.t) (child: Typ.unify_result)
         )
     in
     (*given how large sub_on_res is, it may be a bad idea to use it non tail recursively. hence, the rev method is used *)
-    List.rev(List.rev_map sub_on_res results)
+    (* the list is reverted in order to give more consistency in output (and make debugging easier) *)
+    List.rev (List.rev_map sub_on_res results)
 ;;
 
 (*recurses on the root node specified and adjusts each var solution to its most basic (most independent/literal) value*)
@@ -197,9 +182,6 @@ ex:     THole 0 = Solved THole 1
         THole 0 = UnSolved TNum TBool
         THole 1 = UnSolved TNum TBool
 *)
-(*create new type return status that can tell you if a dependency is cyclic? maybe return updated tracked too? *)
-(*new protocol adjustment: if a cycle is found once accessing a node, return Cyclic of the cycle
-if none are found, return the cycle list results of all other items appended together *)
 let rec sub_on_root_by_dependence (root: Typ.t) (results: Typ.unify_results) (tracked: CycleTrack.t)
     : sub_status =
     match root with
