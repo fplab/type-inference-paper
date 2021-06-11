@@ -52,7 +52,7 @@ end
 
 (*a sub result is some updated set of unify_results after resolving dependencies to simplest form and the result associated 
 with the root called upon *)
-type sub_result = TypeInferenceVar.unify_results * TypeInferenceVar.unify_result
+type sub_result = Typ.unify_results * Typ.unify_result
 
 (*  A node can be:
         -free from cycles in its dependencies, 
@@ -129,7 +129,6 @@ let sub_inf_var_for_child (target: TypeInferenceVar.t) (child: Typ.unify_result)
                         : Typ.t list =
                         (find_and_replace target replacement_ty base_ty)::acc_s
                     in
-                    (*for efficiency in empty accumulator case*)
                     let extended = List.fold_left accumulate_unsolved_by_single acc_list replacements in
                     (true, extended)
                 ) else (
@@ -207,21 +206,23 @@ let rec sub_on_root_by_dependence (root: Typ.t) (results: Typ.unify_results) (tr
                 | Solved ty -> (
                     let subres = sub_on_root_by_dependence ty results tracked in
                     match subres with 
-                    | SubSuccess (results, result_sol) ->
+                    | SubSuccess (results, result_sol) -> (
+                        SubSuccess ((sub_inf_var_for_child var result_sol results), result_sol)
+                    )
                     | Cyclic cyc -> (
-                        let result_sol = Solved (THole cyc) in
-                        DependentlyCyclic ((sub_inf_var_for_child var result_sol results), result_sol, cyc::[])
+                        let result_sol: Typ.unify_result = Solved (THole cyc) in
+                        DependentlyCyclic (((sub_inf_var_for_child var result_sol results), result_sol), cyc::[])
                     )
                     | DependentlyCyclic ((results, result_sol), cycles) -> (
-                        DependentlyCyclic ((sub_inf_var_for_child var result_sol results), result_sol, cycles)
+                        DependentlyCyclic (((sub_inf_var_for_child var result_sol results), result_sol), cycles)
                     )
                 )
                 | UnSolved tys -> (
                     (*the following function accumulates the current state of the unify results and list set
                     by taking the current state and a new child's type and updating the state by recursing on the type *)
-                    let recurse_and_accumulate (acc: (Typ.unify_results * (Typ.t list) * (cycle list))) (ty: Typ.t)
-                        : (Typ.unify_results * (Typ.t list) * (cycle list)) =
-                        let (curr_results, curr_list, cycles) = acc in
+                    let recurse_and_accumulate (acc: (Typ.unify_results * (Typ.t list) * (TypeInferenceVar.t list) * bool)) (ty: Typ.t)
+                        : (Typ.unify_results * (Typ.t list) * (TypeInferenceVar.t list) * bool) =
+                        let (curr_results, curr_list, cycles, found_cyc) = acc in
                         let res_to_ty_list (unify_res: Typ.unify_result): Typ.t list = 
                             match unify_res with
                             | Solved single_ty -> [single_ty]
@@ -230,20 +231,27 @@ let rec sub_on_root_by_dependence (root: Typ.t) (results: Typ.unify_results) (tr
                         match (sub_on_root_by_dependence ty curr_results tracked) with
                         | SubSuccess (updated_results, result_sol) -> (
                             let updated_list = List.rev_append (res_to_ty_list result_sol) curr_list in
-                            (updated_results, updated_list, cycles)
+                            (updated_results, updated_list, cycles, found_cyc)
                         )
                         | Cyclic cyc -> (
-                            (curr_results, (THole cyc)::curr_list, cyc::cycles)
+                            (curr_results, (THole cyc)::curr_list, cyc::cycles, true)
                         )
                         | DependentlyCyclic ((updated_results, result_sol), new_cycles) -> (
                             let updated_list = List.rev_append (res_to_ty_list result_sol) curr_list in
                             let updated_cycles = List.rev_append new_cycles cycles in
-                            (updated_results, updated_list, updated_cycles)
+                            (updated_results, updated_list, updated_cycles, true)
                         )
                     in
-                    let (results, inconsistency_list, cycles) = List.fold_left recurse_and_accumulate (results, [], []) tys in
+                    let (results, inconsistency_list, cycles, found_cyc) = 
+                        List.fold_left recurse_and_accumulate (results, [], [], false) tys 
+                    in
                     let child_res: Typ.unify_result =  UnSolved inconsistency_list in
-                    ((sub_inf_var_for_child var child_res results), child_res)
+                    if (found_cyc) then (
+                        SubSuccess ((sub_inf_var_for_child var child_res results), child_res)
+                    )
+                    else (
+                        DependentlyCyclic (((sub_inf_var_for_child var child_res results), child_res), cycles)
+                    )
                 )
             )
             | None -> (
@@ -258,14 +266,14 @@ and sub_two_of_constructor (ctr: Typ.t -> Typ.t -> Typ.t) (ty1: Typ.t) (ty2: Typ
     let (results, result_ty1, cycles1, has_cyc1) =
         match sub_res_ty1 with
         | SubSuccess (updated_results, result_sol1) -> (updated_results, result_sol1, [], false)
-        | Cyclic cyc -> (results, (THole cyc), cyc::[], true)
+        | Cyclic cyc -> (results, Solved (THole cyc), cyc::[], true)
         | DependentlyCyclic ((updated_results, result_sol1), cycles1) -> (updated_results, result_sol1, cycles1, true)
     in
     let sub_res_ty2 = sub_on_root_by_dependence ty2 results tracked in
     let (results, result_ty2, cycles2, has_cyc2) =
         match sub_res_ty2 with
         | SubSuccess (updated_results, result_sol2) -> (updated_results, result_sol2, [], false)
-        | Cyclic cyc -> (results, (THole cyc), cyc::[], true)
+        | Cyclic cyc -> (results, Solved (THole cyc), cyc::[], true)
         | DependentlyCyclic ((updated_results, result_sol2), cycles2) -> (updated_results, result_sol2, cycles2, true)
     in
     let mk_ctr_types (ctr: Typ.t -> Typ.t -> Typ.t) (const: Typ.t) (const_is_left: bool) (acc: Typ.t list) (variant: Typ.t)
