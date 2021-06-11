@@ -319,7 +319,8 @@ let top_sort_and_sub (results: Typ.unify_results)
     let root_list = List.filter_map wrap_not_depended vars_with_dependency in
     (*update the unify_results by successively passing its current state to be resolved by substitution along each root node*)
     (*folding sub on root is a wrapped version of sub_on_root_by_dependence for fold_left*)
-    let folding_sub_on_root (acc: Typ.unify_results * (cycle list)) (root: Typ.t): Typ.unify_results * (cycle list) =
+    let folding_sub_on_root (acc: Typ.unify_results * (TypeInferenceVar.t list)) (root: Typ.t)
+        : Typ.unify_results * (TypeInferenceVar.t list) =
         let acc_res, acc_cycles = acc in
         match (sub_on_root_by_dependence root acc_res CycleTrack.empty) with
         | SubSuccess (results, _) -> (results, acc_cycles)
