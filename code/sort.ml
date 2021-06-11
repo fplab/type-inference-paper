@@ -271,9 +271,21 @@ let rec sub_on_root_by_dependence (root: Typ.t) (results: Typ.unify_results) (tr
     )
 (* a common instance for recursive types *)
 and sub_two_of_constructor (ctr: Typ.t -> Typ.t -> Typ.t) (ty1: Typ.t) (ty2: Typ.t) (results: Typ.unify_results) (tracked: CycleTrack.t)
-    : substatus =
-    let (results, result_ty1) = sub_on_root_by_dependence ty1 results tracked in
-    let (results, result_ty2) = sub_on_root_by_dependence ty2 results tracked in
+    : sub_status =
+    let sub_res_ty1 = sub_on_root_by_dependence ty1 results tracked in
+    let (results, result_ty1, cycles1, has_cyc1) =
+        match sub_res_ty1 with
+        | SubSuccess (updated_results, result_sol1) -> (updated_results, result_sol1, [], false)
+        | Cyclic cyc -> (results, (THole cyc), cyc::[], true)
+        | DependentlyCyclic ((updated_results, result_sol1), cycles1) -> (updated_results, result_sol1, cycles1, true)
+    in
+    let sub_res_ty2 = sub_on_root_by_dependence ty2 results tracked in
+    let (results, result_ty2, cycles2, has_cyc2) =
+        match sub_res_ty2 with
+        | SubSuccess (updated_results, result_sol2) -> (updated_results, result_sol2, [], false)
+        | Cyclic cyc -> (results, (THole cyc), cyc::[], true)
+        | DependentlyCyclic ((updated_results, result_sol2), cycles2) -> (updated_results, result_sol2, cycles2, true)
+    in
     let mk_ctr_types (ctr: Typ.t -> Typ.t -> Typ.t) (const: Typ.t) (const_is_left: bool) (acc: Typ.t list) (variant: Typ.t)
         : Typ.t list =
         if (const_is_left) then (ctr const variant)::acc else (ctr variant const)::acc
@@ -290,13 +302,17 @@ and sub_two_of_constructor (ctr: Typ.t -> Typ.t -> Typ.t) (ty1: Typ.t) (ty2: Typ
             UnSolved (List.fold_left acc_mk_ctr_types [] tys1)
         )
     in
-    (results, updated_unify_result)
+    if (has_cyc1 || has_cyc2) then (
+        DependentlyCyclic ((results, updated_unify_result), (List.rev_append cycles1 cycles2))
+    ) else (
+        SubSuccess (results, updated_unify_result)
+    )
 ;;
 
 (*Performs a topological sort on the unify results by interpreting it as an adjacency list*)
 (*Performs substitution in order based on type dependencies *)
 let top_sort_and_sub (results: Typ.unify_results)
-    : Typ.unify_results * (cycle list) = 
+    : Typ.unify_results * (TypeInferenceVar.t list) = 
     (*Find roots; a root corresponds to a variable that no variables are dependent on (no incoming edges)*)
     let var_list = Typ.extract_var_list results in
     let result_list =  Typ.extract_result_list results in
@@ -316,10 +332,11 @@ let top_sort_and_sub (results: Typ.unify_results)
     let folding_sub_on_root (acc: Typ.unify_results * (cycle list)) (root: Typ.t): Typ.unify_results * (cycle list) =
         let acc_res, acc_cycles = acc in
         match (sub_on_root_by_dependence root acc_res CycleTrack.empty) with
-        | SubSuccess (results, _, cycles) -> results, cycles @ acc_cycles
-        | Cyclic cycle -> cycle::acc_cycles
+        | SubSuccess (results, _) -> (results, acc_cycles)
+        | Cyclic cyc -> (acc_res, cyc::acc_cycles)
+        | DependentlyCyclic ((results, _), new_cycles) -> (results, (List.rev_append new_cycles acc_cycles))
     in
-    let results_and_cycles = List.fold_left folding_sub_on_root results root_list in
+    let results_and_cycles = List.fold_left folding_sub_on_root (results, []) root_list in
     results_and_cycles
 ;;
 
