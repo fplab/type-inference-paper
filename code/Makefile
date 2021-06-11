@@ -1,5 +1,9 @@
 MAIN=type-inference-paper
 
+test:
+	dune build test.exe
+	dune exec ./test.exe
+
 all:
 	pdflatex $(MAIN)
 
@@ -12,10 +16,6 @@ bib:
 
 clean: 
 	rm -f *.aux *.log *.out *.cmo *.cmi *.o lexer.ml parser.ml parser.mli $(MAIN).bbl main.blg main.pdf
-
-test:
-	dune build test.exe
-	dune exec ./test.exe
 
 bytecode:
 	ocamllex lexer.mll

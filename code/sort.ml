@@ -22,6 +22,7 @@ If stack space is a concern, List.map can be swapped for the rev version.
 Another non tail recursive operation is @. This may be fine, but if possible, 
 use the smaller list first or try to use the simple item::list instead of [item] @ list
 (cat is length of the first argument)
+    If order doesn't matter, consider List.rev_append!
 *)
 
 (********************)
@@ -31,6 +32,58 @@ like marking visited nodes. Anand mentioned algorithms that detect cycles as wel
 be able to resolve nodes not dependent on the cycle equivalence and ignore those involved or dependent on it. What is
 to be reported for such variables is TBD *)
 (********************)
+
+(*the set of variables, from most distantly dependent to directly involved, leading to some independent cycle *)
+(*
+module Cycles = struct
+    type t = TypeInferenceVar.t list
+
+    let mk_cycle_paths (dep: TypeInferenceVar.t) (cycle: TypeInferenceVar.t): cycle_paths =
+        (dep::cycle::[])::[]
+    ;;
+
+    let extend_cycle_paths (dep: TypeInferenceVar.t) (paths: cycle_paths): cycle_paths = 
+        let prepend_dep (path: t): t = dep::path in
+        List.rev_map prepend_dep paths
+    ;;
+end
+*)
+
+module CycleTrack = struct
+    type t = TypeInferenceVar.t list
+
+    let empty : t = [];;
+
+    let track_var (var: TypeInferenceVar.t) (vars: t): t =
+        var::vars
+    ;;
+
+    let is_tracked (var: TypeInferenceVar.t) (vars: t): bool =
+        let is_var (scrut: TypeInferenceVar.t): bool =
+            var == scrut
+        in
+        List.exists is_var vars
+    ;;
+end
+
+(*a sub result is some updated set of unify_results after resolving dependencies to simplest form and the result associated 
+with the root called upon *)
+type sub_result = TypeInferenceVar.unify_results * TypeInferenceVar.unify_result
+
+(*  A node can be:
+        -free from cycles in its dependencies, 
+        -cyclic,
+            where it is directly involved in a cycle,
+            and its name is not substituted out 
+        -or dependently cyclic, 
+            where it is consistent, through some path, with at least one cycle
+            a dependently cyclic node can theoretically be involved in the path to multiple cycles once all
+            children are evaluated. Thus, a dependently cyclic node is associated with a set of cycle paths,
+            each of which maps to a cyclic node to which all involved could be resolved to *)
+type sub_status = 
+    | SubSuccess of sub_result
+    | Cyclic of TypeInferenceVar.t 
+    | DependentlyCyclic of sub_result * (TypeInferenceVar.t list)
 
 (* checks if the type of var is used to determine the type of any other type infernce variable
     i.e. if the result type of any variable depends on var's result*)
@@ -144,52 +197,83 @@ ex:     THole 0 = Solved THole 1
         THole 0 = UnSolved TNum TBool
         THole 1 = UnSolved TNum TBool
 *)
-let rec sub_on_root_by_dependence (root: Typ.t) (results: Typ.unify_results)
-    : (Typ.unify_results * Typ.unify_result) =
+(*create new type return status that can tell you if a dependency is cyclic? maybe return updated tracked too? *)
+(*new protocol adjustment: if a cycle is found once accessing a node, return Cyclic of the cycle
+if none are found, return the cycle list results of all other items appended together *)
+let rec sub_on_root_by_dependence (root: Typ.t) (results: Typ.unify_results) (tracked: CycleTrack.t)
+    : sub_status =
     match root with
-    | TBool -> (results, Solved TBool)
-    | TNum -> (results, Solved TNum)
-    | TArrow (ty1, ty2) -> sub_two_of_constructor Typ.mk_arrow ty1 ty2 results
-    | TProd (ty1, ty2) -> sub_two_of_constructor Typ.mk_prod ty1 ty2 results
-    | TSum (ty1, ty2) -> sub_two_of_constructor Typ.mk_sum ty1 ty2 results
+    | TBool -> SubSuccess (results, Solved TBool)
+    | TNum -> SubSuccess (results, Solved TNum)
+    | TArrow (ty1, ty2) -> sub_two_of_constructor Typ.mk_arrow ty1 ty2 results tracked
+    | TProd (ty1, ty2) -> sub_two_of_constructor Typ.mk_prod ty1 ty2 results tracked
+    | TSum (ty1, ty2) -> sub_two_of_constructor Typ.mk_sum ty1 ty2 results tracked
     | THole var -> (
-        match (retrieve_result_for_inf_var var results) with
-        | Some unif_res -> (
-            match unif_res with
-            | Solved ty -> (
-                let (results, result_ty) = sub_on_root_by_dependence ty results in
-                ((sub_inf_var_for_child var result_ty results), result_ty)
-            )
-            | UnSolved tys -> (
-                (*the following function accumulates the current state of the unify results and list set
-                by taking the current state and a new child's type and updating the state by recursing on the type *)
-                let recurse_and_accumulate (acc: (Typ.unify_results * (Typ.t list))) (ty: Typ.t)
-                    : (Typ.unify_results * (Typ.t list)) =
-                    let (curr_results, curr_list) = acc in
-                    let (updated_results, unify_res) = sub_on_root_by_dependence ty curr_results in
-                    let ty_results = 
-                        match unify_res with
-                        | Solved single_ty -> [single_ty]
-                        | UnSolved tys -> tys
-                    in
-                    (updated_results, ty_results @ curr_list)
-                in
-                let (results, inconsistency_list) = List.fold_left recurse_and_accumulate (results, []) tys in
-                let child_res : Typ.unify_result =  UnSolved inconsistency_list in
-                ((sub_inf_var_for_child var child_res results), child_res)
-            )
+        match (CycleTrack.is_tracked var tracked) with
+        | true -> (
+            (*A cycle exists; stop evaluation to prevent looping. Node resolved to itself*)
+            (*since there is no viable simplifying solution, it is not substituted out of the tree;
+            all direct references it it or those dependent on it will be rendered DependentlyCyclic*)
+            Cyclic var
         )
-        | None -> (
-            (*let out_str = "searched for " ^ string_of_int(var) ^ " but couldn't find it" in
-            Printf.printf "%s\n" out_str;*)
-            raise Impossible (* list of unification results itself was used to generate variable names used; must be present *)
+        | false -> (
+            (*no cycle found with this node yet. proceed as usual, and track the variable *)
+            let tracked = CycleTrack.track_var var tracked in
+            match (retrieve_result_for_inf_var var results) with
+            | Some unif_res -> (
+                match unif_res with
+                | Solved ty -> (
+                    let subres = sub_on_root_by_dependence ty results tracked in
+                    match subres with 
+                    | SubSuccess (results, result_sol) ->
+                    | Cyclic cyc -> (
+                        let result_sol = Solved (THole cyc) in
+                        DependentlyCyclic ((sub_inf_var_for_child var result_sol results), result_sol, cyc::[])
+                    )
+                    | DependentlyCyclic ((results, result_sol), cycles) -> (
+                        DependentlyCyclic ((sub_inf_var_for_child var result_sol results), result_sol, cycles)
+                    )
+                )
+                | UnSolved tys -> (
+                    (*the following function accumulates the current state of the unify results and list set
+                    by taking the current state and a new child's type and updating the state by recursing on the type *)
+                    let recurse_and_accumulate (acc: (Typ.unify_results * (Typ.t list) * (cycle list))) (ty: Typ.t)
+                        : (Typ.unify_results * (Typ.t list) * (cycle list)) =
+                        let (curr_results, curr_list, cycles) = acc in
+                        let res_to_ty_list (unify_res: Typ.unify_result): Typ.t list = 
+                            match unify_res with
+                            | Solved single_ty -> [single_ty]
+                            | UnSolved tys -> tys
+                        in
+                        match (sub_on_root_by_dependence ty curr_results tracked) with
+                        | SubSuccess (updated_results, result_sol) -> (
+                            let updated_list = List.rev_append (res_to_ty_list result_sol) curr_list in
+                            (updated_results, updated_list, cycles)
+                        )
+                        | Cyclic cyc -> (
+                            (curr_results, (THole cyc)::curr_list, cyc::cycles)
+                        )
+                        | DependentlyCyclic ((updated_results, result_sol), new_cycles) -> (
+                            let updated_list = List.rev_append (res_to_ty_list result_sol) curr_list in
+                            let updated_cycles = List.rev_append new_cycles cycles in
+                            (updated_results, updated_list, updated_cycles)
+                        )
+                    in
+                    let (results, inconsistency_list, cycles) = List.fold_left recurse_and_accumulate (results, [], []) tys in
+                    let child_res: Typ.unify_result =  UnSolved inconsistency_list in
+                    ((sub_inf_var_for_child var child_res results), child_res)
+                )
+            )
+            | None -> (
+                raise Impossible (* list of unification results itself was used to generate variable names used; must be present *)
+            )
         )
     )
 (* a common instance for recursive types *)
-and sub_two_of_constructor (ctr: Typ.t -> Typ.t -> Typ.t) (ty1: Typ.t) (ty2: Typ.t) (results: Typ.unify_results)
-    : (Typ.unify_results * Typ.unify_result) =
-    let (results, result_ty1) = sub_on_root_by_dependence ty1 results in
-    let (results, result_ty2) = sub_on_root_by_dependence ty2 results in
+and sub_two_of_constructor (ctr: Typ.t -> Typ.t -> Typ.t) (ty1: Typ.t) (ty2: Typ.t) (results: Typ.unify_results) (tracked: CycleTrack.t)
+    : substatus =
+    let (results, result_ty1) = sub_on_root_by_dependence ty1 results tracked in
+    let (results, result_ty2) = sub_on_root_by_dependence ty2 results tracked in
     let mk_ctr_types (ctr: Typ.t -> Typ.t -> Typ.t) (const: Typ.t) (const_is_left: bool) (acc: Typ.t list) (variant: Typ.t)
         : Typ.t list =
         if (const_is_left) then (ctr const variant)::acc else (ctr variant const)::acc
@@ -212,7 +296,7 @@ and sub_two_of_constructor (ctr: Typ.t -> Typ.t -> Typ.t) (ty1: Typ.t) (ty2: Typ
 (*Performs a topological sort on the unify results by interpreting it as an adjacency list*)
 (*Performs substitution in order based on type dependencies *)
 let top_sort_and_sub (results: Typ.unify_results)
-    : Typ.unify_results = 
+    : Typ.unify_results * (cycle list) = 
     (*Find roots; a root corresponds to a variable that no variables are dependent on (no incoming edges)*)
     let var_list = Typ.extract_var_list results in
     let result_list =  Typ.extract_result_list results in
@@ -229,12 +313,14 @@ let top_sort_and_sub (results: Typ.unify_results)
     let root_list = List.filter_map wrap_not_depended vars_with_dependency in
     (*update the unify_results by successively passing its current state to be resolved by substitution along each root node*)
     (*folding sub on root is a wrapped version of sub_on_root_by_dependence for fold_left*)
-    let folding_sub_on_root (acc_res: Typ.unify_results) (root: Typ.t): Typ.unify_results =
-        let (results, _) = sub_on_root_by_dependence root acc_res in
-        results
+    let folding_sub_on_root (acc: Typ.unify_results * (cycle list)) (root: Typ.t): Typ.unify_results * (cycle list) =
+        let acc_res, acc_cycles = acc in
+        match (sub_on_root_by_dependence root acc_res CycleTrack.empty) with
+        | SubSuccess (results, _, cycles) -> results, cycles @ acc_cycles
+        | Cyclic cycle -> cycle::acc_cycles
     in
-    let results = List.fold_left folding_sub_on_root results root_list in
-    results
+    let results_and_cycles = List.fold_left folding_sub_on_root results root_list in
+    results_and_cycles
 ;;
 
 (*The following three functions do not seem to have use anymore:
