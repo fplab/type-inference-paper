@@ -10,8 +10,12 @@ https://en.wikipedia.org/wiki/Topological_sorting
 The DFS method guides the intuitions of this 'topological sort' of sorts.
 Instead of generating a list here, we simply use the access order to immediately perform
 relevant computations.
+*)
 
-AN EFFICIENCY NOTICE:
+(**********************)
+(**** NOTICE BOARD ****)
+(*current code assumes a hole won't solve to itself (ie no loops). It would seem the code does so, but unclear! *)
+(*AN EFFICIENCY NOTICE:
 sub_on_root_by_dependence is NOT tail recursive.
 
 List.map is NOT tail recursive. 
@@ -24,14 +28,7 @@ use the smaller list first or try to use the simple item::list instead of [item]
 (cat is length of the first argument)
     If order doesn't matter, consider List.rev_append!
 *)
-
-(********************)
-(*current code assumes a hole won't solve to itself (ie no loops). It would seem the code does so, but unclear! *)
-(*cycle management not implemented yet; standard methods for detecting include methods that occur during the search
-like marking visited nodes. Anand mentioned algorithms that detect cycles as well. Whatever is done, ideally, should
-be able to resolve nodes not dependent on the cycle equivalence and ignore those involved or dependent on it. What is
-to be reported for such variables is TBD *)
-(********************)
+(*********************)
 
 module CycleTrack = struct
     type t = TypeInferenceVar.t list
@@ -220,6 +217,7 @@ let rec sub_on_root_by_dependence (root: Typ.t) (results: Typ.unify_results) (tr
                 | UnSolved tys -> (
                     (*the following function accumulates the current state of the unify results and list set
                     by taking the current state and a new child's type and updating the state by recursing on the type *)
+                    (*if cyclic when already dependently, add to list? *)
                     let recurse_and_accumulate (acc: (Typ.unify_results * (Typ.t list) * (TypeInferenceVar.t list) * bool)) (ty: Typ.t)
                         : (Typ.unify_results * (Typ.t list) * (TypeInferenceVar.t list) * bool) =
                         let (curr_results, curr_list, cycles, found_cyc) = acc in
@@ -334,7 +332,7 @@ let top_sort_and_sub (results: Typ.unify_results)
 (*The following three functions do not seem to have use anymore:
     - old intended use: to remove any elements rendered consistent with others after a substitution
     - reason for lack thereof: only holes are substituted. If known as an inconsistent set, replacing 
-                            holes will never increase consistency*)
+        holes will never increase consistency*)
 
 (* Appends the item to the list only if the item is not consistent with any items in the list *)
 let cat_if_inconsistent_for_all (target_list: Typ.t list) (item: Typ.t)
