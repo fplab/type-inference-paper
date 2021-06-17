@@ -68,7 +68,8 @@ let rec syn (ctx: Ctx.t) (e: Exp.t): (Typ.t * Constraints.t) option =
       | Some (typ2, cons2) -> (
         match syn ctx e3 with
         | None -> None
-        | Some (typ3, cons3) -> 
+        | Some (typ3, cons3) ->
+          (*will need to make helper to order literals after holes and use here *)
           if Typ.consistent typ2 typ3 then Some (typ2, cons1 @ cons2 @ cons3 @[(typ2, typ3)])
           else None
       )
@@ -129,6 +130,7 @@ let rec syn (ctx: Ctx.t) (e: Exp.t): (Typ.t * Constraints.t) option =
         match syn (Ctx.extend ctx (y, typ2)) e2 with
         | None -> None
         | Some (typ_y, cons3) -> (
+          (*will need to make helper to order literals after holes and use here *)
           if Typ.consistent typ_x typ_y then Some(typ_x, cons1@cons2@cons3@[(typ_x, typ_y)])
           else None
           )
@@ -157,6 +159,7 @@ and ana (ctx: Ctx.t) (e: Exp.t) (ty: Typ.t): Constraints.t option =
       match ana (Ctx.extend ctx (x, ty_in')) exp ty_out with
       | None -> None
       | Some cons2 -> 
+      (*will need to make helper to order literals after holes and use here *)
       if Typ.consistent ty_in ty_in' then Some (cons1@cons2@[(ty_in', ty_in)])
       else None
     )
@@ -255,6 +258,7 @@ and ana (ctx: Ctx.t) (e: Exp.t) (ty: Typ.t): Constraints.t option =
       (match syn ctx e with
         | None -> None
         | Some (ty', cons) -> 
+        (*will need to make helper to order literals after holes and use here *)
         if (Typ.consistent ty' ty) then Some (cons@[(ty', ty)])
         else None
       )
