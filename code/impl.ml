@@ -157,7 +157,7 @@ and ana (ctx: Ctx.t) (e: Exp.t) (ty: Typ.t): Constraints.t option =
       match ana (Ctx.extend ctx (x, ty_in')) exp ty_out with
       | None -> None
       | Some cons2 -> 
-      if Typ.consistent ty_in ty_in' then Some (cons1@cons2@[(ty_in, ty_in')])
+      if Typ.consistent ty_in ty_in' then Some (cons1@cons2@[(ty_in', ty_in)])
       else None
     )
     | _ -> raise Impossible
@@ -255,7 +255,7 @@ and ana (ctx: Ctx.t) (e: Exp.t) (ty: Typ.t): Constraints.t option =
       (match syn ctx e with
         | None -> None
         | Some (ty', cons) -> 
-        if (Typ.consistent ty' ty) then Some (cons@[(ty, ty')])
+        if (Typ.consistent ty' ty) then Some (cons@[(ty', ty)])
         else None
       )
 ;;

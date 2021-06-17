@@ -18,9 +18,9 @@ let testcases: (Ctx.t * Exp.t) list = [
   
   (Ctx.empty, parse "let y be fun (x:Hole[0]) -> x + 1 in y (|7|)");
   (*to do: see if you can figure out the reason why the output of THole[2]'s ma_arrow  *)
-  (*(Ctx.empty, parse "fun (x:Hole[2]) -> x (x+5)");*)
+  (Ctx.empty, parse "fun (x:Hole[2]) -> x (x+5)");
   (Ctx.empty, parse "fun (x:Hole[2]) -> x x");
-  (*([("x",THole 1);], parse "x x");
+  ([("x",THole 1);], parse "x x");
   ([("x",THole 1);], parse "x 1 1");
   ([("x",THole 1); ("y",THole 2);], parse "x 1 1 y");
   ([("f",TArrow(TNum,THole 1));("g",TArrow(TArrow(TNum, TNum),THole 2))], parse "fun (x:Hole[3]) -> f (g x)");
@@ -73,7 +73,7 @@ let testcases: (Ctx.t * Exp.t) list = [
   (Ctx.empty, ELet ("f", (Some (TArrow (THole 0,THole 1))), (ELam ("x", (EVar "x"))), (EPair ((EBinOp ((EVar "f"), OpAp, (EBoolLiteral true))), (EBinOp ((EVar "f"), OpAp, (ENumLiteral 1)))))));
   (Ctx.empty, ELet ("x", (Some (TSum(THole 0, THole 1))), parse "(|1|)", parse "case x of L(x) -> (if x then 1 else 1) else R(x) -> x+1"));
   (* (Ctx.empty, ELet ("x", (Some (TSum(THole 0, THole 1))), parse "(|1|)", parse "case x of L(x) -> (if x then 1 else 1) else R(x) -> x+1")); *)
-  (Ctx.empty, ELet ("x", (Some (THole 0)), parse "(|1|)", parse "case x of L(x) -> 1 else R(x) -> 1"));*)
+  (Ctx.empty, ELet ("x", (Some (THole 0)), parse "(|1|)", parse "case x of L(x) -> 1 else R(x) -> 1"));
 ]
 ;;
 

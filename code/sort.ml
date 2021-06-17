@@ -27,6 +27,8 @@ Another non tail recursive operation is @. This may be fine, but if possible,
 use the smaller list first or try to use the simple item::list instead of [item] @ list
 (cat is length of the first argument)
     If order doesn't matter, consider List.rev_append!
+    List.rev_append (List.rev l1) l2          ==           List.append l1 l2
+    length of first argument time in both; space of first arg too in second
 *)
 (*********************)
 
@@ -228,15 +230,15 @@ let rec sub_on_root_by_dependence (root: Typ.t) (results: Typ.unify_results) (tr
                         in
                         match (sub_on_root_by_dependence ty curr_results tracked) with
                         | SubSuccess (updated_results, result_sol) -> (
-                            let updated_list = List.rev_append (res_to_ty_list result_sol) curr_list in
+                            let updated_list = List.rev_append (List.rev curr_list) (res_to_ty_list result_sol) in
                             (updated_results, updated_list, cycles, found_cyc)
                         )
                         | Cyclic cyc -> (
                             (curr_results, (THole cyc)::curr_list, cyc::cycles, true)
                         )
                         | DependentlyCyclic ((updated_results, result_sol), new_cycles) -> (
-                            let updated_list = List.rev_append (res_to_ty_list result_sol) curr_list in
-                            let updated_cycles = List.rev_append new_cycles cycles in
+                            let updated_list = List.rev_append (List.rev curr_list) (res_to_ty_list result_sol) in
+                            let updated_cycles = List.rev_append (List.rev cycles) new_cycles in
                             (updated_results, updated_list, updated_cycles, true)
                         )
                     in
@@ -253,7 +255,15 @@ let rec sub_on_root_by_dependence (root: Typ.t) (results: Typ.unify_results) (tr
                 )
             )
             | None -> (
-                raise Impossible (* list of unification results itself was used to generate variable names used; must be present *)
+                (* raise Impossible <--- actually possible! : *)
+                (*this can arise in the event that a unification result references a hole that has no unify result *)
+                (*later iterations will likely want to expand upon such cases to be handled as unbound or apply extensions thereof here *)
+                (*for now, we don't have support for things with no unify result that are not unsolved (aka unbound vars) *)
+                (*furthermore, with THole's, the ability to generalize to a polymorphic type is dependent upon the fact that you know
+                100% that no other use of the hole constrains the type at all. thus, you would need to be careful when implementing
+                polymorphism and unconstrained *)
+                (*we choose to simply return the  variable itself if it is unbound with the solved status (as this is not invalid)*)
+                SubSuccess (results, (Solved root))
             )
         )
     )
@@ -291,7 +301,7 @@ and sub_two_of_constructor (ctr: Typ.t -> Typ.t -> Typ.t) (ty1: Typ.t) (ty2: Typ
         )
     in
     if (has_cyc1 || has_cyc2) then (
-        DependentlyCyclic ((results, updated_unify_result), (List.rev_append cycles1 cycles2))
+        DependentlyCyclic ((results, updated_unify_result), (List.rev_append (List.rev cycles1) cycles2))
     ) else (
         SubSuccess (results, updated_unify_result)
     )
@@ -323,7 +333,7 @@ let top_sort_and_sub (results: Typ.unify_results)
         match (sub_on_root_by_dependence root acc_res CycleTrack.empty) with
         | SubSuccess (results, _) -> (results, acc_cycles)
         | Cyclic cyc -> (acc_res, cyc::acc_cycles)
-        | DependentlyCyclic ((results, _), new_cycles) -> (results, (List.rev_append new_cycles acc_cycles))
+        | DependentlyCyclic ((results, _), new_cycles) -> (results, (List.rev_append (List.rev acc_cycles) new_cycles))
     in
     let results_and_cycles = List.fold_left folding_sub_on_root (results, []) root_list in
     results_and_cycles
