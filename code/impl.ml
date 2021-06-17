@@ -15,6 +15,24 @@ let get_match_arrow_typ (t: Typ.t): (Typ.t * Constraints.t) option =
   | _ -> None
 ;;
 
+let rec is_fully_literal (typ: Typ.t): bool =
+  match typ with
+    | TNum
+    | TBool -> true
+    | THole _ -> false
+    | TArrow (ty1, ty2)
+    | TProd (ty1, ty2)
+    | TSum (ty1, ty2) -> (is_fully_literal ty1) && (is_fully_literal ty2)
+;;
+
+let order_by_independence (target: Typ.t) (result: Typ.t): Constraints.consistent =
+  match ((is_fully_literal target), (is_fully_literal result)) with
+  | (true, true) 
+  | (false, true) 
+  | (false, false) -> (target, result)
+  | (true, false) -> (result, target)
+;;
+
 let rec syn (ctx: Ctx.t) (e: Exp.t): (Typ.t * Constraints.t) option =
   match e with
   | EVar x -> (
@@ -70,7 +88,7 @@ let rec syn (ctx: Ctx.t) (e: Exp.t): (Typ.t * Constraints.t) option =
         | None -> None
         | Some (typ3, cons3) ->
           (*will need to make helper to order literals after holes and use here *)
-          if Typ.consistent typ2 typ3 then Some (typ2, cons1 @ cons2 @ cons3 @[(typ2, typ3)])
+          if Typ.consistent typ2 typ3 then Some (typ2, cons1 @ cons2 @ cons3 @ [(typ2, typ3)])
           else None
       )
     )
