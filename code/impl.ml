@@ -15,6 +15,8 @@ let get_match_arrow_typ (t: Typ.t): (Typ.t * Constraints.t) option =
   | _ -> None
 ;;
 
+(* Below two don't actually appear necessary
+
 let rec is_fully_literal (typ: Typ.t): bool =
   match typ with
     | TNum
@@ -32,6 +34,7 @@ let order_by_independence (target: Typ.t) (result: Typ.t): Constraints.consisten
   | (false, false) -> (target, result)
   | (true, false) -> (result, target)
 ;;
+*)
 
 let rec syn (ctx: Ctx.t) (e: Exp.t): (Typ.t * Constraints.t) option =
   match e with
