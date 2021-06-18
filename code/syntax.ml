@@ -16,7 +16,7 @@ module Typ = struct
         | TProd of t * t
         | TSum of t * t
 
-    type unify_result = 
+    type unify_result =
         | Solved of t
         | UnSolved of (t list)
 

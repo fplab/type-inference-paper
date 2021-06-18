@@ -358,7 +358,7 @@ and unify_one (t1: Typ.t) (t2: Typ.t) (partial_results: Typ.unify_results)
     | (TSum (ty1, ty2), TSum (ty3,ty4))-> (
       unify [(ty1,ty3);(ty2,ty4)]
     )
-    | (THole v, t) | (t, THole v) -> 
+    | (THole v, t) | (t, THole v) ->
       (*for sake of clarity, a recomparison to the TAPL unify formulation
       rest is identical save for the hole case. In tapl, if two type variables are posited equal
       then you assert that the variable is equivalent to the other value (variable or literal)
@@ -383,20 +383,24 @@ and unify_one (t1: Typ.t) (t2: Typ.t) (partial_results: Typ.unify_results)
       by substitution to incorporate more consistency logic so it doesn't pass invalid constraints on by substitution*)
       let subs_v = apply partial_results (THole v) in
       let typ = apply partial_results t in
-        (* detect recursive case *)
-        if (is_in_dom v typ) then (false, [(v, UnSolved [typ; THole v])])
+        (*solution for identical typ vars (no solution for now); may need to be shifted to unconstrained unify result status *)
+        if (subs_v = typ) then (true, [])
         else (
-          match subs_v with
-          | THole _ -> (true, [(v, Solved typ)])
-          | _ -> (
-            match (unify_one subs_v typ partial_results) with
-            | (true, result) ->  (true, add_result (v, Typ.Solved typ) result)
-            (*old ver: \\subs_v; t \\typ   maybe Zoe wanted to change the way unsolved accumulated things? 
-            it would seem so based on the new-algs in this branch. i think she may have been phasing out add result
-            in favor of using Solver.update_typ_in_hole_eq and then running solve_eqs after instead of 'solving' every update
-            after all, if she meant to 'comment out' subs_v and typ for just t, maybe she wnted to add the type as is without processing
-            to be assessed later. kinda like generating a list of things holes have to be equal to*)
-            | (false, result) -> (false, add_result (v, Typ.UnSolved([subs_v; typ])) result)
+          (* detect recursive case *)
+          if (is_in_dom v typ) then (false, [(v, UnSolved [typ; THole v])])
+          else (
+            match subs_v with
+            | THole _ -> (true, [(v, Solved typ)])
+            | _ -> (
+              match (unify_one subs_v typ partial_results) with
+              | (true, result) ->  (true, add_result (v, Typ.Solved typ) result)
+              (*old ver: \\subs_v; t \\typ   maybe Zoe wanted to change the way unsolved accumulated things? 
+              it would seem so based on the new-algs in this branch. i think she may have been phasing out add result
+              in favor of using Solver.update_typ_in_hole_eq and then running solve_eqs after instead of 'solving' every update
+              after all, if she meant to 'comment out' subs_v and typ for just t, maybe she wnted to add the type as is without processing
+              to be assessed later. kinda like generating a list of things holes have to be equal to*)
+              | (false, result) -> (false, add_result (v, Typ.UnSolved([subs_v; typ])) result)
+            )
           )
         )
     | (_, _) -> 
