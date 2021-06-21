@@ -338,34 +338,3 @@ let top_sort_and_sub (results: Typ.unify_results)
     let results_and_cycles = List.fold_left folding_sub_on_root (results, []) root_list in
     results_and_cycles
 ;;
-
-(*The following three functions do not seem to have use anymore:
-    - old intended use: to remove any elements rendered consistent with others after a substitution
-    - reason for lack thereof: only holes are substituted. If known as an inconsistent set, replacing 
-        holes will never increase consistency*)
-
-(* Appends the item to the list only if the item is not consistent with any items in the list *)
-let cat_if_inconsistent_for_all (target_list: Typ.t list) (item: Typ.t)
-    : Typ.t list =
-    if (List.exists (Typ.consistent item) target_list) then (
-        target_list
-    ) else (
-        item::target_list
-    )
-;;
-
-(* Combines a pair of lists by adding elements from l2 only if they are inconsistent with those currently added/in l1 *)
-let smallest_inconsistent_pair (l1: Typ.t list) (l2: Typ.t list)
-    : Typ.t list =
-    List.fold_left cat_if_inconsistent_for_all l1 l2
-;;
-
-(* A generalized version of smallest_inconsistent_pair that simply concatenates the tail of a list set to be used in pair *)
-let smallest_inconsistent_set (list_set: (Typ.t list) list)
-    : Typ.t list =
-    match list_set with
-    | [] -> []
-    | hd::tl -> 
-        let tl = List.fold_left (@) [] tl in
-        smallest_inconsistent_pair hd tl
-;;
