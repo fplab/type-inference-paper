@@ -3,6 +3,17 @@ open Syntax
 open Util
 let parse = Myparse.parse;;
 
+let cycle: Exp.t = 
+  EIf ((EBoolLiteral true), (EVar "x"), (EIf ((EBoolLiteral true), (EVar "y"), (EIf ((EBoolLiteral true), (EVar "z"), (EVar "x"))))))
+;;
+let cycle': Exp.t = 
+  EIf ((EBoolLiteral true), (EVar "a"), (EIf ((EBoolLiteral true), (EVar "b"), (EIf ((EBoolLiteral true), (EVar "c"), (EVar "a"))))))
+;;
+
+let unsolved_node_o: Exp.t = 
+  EIf ((EVar "o"), (ENumLiteral 2), (EVar "o"))
+;;
+
 (* TBD *)
 let testcases: (Ctx.t * Exp.t) list = [
   (Ctx.empty, parse "let x be (|0|) in x");
@@ -74,6 +85,37 @@ let testcases: (Ctx.t * Exp.t) list = [
   (Ctx.empty, ELet ("x", (Some (TSum(THole 0, THole 1))), parse "(|1|)", parse "case x of L(x) -> (if x then 1 else 1) else R(x) -> x+1"));
   (* (Ctx.empty, ELet ("x", (Some (TSum(THole 0, THole 1))), parse "(|1|)", parse "case x of L(x) -> (if x then 1 else 1) else R(x) -> x+1")); *)
   (Ctx.empty, ELet ("x", (Some (THole 0)), parse "(|1|)", parse "case x of L(x) -> 1 else R(x) -> 1"));
+
+  (*top-sort relevant tests *)
+  (*does not spawn a loop due to the application of partial results showing already found equivalence*)
+  ([("x", THole 0); ("y", THole 1);], EIf ((EBoolLiteral true), (EVar "x"), (EIf ((EBoolLiteral true), (EVar "y"), (EVar "x")))));
+  (*a basic cycle *)
+  ([("x", THole 0); ("y", THole 1); ("z", THole 2)], 
+    EIf ((EBoolLiteral true), (EVar "x"), (EIf ((EBoolLiteral true), (EVar "y"), (EIf ((EBoolLiteral true), (EVar "z"), (EVar "x")))))));
+  (*chained dependency *)
+  ([("x", THole 0); ("y", THole 1); ("z", THole 2)], 
+    EIf ((EBoolLiteral true), (EVar "x"), (EIf ((EBoolLiteral true), (EVar "y"), (EIf ((EBoolLiteral true), (EVar "z"), (EBoolLiteral true)))))));
+  
+  (*dependently cyclic down a line *)
+  ([("x", THole 0); ("y", THole 1); ("z", THole 2); ("a", THole 3); ("b", THole 4)],
+    EIf ((EBoolLiteral true), (EVar "a"), (EIf ((EBoolLiteral true), (EVar "b"), cycle))));
+  (*cycle child of unsolved, child of solved *)
+  ([("x", THole 0); ("y", THole 1); ("z", THole 2); ("a", THole 3); ("b", THole 4); ("c", THole 5); 
+    ("f", TArrow((THole 6), (THole 7))); ("g", TArrow((THole 9), (THole 9))); ("o", THole 10); ("w", THole 9)],
+    (EPair (
+      (EBinOp ((EVar "f"), OpAp, (EIf ((EBoolLiteral true), (EEmptyHole 8), cycle)))),
+      (EPair (
+        (EBinOp ((EVar "f"), OpAp, (EBoolLiteral true))),
+        (EPair (
+          (EBinOp((EVar "g"), OpAp, unsolved_node_o)), 
+          (EPair (
+            (EBinOp((EVar "g"), OpAp, cycle')), 
+            (EBinOp((EVar "f"), OpAp, (EVar "w")))
+          ))
+        ))
+      ))
+    ))
+  );
 ]
 ;;
 

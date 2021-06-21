@@ -79,6 +79,15 @@ let rec print_ctx(ctx: Ctx.t) =
   )
 ;;
 
+let rec print_cycles(cycles: TypeInferenceVar.t list) =
+  match cycles with
+  | [] -> ();
+  | hd::tl -> (
+    Printf.printf "%s\n" (string_of_int(hd) ^ ", ");
+    print_cycles tl;
+  )
+;;
+
 let rec update_type_variable (ctx: Ctx.t) (e: Exp.t): unit =
   match e with
   | EVar x ->(
@@ -145,9 +154,12 @@ let solve (ctx: Ctx.t) (e: Exp.t) =
     let (_, results) =   Impl.unify cons in 
     Printf.printf "%s\n" (string_of_results results); 
     (*calls to new topsort code *)
-    Printf.printf "\ntopologically simplified unify results:\n";
-    let (results, _) = Sort.top_sort_and_sub results in
-    Printf.printf "%s\n" (string_of_results results)
+    Printf.printf "topologically simplified unify results:\n";
+    let (results, cycles) = Sort.top_sort_and_sub results in
+    Printf.printf "\nresults\n";
+    Printf.printf "%s" (string_of_results results);
+    Printf.printf "independent cycles found\n";
+    print_cycles cycles
 (*       let new_typ = Impl.apply subs typ in
       Printf.printf "+ final result of infer typ:\n %s\n" (string_of_typ new_typ); *)
     
