@@ -101,9 +101,9 @@ let testcases: (Ctx.t * Exp.t) list = [
     EIf ((EBoolLiteral true), (EVar "a"), (EIf ((EBoolLiteral true), (EVar "b"), cycle))));
   (*cycle child of unsolved, child of solved *)
   ([("x", THole 0); ("y", THole 1); ("z", THole 2); ("a", THole 3); ("b", THole 4); ("c", THole 5); 
-    ("f", TArrow((THole 6), (THole 7))); ("g", TArrow((THole 9), (THole 9))); ("o", THole 10); ("w", THole 9)],
+    ("f", TArrow((THole 6), (THole 7))); ("g", TArrow((THole 9), (THole 9))); ("o", THole 10); ("w", THole 9); ("i", THole 13)],
     (EPair (
-      (EBinOp ((EVar "f"), OpAp, (EIf ((EBoolLiteral true), (EEmptyHole 8), cycle)))),
+      (EBinOp ((EVar "f"), OpAp, (EIf ((EBoolLiteral true), (EVar "i"), cycle)))),
       (EPair (
         (EBinOp ((EVar "f"), OpAp, (EBoolLiteral true))),
         (EPair (
@@ -116,6 +116,9 @@ let testcases: (Ctx.t * Exp.t) list = [
       ))
     ))
   );
+
+  ([("o", THole 0);], unsolved_node_o);
+  ([("g", TArrow((THole 9), (THole 9))); ("o", THole 0);], (EBinOp((EVar "g"), OpAp, unsolved_node_o)));
 ]
 ;;
 
