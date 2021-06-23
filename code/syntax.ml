@@ -16,8 +16,31 @@ module Typ = struct
         | TProd of t * t
         | TSum of t * t
 
+    (*
+    The solved status is for:
+        if only unify has run:
+            type variables that have no other type variables found constraining them yet
+            and are constrained without inconsistency to a literal/structure of literals.
+        if top-sort has also run:
+            that have been assessed such that beyond a shadow of a doubt, they have the value of some hole/literal/literal structure through
+            topological sorting without any inconsistencies. Such a solution is different from an unreported
+            unify_result in that it must occur when a variable is constrained by some OTHER variable (also being potentially cyclic)
+
+    The ambiguous status is for: 
+        type variables constrained to other type variables with at most one found base type
+        and multiple types involving holes (where NONE of these are inconsistent with the found base type, 
+        if present, and all are pairwise consistent)
+        These need to be topologically resolved so cycles can be detected and collapsed properly
+        After topological sorting, all ambiguous statuses should be resolved to Solved or UnSolved
+        Ambiguity is not the same as unconstrained solution to a single type variable
+        
+    The unsolved status is for:
+        type variables that are guaranteed to be unsolved, whether or not the listed dependencies are fully simplified.
+        Being fully simplified is guaranteed only if top-sort has been run.
+    *)
     type unify_result =
         | Solved of t
+        (*| Ambiguous of (t option) * (t list)*)
         | UnSolved of (t list)
 
     type unify_results  = (TypeInferenceVar.t * unify_result) list

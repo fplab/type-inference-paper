@@ -350,14 +350,14 @@ let apply (subs: Typ.unify_results) (t: Typ.t) : Typ.t =
 let rec add_result (new_result: TypeInferenceVar.t*Typ.unify_result) (old_results: Typ.unify_results): Typ.unify_results =
   match old_results with
   | [] -> new_result::[]
-  | (hd_var, hd_typ)::tl -> (
-    let (new_var, new_typ) = new_result in
+  | (hd_var, hd_res)::tl -> (
+    let (new_var, new_res) = new_result in
     if hd_var == new_var then (
-      match (hd_typ, new_typ) with
+      match (hd_res, new_res) with
       (*even if both are solved, the two local results can thoretically conflict! need to check consistency; 
       note that the value given already should have the most recent partial results applied (at least for the new one)
       does the old value need to have partial results re substituted in?*)
-      | (Solved _, Solved _)
+      | (Solved old_typ, Solved new_typ) ->
       | (Solved _, UnSolved _) -> (hd_var, new_typ)::tl
       | (UnSolved ls_old, UnSolved ls_new) -> (hd_var, UnSolved (Typ.merge_typ_lst ls_old ls_new))::tl
       | (UnSolved ls_old, Solved typ) -> (hd_var, UnSolved (Typ.add_to_typ_lst typ ls_old))::tl
@@ -372,6 +372,15 @@ let rec merge_results (new_results: Typ.unify_results) (old_results: Typ.unify_r
   | hd::tl -> merge_results tl (add_result hd old_results)
 ;;
 
+let rec contains_hole (typ: Typ.t): bool =
+  match typ with
+  | TNum
+  | TBool -> false
+  | THole _ -> true
+  | TArrow(ty1, ty2)
+  | TProd(ty1, ty2)
+  | TSum(ty1, ty2) -> (contains_hole ty1) || (contains_hole ty2)
+;;
 
 let rec unify (constraints: Constraints.t)
   :  bool*Typ.unify_results =
@@ -386,54 +395,30 @@ let rec unify (constraints: Constraints.t)
 and unify_one (t1: Typ.t) (t2: Typ.t) (partial_results: Typ.unify_results)
   : bool * Typ.unify_results  =
     match ((t1, t2)) with
-    | (TNum, TNum) ->  (true, [])
+    | (TNum, TNum)
+    | (TBool, TBool) -> (true, [])
     | (TArrow (ty1, ty2), TArrow (ty3, ty4)) 
     | (TProd (ty1, ty2), TProd (ty3,ty4)) 
     | (TSum (ty1, ty2), TSum (ty3,ty4))-> (
       unify [(ty1,ty3);(ty2,ty4)]
     )
     | (THole v, t) | (t, THole v) ->
-      (*for sake of clarity, a recomparison to the TAPL unify formulation
-      rest is identical save for the hole case. In tapl, if two type variables are posited equal
-      then you assert that the variable is equivalent to the other value (variable or literal)
-      and update your constraint set by substituting this assertion (replacing all instances of the variable with the other value) 
-      and composing the resultant substitution with the equivalnce you used in updating. In other words, endeavor to solve
-      the mgu for the current constraint set where all constraints relating to the hole variable v are substituted with the type t
-      and compose the resultant mgu with (v, t) consistency equivalence.*)
-      
-      (*Zoe's version:
-      applies current results to both the variable and compared type. 
-      if the variable remains a hole, it is consistent; return the new result
-      if the variable is anything else, then attempt to unify the substituted type with the constraint typ t
-        if this succeeds, with whatever list of generated consistencies, add the result that the hole v is consistent with typ
-        if this fails, add the result that this hole failed to be consistent with the attempted consistency in the unsolved list
-          zoe's commenting out instead was placing the substituted type that resulted in the inconsistency. 
-            Why? see discussion of possibilities below*)
-
-      (* According to Siek: general version
-      Literally just returns that the type variable has the other one substituted for it
-      I imagine TAPL's extra stuff is for efficiency 
-      It looks like Zoe might've followed the general formulation while simply adapting the logic from where it posits equality
-      by substitution to incorporate more consistency logic so it doesn't pass invalid constraints on by substitution*)
+      (*i think this needs support for the hole hole case and for recursive types? *)
       let subs_v = apply partial_results (THole v) in
       let typ = apply partial_results t in
-        (*solution for identical typ vars (no solution for now); may need to be shifted to unconstrained unify result status *)
+        (*solution for identical typ vars*)
         if (subs_v = typ) then (true, [])
         else (
           (* detect recursive case *)
           if (is_in_dom v typ) then (false, [(v, UnSolved [typ; THole v])])
           else (
             match subs_v with
-            | THole _ -> (true, [(v, Solved typ)])
+            | THole _ -> (true, add_result (v, Solved typ) partial_results)
             | _ -> (
+              (*match the result of attempting to unify  *)
               match (unify_one subs_v typ partial_results) with
-              | (true, result) ->  (true, add_result (v, Typ.Solved typ) result)
-              (*old ver: \\subs_v; t \\typ   maybe Zoe wanted to change the way unsolved accumulated things? 
-              it would seem so based on the new-algs in this branch. i think she may have been phasing out add result
-              in favor of using Solver.update_typ_in_hole_eq and then running solve_eqs after instead of 'solving' every update
-              after all, if she meant to 'comment out' subs_v and typ for just t, maybe she wnted to add the type as is without processing
-              to be assessed later. kinda like generating a list of things holes have to be equal to*)
-              | (false, result) -> (false, add_result (v, Typ.UnSolved([subs_v; typ])) result)
+              | (true, results) ->  (true, add_result (v, Typ.Solved typ) results)
+              | (false, results) -> (false, add_result (v, Typ.UnSolved([subs_v; typ])) results)
             )
           )
         )

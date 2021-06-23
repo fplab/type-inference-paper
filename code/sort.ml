@@ -309,6 +309,10 @@ and sub_two_of_constructor (ctr: Typ.t -> Typ.t -> Typ.t) (ty1: Typ.t) (ty2: Typ
 
 (*Performs a topological sort on the unify results by interpreting it as an adjacency list*)
 (*Performs substitution in order based on type dependencies *)
+(*New requirements for changes:
+    op 1: choose roots in same way; if any vars not subbed on, sub on a random one until all are
+    op 2: technically, recursion is well defined for any tree. just start on the first and sub till
+        you've hit everything. the remnants are left in unify_results for any other overarching tree to pick up on *)
 let top_sort_and_sub (results: Typ.unify_results)
     : Typ.unify_results * (TypeInferenceVar.t list) = 
     (*Find roots; a root corresponds to a variable that no variables are dependent on (no incoming edges)*)
