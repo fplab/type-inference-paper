@@ -16,12 +16,32 @@ module Typ = struct
         | TArrow of t * t
         | TProd of t * t
         | TSum of t * t
+    
+    type dir =
+        | L
+        | R
+
+    type dir_status = 
+        | Arrow of dir
+        | Sum of dir
+        | Prod of dir
+
+    type utyp =
+        | Standard of t
+        | SidedHole of utyp * dir_status
 
     type unify_result = 
-        | Solved of t
-        | UnSolved of (t list)
+        | Solved of utyp
+        | Ambiguous of (t option) * (utyp list)
+        | UnSolved of (utyp list)
 
     type unify_results  = (TypeInferenceVar.t * unify_result) list
+
+    (*New helpers to construct recursive types *)
+    let mk_arrow (ty1: t) (ty2: t): t = TArrow (ty1, ty2);;
+    let mk_prod (ty1: t) (ty2: t): t = TProd (ty1, ty2);;
+    let mk_sum (ty1: t) (ty2: t): t = TSum (ty1, ty2);;
+
 
     let rec in_dom lst typ = 
         match lst with
