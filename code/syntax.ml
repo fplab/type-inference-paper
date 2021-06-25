@@ -27,7 +27,7 @@ module Typ = struct
     but whose solution will help to resolve variables contained
     by describing their dependencies with variables of simpler structure
     ex: TArrow(THole4, THole5) = Solved (THole 0)*)
-    type rec_unify_results = (Typ.t * unify_result) list
+    type rec_unify_results = (t * unify_result) list
 
     type unify_results  = (TypeInferenceVar.t * unify_result) list
 
