@@ -1,5 +1,5 @@
 (*  *)
-exception Impossible of string
+exception Impossible
 exception InvalidUse of string
 open Syntax
 
@@ -51,12 +51,10 @@ let rec consistent (t1: Typ.t) (t2: Typ.t) : bool =
   | _ -> false
 ;;
 
-let wrap_std (t: Typ.t): Typ.utyp = Typ.Standard t;;
-
 (* Appends the item to the list only if the item is inconsistent with any item in the list *)
-let cat_if_unequal_for_all (target_list: Typ.utyp list) (item: Typ.utyp)
+let cat_if_unequal_for_all (target_list: Typ.t list) (item: Typ.t)
     : Typ.t list =
-    let is_eq (elt: Typ.utyp): bool = (elt = item) in
+    let is_eq (elt: Typ.t): bool = (elt = item) in
     if (List.exists is_eq target_list) then (
         target_list
     ) else (
@@ -65,13 +63,13 @@ let cat_if_unequal_for_all (target_list: Typ.utyp list) (item: Typ.utyp)
 ;;
 
 (* Combines a pair of lists by adding elements from l2 only if they are inconsistent with those currently added/in l1 *)
-let smallest_unequal_pair (l1: Typ.utyp list) (l2: Typ.utyp list)
+let smallest_unequal_pair (l1: Typ.t list) (l2: Typ.t list)
     : Typ.t list =
     List.fold_left cat_if_unequal_for_all l1 l2
 ;;
 
 (* A generalized version of smallest_inconsistent_pair that simply concatenates the tail of a list set to be used in pair *)
-let smallest_unequal_set (list_set: (Typ.utyp list) list)
+let smallest_unequal_set (list_set: (Typ.t list) list)
     : Typ.t list =
     match list_set with
     | [] -> []
@@ -328,7 +326,6 @@ and ana (ctx: Ctx.t) (e: Exp.t) (ty: Typ.t): Constraints.t option =
       )
 ;;
 
-
 let rec is_in_dom (v: TypeInferenceVar.t) (t: Typ.t) : bool =
   match t with
     | THole v' -> v' == v 
@@ -339,6 +336,7 @@ let rec is_in_dom (v: TypeInferenceVar.t) (t: Typ.t) : bool =
     | TSum (t1, t2) -> (is_in_dom v t1) || (is_in_dom v t2) 
 ;;
 
+(*
 let rec substitute (u: Typ.unify_result) (x: TypeInferenceVar.t) (t: Typ.t) : Typ.t =
   match u with
   | Solved u_typ ->(
@@ -357,7 +355,7 @@ let rec substitute (u: Typ.unify_result) (x: TypeInferenceVar.t) (t: Typ.t) : Ty
 let apply (subs: Typ.unify_results) (t: Typ.t) : Typ.t =
   List.fold_right (fun (x, u) t -> substitute u x t) subs t
 ;;
-
+*)
 
 (*
 Zoe's old ver------------
@@ -374,40 +372,41 @@ if hd_var == new_var then (
     else (hd_var, hd_res)::(add_result new_result tl)*)
 (*intended use: during unify to add results and manage inconsistencies; thus, no value should be solved of a hole
 or some derived sided hole. raises InvalidUse is such an occurrence is found*)
-let rec add_result (new_result: TypeInferenceVar.t*Typ.unify_result) (old_results: Typ.unify_results): Typ.unify_results =
+let rec add_unify_result (new_result: TypeInferenceVar.t*Typ.unify_result) (old_results: Typ.unify_results)
+  : Typ.unify_results =
   match old_results with
   | [] -> new_result::[]
   | (hd_var, hd_res)::tl -> (
     let (new_var, new_res) = new_result in
     if hd_var == new_var then (
       match (hd_res, new_res) with
-      | ((Solved (Standard old_typ)), (Solved (Standard new_typ))) -> (
+      | ((Solved old_typ), (Solved new_typ)) -> (
         match (old_typ, new_typ) with
         | (THole _, _)
-        | (_, THole _) -> raise (InvalidUse "a variable was solved as a standard hole in add_result")
+        | (_, THole _) -> raise (InvalidUse "a variable was solved as a hole in add_result")
         | _ -> (
           if (consistent old_typ new_typ) then (
             (hd_var, hd_res)::tl
           ) else (
-            (hd_var, Typ.UnSolved [((wrap_std old_typ); (wrap_std new_typ))])::tl
+            (hd_var, Typ.UnSolved [old_typ; new_typ])::tl
           )
         )
       )
-      | ((Ambiguous (ty_op, holes)), (Solved (Standard basic_ty)))
-      | ((Solved (Standard basic_ty)), (Ambiguous (ty_op, holes))) -> (
+      | ((Ambiguous (ty_op, holes)), (Solved basic_ty))
+      | ((Solved basic_ty), (Ambiguous (ty_op, holes))) -> (
         match (basic_ty) with
-        | (THole _) -> raise (InvalidUse "a variable was solved as a standard hole in add_result")
+        | (THole _) -> raise (InvalidUse "a variable was solved as a hole in add_result")
         | _ -> (
           match (ty_op) with
           | (Some ty) -> (
             match ty with
-            | THole _ -> raise (InvalidUse "a variable was ambiguously solved as a standard hole in add_result")
+            | THole _ -> raise (InvalidUse "a variable was ambiguously solved as a hole in add_result")
             | _ -> (
               if (consistent ty basic_ty) then (
                 (hd_var, Typ.Ambiguous ((Some ty), holes))::tl
               )
               else (
-                (hd_var, Typ.UnSolved ([wrap_std ty] @ [wrap_std basic_ty] @ holes))::tl
+                (hd_var, Typ.UnSolved ([ty; basic_ty] @ holes))::tl
               )
             )
           )
@@ -415,7 +414,7 @@ let rec add_result (new_result: TypeInferenceVar.t*Typ.unify_result) (old_result
             if (List.for_all (consistent basic_ty) holes) then (
               (hd_var, Typ.Ambiguous ((Some basic_ty), holes))::tl
             ) else (
-              (hd_var, Typ.UnSolved ((wrap_std basic_ty)::holes))::tl
+              (hd_var, Typ.UnSolved [basic_ty; holes])::tl
             )
           )
         )
@@ -425,39 +424,39 @@ let rec add_result (new_result: TypeInferenceVar.t*Typ.unify_result) (old_result
         | ((Some ty1), (Some ty2)) -> (
           match (ty1, ty2) with
           | ((THole _), _)
-          | (_, (THole _)) -> raise (InvalidUse "a variable was ambiguously solved as a standard hole in add_result")
+          | (_, (THole _)) -> raise (InvalidUse "a variable was ambiguously solved as a hole in add_result")
           | _ -> (
             if (consistent ty1 ty2) then (
               (hd_var, Typ.Ambiguous ((Some ty1), (smallest_unequal_pair holes1 holes2)))::tl
             ) else (
-              (hd_var, Typ.UnSolved (smallest_unequal_set [holes1; holes2; (wrap_std ty1)::(wrap_std ty2)::[]]))::tl
+              (hd_var, Typ.UnSolved (smallest_unequal_set [holes1; holes2; ty1::ty2::[]]))::tl
             )
           )
         )
         | (None, (Some ty)) -> (
           match ty with
-          | THole _ -> raise (InvalidUse "a variable was ambiguously solved as a standard hole in add_result")
+          | THole _ -> raise (InvalidUse "a variable was ambiguously solved as a hole in add_result")
           | _ -> (
             if (List.for_all (consistent ty) holes1) then (
               (hd_var, Typ.Ambiguous ((Some ty), (smallest_unequal_pair holes1 holes2)))::tl
             ) else (
-              (hd_var, Typ.UnSolved ((wrap_std ty)::(smallest_unequal_pair holes1 holes2)))::tl
+              (hd_var, Typ.UnSolved (ty::(smallest_unequal_pair holes1 holes2)))::tl
             )
           )
         )
         | ((Some ty), None) -> (
           match ty with
-          | THole _ -> raise (InvalidUse "a variable was ambiguously solved as a standard hole in add_result")
+          | THole _ -> raise (InvalidUse "a variable was ambiguously solved as a hole in add_result")
           | _ -> (
             if (List.for_all (consistent ty) holes2) then (
               (hd_var, Typ.Ambiguous ((Some ty), (smallest_unequal_pair holes1 holes2)))::tl
             ) else (
-              (hd_var, Typ.UnSolved ((wrap_std ty)::(smallest_unequal_pair holes1 holes2)))::tl
+              (hd_var, Typ.UnSolved (ty::(smallest_unequal_pair holes1 holes2)))::tl
             )
           )
         )
         | (None, None) -> (
-          (hd_var, Typ.Ambiguous ((None), (smallest_unequal_pair holes1 holes2)))::tl
+          (hd_var, Typ.Ambiguous (None, (smallest_unequal_pair holes1 holes2)))::tl
         )
       )
       | ((UnSolved ls), (Ambiguous (ty_op, holes)))
@@ -465,32 +464,47 @@ let rec add_result (new_result: TypeInferenceVar.t*Typ.unify_result) (old_result
         match ty_op with
         | (Some ty) -> (
           match ty with
-          | THole _ -> raise (InvalidUse "a variable was ambiguously solved as a standard hole in add_result")
-          | _ -> (hd_var, Typ.UnSolved (smallest_unequal_pair ((wrap_std ty)::holes) ls))::tl
+          | THole _ -> raise (InvalidUse "a variable was ambiguously solved as a hole in add_result")
+          | _ -> (hd_var, Typ.UnSolved (smallest_unequal_pair (ty::holes) ls))::tl
         )
         | None -> (hd_var, Typ.UnSolved (smallest_unequal_pair holes ls))::tl
       )
-      | ((UnSolved ls), (Solved (Standard basic_ty)))
-      | ((Solved (Standard basic_ty)), (UnSolved ls)) -> (
+      | ((UnSolved ls), (Solved basic_ty))
+      | ((Solved basic_ty), (UnSolved ls)) -> (
         match basic_ty with
-        | THole _ -> raise (InvalidUse "a variable was solved as a standard hole in add_result")
-        | _ -> (hd_var, Typ.UnSolved ((wrap_std basic_ty)::ls))::tl
+        | THole _ -> raise (InvalidUse "a variable was solved as a hole in add_result")
+        | _ -> (hd_var, Typ.UnSolved (basic_ty::ls))::tl
       )
       | ((UnSolved ls1), (UnSolved ls2)) -> (
         (hd_var, Typ.UnSolved (smallest_unequal_pair ls1 ls2))::tl
       )
-      | _ -> raise (InvalidUse "a variable was solved as a non standard value in add_result")
     )
-    else (hd_var, hd_res)::(add_result new_result tl)
+    else (hd_var, hd_res)::(add_unify_result new_result tl)
   )
 ;;
 
-let rec merge_results (new_results: Typ.unify_results) (old_results: Typ.unify_results): Typ.unify_results =
+let rec add_rec_unify_result (new_result: Typ.t*Typ.rec_unify_result) (old_results: Typ.rec_unify_results)
+  : Typ.rec_unify_results =
+  if hd_var == new_var then (
+      match (hd_res, new_res) with
+      | (Solved _, Solved _)
+      | (Solved _, UnSolved _) -> (hd_var, new_res)::tl
+      (*if two unsolved results are generated, the variable is associated with the conflicts of both; merge the type lists of both for its type *)
+      | (UnSolved ls_old, UnSolved ls_new) -> (hd_var, UnSolved (Typ.merge_typ_lst ls_old ls_new))::tl
+      (*if it was unsolved previously and found to be solved in another instance, it must still be unsolved. add the type solved to the list
+      of conflicting types in the variable's list of unsolved*)
+      | (UnSolved ls_old, Solved typ) -> (hd_var, UnSolved (Typ.add_to_typ_lst typ ls_old))::tl
+    )
+    else (hd_var, hd_res)::(add_result new_result tl)
+;;
+
+let rec merge_unify_results (new_results: Typ.unify_results) (old_results: Typ.unify_results): Typ.unify_results =
   match new_results with
   | [] -> old_results
   | hd::tl -> merge_results tl (add_result hd old_results)
 ;;
 
+(*
 (*Requires var be a THole type *)
 let rec expand_until_matchable (hvar: Typ.t) (to_match: Typ.t)
   : Constraints.t = 
@@ -500,32 +514,32 @@ let rec expand_until_matchable (hvar: Typ.t) (to_match: Typ.t)
   | THole id -> [(hvar, Typ.THole id);]
   | TArrow (ty1, ty2) -> (
     let (ty_in, ty_out, ctrs) = 
-      match get_matched_arrow (hvar) with
+      match get_match_arrow_typ (hvar) with
       | Some (TArrow (ma1, ma2), ctrs_out) -> (ma1, ma2, ctrs_out)
-      | None -> raise Impossible
+      | _ -> raise Impossible
     in
     List.rev_append (ctrs @ (expand_until_matchable ty_in ty1)) (expand_until_matchable ty_out ty2)
   )
   | TProd (ty1, ty2) -> (
     let (ty_in, ty_out, ctrs) = 
-      match get_matched_prod (hvar) with
+      match get_match_prod_typ (hvar) with
       | Some (TProd (ma1, ma2), ctrs_out) -> (ma1, ma2, ctrs_out)
-      | None -> raise Impossible
+      | _ -> raise Impossible
     in
     List.rev_append (ctrs @ (expand_until_matchable ty_in ty1)) (expand_until_matchable ty_out ty2)
   )
   | TSum (ty1, ty2) -> (
     let (ty_in, ty_out, ctrs) = 
-      match get_matched_arrow (hvar) with
+      match get_match_sum_typ (hvar) with
       | Some (TSum (ma1, ma2), ctrs_out) -> (ma1, ma2, ctrs_out)
-      | None -> raise Impossible
+      | _ -> raise Impossible
     in
     List.rev_append (ctrs @ (expand_until_matchable ty_in ty1)) (expand_until_matchable ty_out ty2)
   )
 ;;
+*)
 
-(*returns the set of solutions needed to link the recursive t_rec normal type to 
-the utyp t_hole in unify results*)
+(*
 let rec solve_rec_as_hole (t_rec: Typ.t) (t_hole: Typ.utyp): (Typ.unify_results) =
   match t_rec with
   | TNum
@@ -534,53 +548,55 @@ let rec solve_rec_as_hole (t_rec: Typ.t) (t_hole: Typ.utyp): (Typ.unify_results)
   | TArrow (ty1, ty2) -> (
     List.rev_append 
       (solve_rec_as_hole
-        (Typ.Standard ty1) 
-        (Typ.SidedHole (t_hole (Arrow (L))))
+        (ty1) 
+        (Typ.SidedHole (t_hole, (Arrow (L))))
       )
       (solve_rec_as_hole 
-        (Typ.Standard ty2) 
-        (Typ.SidedHole (t_hole (Arrow (R))))
+        (ty2) 
+        (Typ.SidedHole (t_hole, (Arrow (R))))
       )
   )
   | TProd (ty1, ty2) -> (
     List.rev_append 
       (solve_rec_as_hole
-        (Typ.Standard ty1) 
-        (Typ.SidedHole (t_hole (Prod (L))))
+        (ty1) 
+        (Typ.SidedHole (t_hole, (Prod (L))))
       )
       (solve_rec_as_hole 
-        (Typ.Standard ty2) 
-        (Typ.SidedHole (t_hole (Prod (R))))
+        (ty2) 
+        (Typ.SidedHole (t_hole, (Prod (R))))
       )
   )
   | TSum (ty1, ty2) -> (
     List.rev_append 
       (solve_rec_as_hole
-        (Typ.Standard ty1) 
-        (Typ.SidedHole (t_hole (Sum (L))))
+        (ty1) 
+        (Typ.SidedHole (t_hole, (Sum (L))))
       )
       (solve_rec_as_hole 
-        (Typ.Standard ty2) 
-        (Typ.SidedHole (t_hole (Sum (R))))
+        (ty2) 
+        (Typ.SidedHole (t_hole, (Sum (R))))
       )
   )
-;;
+;;*)
 
 let rec unify (constraints: Constraints.t)
-  :  bool*Typ.unify_results =
+  :  bool*Typ.unify_results*Typ.rec_unify_results =
   match constraints with
-  | [] -> (true, [])
+  | [] -> (true, [], [])
   | (x, y) :: xs ->
     (* generate substitutions of the rest of the list *)
-    let (suc2, r2) = unify xs in
+    let (suc2, u_res2, r_rec2) = unify xs in
     (* resolve the LHS and RHS of the constraints from the previous substitutions *)
-    let (suc1, r1) = unify_one x y in 
-    (suc2 && suc1, merge_results r1 r2)
+    let (suc1, u_res1, r_res1) = unify_one x y in 
+    (suc2 && suc1, 
+    merge_unify_results u_res1 u_res2, 
+    merge_rec_unify_results r_res1 r_res2)
 and unify_one (t1: Typ.t) (t2: Typ.t)
-  : bool * Typ.unify_results  =
+  : bool * Typ.unify_results * Typ.rec_unify_results  =
     match ((t1, t2)) with
     | (TNum, TNum) 
-    | (TBool, TBool) ->  (true, [])
+    | (TBool, TBool) ->  (true, [], [])
     | (TArrow (ty1, ty2), TArrow (ty3, ty4)) 
     | (TProd (ty1, ty2), TProd (ty3,ty4)) 
     | (TSum (ty1, ty2), TSum (ty3,ty4))-> (
@@ -589,43 +605,33 @@ and unify_one (t1: Typ.t) (t2: Typ.t)
     | (THole v, t) | (t, THole v) ->
       (*occurs check *)
       if (is_in_dom v t) then (
-        (false, 
-        [(v, 
-          UnSolved 
-            [
-              (wrap_std t); 
-              (wrap_std (THole v))
-            ]
-        )]
-        )
+        (false, [(v, UnSolved [t; (THole v)])], [])
       ) else (
         match t with
         | THole t_id -> (
           (*to ensure dependencies are captures, add both as solved of each other *)
           (true,
           [
-            (t_id, 
-            Typ.Ambiguous 
-              (None, (wrap_std (THole v))::[]));
-            (v, 
-            Typ.Ambiguous 
-              (None, (wrap_std t)::[]))
-          ]
+            (v, Typ.Ambiguous (None, t::[])); 
+            (t_id, Typ.Ambiguous (None, (THole v)::[]))
+          ],
+          []
           )
         )
         | _ -> (
           (*if a recursive structure containing holes *)
           if (contains_hole t) then (
-            let rec_results = solve_rec_as_hole t (wrap_std (THole v)) in
-            (true, (v, Typ.Solved (wrap_std t))::rec_results)
+            (true,
+            [(v, Typ.Ambiguous (None, t::[]))],
+            [(t, Typ.Ambiguous (None, (THole v)::[]))])
           ) else (
             (*otherwise, the hole is simply solved of the base type *)
-            (true, [(v, Typ.Solved (wrap_std t))])
+            (true, [(v, Typ.Solved t)], [])
           )
         )
       )
     | (_, _) -> 
-      (false, [])
+      (false, [], [])
     (*
     | (THole v, t) | (t, THole v) -> 
       (*the reason we can't just sub in the value

@@ -16,24 +16,18 @@ module Typ = struct
         | TArrow of t * t
         | TProd of t * t
         | TSum of t * t
-    
-    type dir =
-        | L
-        | R
-
-    type dir_status = 
-        | Arrow of dir
-        | Sum of dir
-        | Prod of dir
-
-    type utyp =
-        | Standard of t
-        | SidedHole of utyp * dir_status
 
     type unify_result = 
-        | Solved of utyp
-        | Ambiguous of (t option) * (utyp list)
-        | UnSolved of (utyp list)
+        | Solved of t
+        | Ambiguous of (t option) * (t list)
+        | UnSolved of (t list)
+
+    (*solutions for recursive types involving holes;
+    really just a type of unify result that isn't for variables,
+    but whose solution will help to resolve variables contained
+    by describing their dependencies with variables of simpler structure
+    ex: TArrow(THole4, THole5) = Solved (THole 0)*)
+    type rec_unify_results = (Typ.t * unify_result) list
 
     type unify_results  = (TypeInferenceVar.t * unify_result) list
 
