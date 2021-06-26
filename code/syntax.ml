@@ -36,7 +36,6 @@ module Typ = struct
     let mk_prod (ty1: t) (ty2: t): t = TProd (ty1, ty2);;
     let mk_sum (ty1: t) (ty2: t): t = TSum (ty1, ty2);;
 
-
     let rec in_dom lst typ = 
         match lst with
         | [] -> false
