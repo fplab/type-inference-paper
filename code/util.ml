@@ -13,10 +13,10 @@ let rec string_of_typ_ls(typ_ls:Typ.t list) =
   match typ_ls with
   | [] -> " "
   | hd::tl -> 
-   (string_of_typ hd)^ ", " ^ (string_of_typ_ls tl);
+    (string_of_typ hd)^ ", " ^ (string_of_typ_ls tl);
 ;;
 
-let rec string_of_results(results: Typ.unify_results) =
+let rec string_of_u_results(results: Typ.unify_results) =
   match results with
   | [] -> "\n"
   | hd::tl -> (
@@ -24,9 +24,37 @@ let rec string_of_results(results: Typ.unify_results) =
     (
       match typ with 
       | Solved typ' -> ("solved: (" ^ string_of_int(var) ^ ") ("^ string_of_typ(typ') ^ ")\n");
+      | Ambiguous (typ_op, typ_ls) -> (
+        match typ_op with
+        | Some typ -> 
+          ("ambiguous: (" ^ string_of_int(var) ^ ") (" ^ string_of_typ(typ) ^ "; "
+            ^ string_of_typ_ls(typ_ls) ^ ")\n");
+        | None -> ("ambiguous: (" ^ string_of_int(var) ^ ") (None; "^ string_of_typ_ls(typ_ls) ^ ")\n");
+      )
       | UnSolved typ_ls -> 
         ("unsolved: (" ^ string_of_int(var) ^ ") ("^ string_of_typ_ls(typ_ls) ^ ")\n");
-    ) ^ string_of_results(tl);
+    ) ^ string_of_u_results(tl);
+  )
+;;
+
+let rec string_of_r_results(results: Typ.rec_unify_results) =
+  match results with
+  | [] -> "\n"
+  | hd::tl -> (
+    let (typ,res) = hd in
+    (
+      match res with 
+      | Solved res' -> ("solved: (" ^ string_of_typ(typ) ^ ") ("^ string_of_typ(res') ^ ")\n");
+      | Ambiguous (res_op, res_ls) -> (
+        match res_op with
+        | Some res' -> 
+          ("ambiguous: (" ^ string_of_typ(typ) ^ ") (" ^ 
+            string_of_typ(res') ^ "; " ^ string_of_typ_ls(res_ls) ^ ")\n");
+        | None -> ("ambiguous: (" ^ string_of_typ(typ) ^ ") (None; "^ string_of_typ_ls(res_ls) ^ ")\n");
+      )
+      | UnSolved res_ls -> 
+        ("unsolved: (" ^ string_of_typ(typ) ^ ") ("^ string_of_typ_ls(res_ls) ^ ")\n");
+    ) ^ string_of_r_results(tl);
   )
 ;;
 
@@ -151,8 +179,9 @@ let solve (ctx: Ctx.t) (e: Exp.t) =
     Printf.printf "\n+ unify results: (<hole_id>) (<type>)\n";
     (* let var_ls = TypeInferenceVar.group_create !Typ.type_variable in
     Printf.printf "\n@@@variable@@@: %s\n" (string_of_int !Typ.type_variable); *)
-    let (_, results) =   Impl.unify cons in 
-    Printf.printf "%s\n" (string_of_results results); 
+    let (_, u_results, r_results) = Impl.unify cons in 
+    Printf.printf "%s\n" (string_of_u_results u_results); 
+    Printf.printf "%s\n" (string_of_r_results r_results); 
     (*calls to new topsort code *)
     Printf.printf "topologically simplified unify results:\n";
     let (results, cycles) = Sort.top_sort_and_sub results in

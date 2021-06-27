@@ -38,10 +38,17 @@ module Typ = struct
         type variables that are guaranteed to be unsolved, whether or not the listed dependencies are fully simplified.
         Being fully simplified is guaranteed only if top-sort has been run.
     *)
-    type unify_result =
+    type unify_result = 
         | Solved of t
-        (*| Ambiguous of (t option) * (t list)*)
+        | Ambiguous of (t option) * (t list)
         | UnSolved of (t list)
+
+    (*solutions for recursive types involving holes;
+    really just a type of unify result that isn't for variables,
+    but whose solution will help to resolve variables contained
+    by describing their dependencies with variables of simpler structure
+    ex: TArrow(THole4, THole5) = Solved (THole 0)*)
+    type rec_unify_results = (t * unify_result) list
 
     type unify_results  = (TypeInferenceVar.t * unify_result) list
 
