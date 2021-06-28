@@ -102,7 +102,7 @@ let rec find_and_replace (target: TypeInferenceVar.t) (replacement: Typ.t) (ty: 
     | _ -> ty
 ;;
 
-(*Iterates through unify_results to replace all instances of target with ty. 
+(*Iterates through unify_results to replace all instances of target with child. 
     Isolates target from the tree in that no references to it exist in any referenced types*)
 let sub_inf_var_for_child (target: TypeInferenceVar.t) (child: Typ.unify_result) (results: Typ.unify_results)
     : Typ.unify_results = 
@@ -140,7 +140,7 @@ let sub_inf_var_for_child (target: TypeInferenceVar.t) (child: Typ.unify_result)
             match result with
             | Solved var_ty -> (
                 match child with
-                | Solved child_ty -> (var, Solved (find_and_replace target child_ty var_ty)) 
+                | Solved child_ty -> (var, Solved (find_and_replace target child_ty var_ty))
                 | UnSolved child_tys -> (
                     let (changed, sub_list) = accumulate_unsolved_by_list child_tys (false, []) var_ty in
                     if (changed) then (var, UnSolved (sub_list)) else var_with_res
@@ -180,14 +180,39 @@ ex:     THole 0 = Solved THole 1
         THole 0 = UnSolved TNum TBool
         THole 1 = UnSolved TNum TBool
 *)
-let rec sub_on_root_by_dependence (root: Typ.t) (results: Typ.unify_results) (tracked: CycleTrack.t)
-    : sub_status =
+(*If anything is ambiguous, there is guaranteed to be a cycle. Begin DFS protocol.
+    NON REC:
+    1) Collect all apparent types and hole structures in the cycle
+    2) As you DFS by checking paths not tracked, be sure to also assess if curr_val is
+        in domain of tracked vars -> if so, immediate unsolved
+    3) Assess them all to generate the status
+    4 When generating final solved value, recurse again and update all below with found value
+        DO NOT remove and references to holes or rec types. these will be resolved later in case
+        the currently assessed cycle is part of a recursive type that could attempt to impose
+        further restrictions on it later
+    REC:
+    1) Evaluate children
+    2) Generate resultant type
+    3) Recurse on any paths in the rec_unify_results (if present, guaranteed cyclic)
+    4) Use returned type to assess additional incurred types for children and generate a modified status
+    5) Use other subroutine to update children and their dependencies with the new status
+    6) Return final type
+    *)
+(*New methods needed:
+    1) Simplify --> to change ambiguous statuses to solved and bring all equal hole references to one id
+    2) Accumulate cycle types --> to DFS out types in a first pass in ambig/unsolved cases
+    3) Adjust status and dependencies --> for updating children of a recursive type *)
+(*Values no longer needed:
+    Dependently Cyclic
+    lots of solved logic *)
+let rec sub_on_root_by_dependence (root: Typ.t) (u_results: Typ.unify_results) (r_results: Typ.rec_unify_results) 
+    (tracked: CycleTrack.t): sub_status =
     match root with
     | TBool -> SubSuccess (results, Solved TBool)
     | TNum -> SubSuccess (results, Solved TNum)
-    | TArrow (ty1, ty2) -> sub_two_of_constructor Typ.mk_arrow ty1 ty2 results tracked
-    | TProd (ty1, ty2) -> sub_two_of_constructor Typ.mk_prod ty1 ty2 results tracked
-    | TSum (ty1, ty2) -> sub_two_of_constructor Typ.mk_sum ty1 ty2 results tracked
+    | TArrow (ty1, ty2) -> sub_two_of_constructor Typ.mk_arrow ty1 ty2 u_results r_results tracked
+    | TProd (ty1, ty2) -> sub_two_of_constructor Typ.mk_prod ty1 ty2 u_results r_results tracked
+    | TSum (ty1, ty2) -> sub_two_of_constructor Typ.mk_sum ty1 ty2 u_results r_results tracked
     | THole var -> (
         match (CycleTrack.is_tracked var tracked) with
         | true -> (
@@ -268,7 +293,8 @@ let rec sub_on_root_by_dependence (root: Typ.t) (results: Typ.unify_results) (tr
         )
     )
 (* a common instance for recursive types *)
-and sub_two_of_constructor (ctr: Typ.t -> Typ.t -> Typ.t) (ty1: Typ.t) (ty2: Typ.t) (results: Typ.unify_results) (tracked: CycleTrack.t)
+and sub_two_of_constructor (ctr: Typ.t -> Typ.t -> Typ.t) (ty1: Typ.t) (ty2: Typ.t) 
+    (u_results: Typ.unify_results) (r_results: Typ.rec_unify_results) (tracked: CycleTrack.t)
     : sub_status =
     let sub_res_ty1 = sub_on_root_by_dependence ty1 results tracked in
     let (results, result_ty1, cycles1, has_cyc1) =
