@@ -82,59 +82,54 @@ let simplify (typs: Typ.t list): Typ.unify_result =
     )
 ;;
 
+let mk_ctr_types (ctr: Typ.t -> Typ.t -> Typ.t) (const: Typ.t) (const_is_left: bool) (acc: Typ.t list) (variant: Typ.t)
+    : Typ.t list =
+    if (const_is_left) then (ctr const variant)::acc else (ctr variant const)::acc
+;;
+
+let fuse_lists (ctr: Typ.t -> Typ.t -> Typ.t) (ty1_ls: Typ.t list) (ty2_ls: Typ.t list)
+    : Typ.t list = 
+    let acc_mk_ctr_types (acc: Typ.t list) (const_of_left: Typ.t): Typ.t list = 
+        List.fold_left (mk_ctr_types ctr const_of_left true) acc (ty2_ls)
+    in
+    List.fold_left acc_mk_ctr_types [] ty1_ls
+;;
+
 let fuse_results (ctr: Typ.t -> Typ.t -> Typ.t) (result_ty1: Typ.unify_result) (result_ty2: Typ.unify_result)
-    : Typ.unify_result = 
-    let mk_ctr_types (ctr: Typ.t -> Typ.t -> Typ.t) (const: Typ.t) (const_is_left: bool) (acc: Typ.t list) (variant: Typ.t)
-        : Typ.t list =
-        if (const_is_left) then (ctr const variant)::acc else (ctr variant const)::acc
+    : Typ.unify_result =
+    let op_to_ctr_op (op: Typ.t option) (ctr: Typ.t -> Typ.t -> Typ.t) (op_left: bool) (second: Typ.t)
+        : Typ.t option =
+        match op with
+        | Some ty -> (if (op_left) then (Some (ctr ty second)) else (Some (ctr second ty)))
+        | None -> None
+    in
+    let op_to_ls (op: Typ.t option): Typ.t list =
+        match op with
+        | Some ty -> [ty]
+        | None -> []
     in
     match (result_ty1, result_ty2) with
     | ((Solved resolved_ty1), (Solved resolved_ty2)) -> Solved (ctr resolved_ty1 resolved_ty2)
     | ((UnSolved tys), (Solved resolved_ty2)) -> UnSolved (List.fold_left (mk_ctr_types ctr resolved_ty2 false) [] tys)
     | ((Solved resolved_ty1), (UnSolved tys)) -> UnSolved (List.fold_left (mk_ctr_types ctr resolved_ty1 true) [] tys)
-    | ((UnSolved tys1), (UnSolved tys2)) -> (
-        let acc_mk_ctr_types (acc: Typ.t list) (const_of_left: Typ.t): Typ.t list = 
-            List.fold_left (mk_ctr_types ctr const_of_left true) acc tys2
-        in
-        UnSolved (List.fold_left acc_mk_ctr_types [] tys1)
-    )
+    | ((UnSolved tys1), (UnSolved tys2)) -> UnSolved (fuse_lists ctr tys1 tys2)
     | ((Solved resolved_ty1), (Ambiguous (ty_op2, ty_ls2))) -> (
-        let amb_op = 
-            match ty_op2 with
-            | Some ty2 -> ctr resolved_ty1 ty2
-            | None -> None
-        in
-        Ambiguous (amb_op, (List.fold_left (mk_ctr_types ctr resolved_ty1 true) [] ty_ls2))
+        Ambiguous (
+            (op_to_ctr_op ty_op2 ctr false resolved_ty1), 
+            (List.fold_left (mk_ctr_types ctr resolved_ty1 true) [] ty_ls2)
+        )
     )
     | ((Ambiguous (ty_op1, ty_ls1)), (Solved resolved_ty2)) -> (
-        let amb_op = 
-            match ty_op1 with
-            | Some ty1 -> ctr ty1 resolved_ty2
-            | None -> None
-        in
-        Ambiguous (amb_op, (List.fold_left (mk_ctr_types ctr resolved_ty2 false) [] ty_ls1))
+        Ambiguous (
+            (op_to_ctr_op ty_op1 ctr true resolved_ty2), 
+            (List.fold_left (mk_ctr_types ctr resolved_ty2 false) [] ty_ls1)
+        )
     )
     | ((UnSolved tys1), (Ambiguous (ty_op2, ty_ls2))) -> (
-        let amb_ls = 
-            match ty_op2 with
-            | Some ty2 -> [ty2]
-            | None -> []
-        in
-        let acc_mk_ctr_types (acc: Typ.t list) (const_of_left: Typ.t): Typ.t list = 
-            List.fold_left (mk_ctr_types ctr const_of_left true) acc (amb_ls @ ty_ls2)
-        in
-        UnSolved (List.fold_left acc_mk_ctr_types [] tys1)
+        UnSolved (fuse_lists ctr tys1 ((op_to_ls ty_op2) @ ty_ls2))
     )
     | ((Ambiguous (ty_op1, ty_ls1)), (UnSolved tys2)) -> (
-        let amb_ls = 
-            match ty_op1 with
-            | Some ty1 -> [ty1]
-            | None -> []
-        in
-        let acc_mk_ctr_types (acc: Typ.t list) (const_of_left: Typ.t): Typ.t list = 
-            List.fold_left (mk_ctr_types ctr const_of_left true) acc tys2
-        in
-        UnSolved (List.fold_left acc_mk_ctr_types [] (amb_ls @ ty_ls1))
+        UnSolved (fuse_lists ctr ((op_to_ls ty_op1) @ ty_ls1) tys2)
     )
     | ((Ambiguous (ty_op1, ty_ls1)), (Ambiguous (ty_op2, ty_ls2))) -> (
         let amb_op = 
@@ -142,10 +137,7 @@ let fuse_results (ctr: Typ.t -> Typ.t -> Typ.t) (result_ty1: Typ.unify_result) (
             | ((Some ty1), (Some ty2)) -> Some (ctr ty1 ty2)
             | _ -> None
         in
-        let acc_mk_ctr_types (acc: Typ.t list) (const_of_left: Typ.t): Typ.t list = 
-            List.fold_left (mk_ctr_types ctr const_of_left true) acc ty_ls1
-        in
-        Ambiguous (amb_op, (List.fold_left acc_mk_ctr_types [] ty_ls2))
+        Ambiguous (amb_op, (fuse_lists ty_ls1 ty_ls2))
     )
 ;;
 
@@ -183,16 +175,66 @@ let rec dfs (root: Typ.t) (u_results: Typ.unify_results) (r_results: Typ.rec_uni
     | TSum (ty1, ty2) -> (dfs_of_ctr mk_sum ty1 ty2 u_results r_results tracked)
     | THole var -> (
         match (retrieve_result_for_inf_var var u_results) with
-        | Some unif_res -> (
-            dfs_res unif_res tracked
-        )
-        | None -> (
-            (true, [])
-        )
+        | Some unif_res -> (dfs_res unif_res tracked)
+        | None -> (true, [])
     )
 and dfs_of_ctr (ctr: Typ.t -> Typ.t -> Typ.t) (ty1: Typ.t) (ty2: Typ.t) (u_results: Typ.unify_results) 
     (r_results: Typ.rec_unify_results) (tracked: CycleTrack.t)
     : bool * (Typ.t list) =
+    let (occ1, ty1_ls) = dfs ty1 u_results r_results in
+    let (occ2, ty2_ls) = dfs ty2 u_results r_results in
+    let rec_tys = fuse_lists ty1_ls ty2_ls in
+    let (dfs_occ, dfs_tys) = 
+        match (retrieve_result_for_rec_typ (ctr ty1 ty2) r_results) with
+        | Some unif_res -> dfs_res unif_res tracked
+        | None -> (true, [])
+    in
+    (occ1 && occ2 && dfs_occ, (List.rev_append rec_tys dfs_tys))
+and dfs_res (unif_res: Typ.unify_result) (tracked: CycleTrack.t): bool * (Typ.t list)=
+    match unif_res with
+    | Solved ty -> (true, [ty])
+    | Ambiguous (ty_op, ty_ls)
+    | UnSolved ty_ls -> (
+        let new_hd = 
+            match unify_res with
+            | Ambiguous ((Some ty), _) -> [ty]
+            | _ -> []
+        in
+        let in_domain_and_unequal (list_elt: Typ.t) (tracked_elt: CycleTrack.t): bool =
+            ((Typ.THole tracked_elt) <> list_elt) && (Typ.contains_var tracked_elt list_elt)
+        in
+        let traverse_if_valid (acc: bool * (Typ.t list) * CycleTrack.t) (list_elt: Typ.t)
+            : bool*(Typ.t list) =
+            let (acc_b, acc_typs, tracked) = acc in
+            if (List.exists (in_domain_and_unequal list_elt) tracked) then (
+                (false, acc_typs)
+            ) else (
+                if (CycleTrack.is_tracked list_elt tracked) then (
+                    (acc_b, acc_typs)
+                ) else (
+                    (acc_b, 
+                    (List.rev_append (dfs list_elt u_results r_results tracked) acc_typs))
+                )
+            )
+        in
+        let (status, dfs_out, _) = 
+            List.fold_left (true, [], tracked) traverse_if_valid ty_holes
+        in
+        (status, new_hd @ dfs_out)
+    )
+;;
+
+let rec resolve (root: Typ.t) (solution: Typ.unify_result) (u_results: Typ.unify_results) (r_results: Typ.rec_unify_results)
+    : Typ.unify_results * Typ.rec_unify_results =
+    match root with
+    | TNum
+    | TBool -> (u_results, r_results)
+    | TArrow (ty1, ty2) -> 
+    | TProd (ty1, ty2) ->
+    | TSum (ty1, ty2) ->
+    | THole var ->
+and resolve_of_ctr (ctr: Typ.t -> Typ.t -> Typ.t) (ty1: Typ.t) (ty2: Typ.t) (u_results: Typ.unify_results) (r_results: Typ.rec_unify_results)
+    : Typ.unify_results * Typ.rec_unify_results =
     (*
     1) Evaluate children
     2) Generate resultant type
@@ -240,44 +282,6 @@ and dfs_of_ctr (ctr: Typ.t -> Typ.t -> Typ.t) (ty1: Typ.t) (ty2: Typ.t) (u_resul
         if (occ2) then (UnSolved ty2_ls) else (simplify ty2_ls)
     in
     let rec_res = fuse_results ctr ty1_res ty2_res
-and dfs_res (unif_res: Typ.unify_result) (tracked: CycleTrack.t): bool * (Typ.t list)=
-    match unif_res with
-    | Solved ty -> (true, [ty])
-    | Ambiguous (ty_op, ty_ls)
-    | UnSolved ty_ls -> (
-        let new_hd = 
-            match unify_res with
-            | Ambiguous ((Some ty), _) -> [ty]
-            | _ -> []
-        in
-        let in_domain_and_unequal (list_elt: Typ.t) (tracked_elt: CycleTrack.t): bool =
-            ((Typ.THole tracked_elt) <> list_elt) && (Typ.contains_var tracked_elt list_elt)
-        in
-        let traverse_if_valid (acc: bool * (Typ.t list) * CycleTrack.t) (list_elt: Typ.t)
-            : bool*(Typ.t list) =
-            let (acc_b, acc_typs, tracked) = acc in
-            if (List.exists (in_domain_and_unequal list_elt) tracked) then (
-                (false, acc_typs)
-            ) else (
-                if (CycleTrack.is_tracked list_elt tracked) then (
-                    (acc_b, acc_typs)
-                ) else (
-                    (acc_b, 
-                    (List.rev_append (dfs list_elt u_results r_results tracked) acc_typs))
-                )
-            )
-        in
-        let (status, dfs_out, _) = 
-            List.fold_left (true, [], tracked) traverse_if_valid ty_holes
-        in
-        (status, new_hd @ dfs_out)
-    )
-;;
-
-let rec resolve (root: Typ.t) (solution: Typ.unify_result) (u_results: Typ.unify_results) (r_results: Typ.rec_unify_results)
-    : Typ.unify_results * Typ.rec_unify_results =
-and resolve_of_ctr (ctr: Typ.t -> Typ.t -> Typ.t) (ty1: Typ.t) (ty2: Typ.t) (u_results: Typ.unify_results) (r_results: Typ.rec_unify_results)
-    : Typ.unify_results * Typ.rec_unify_results =
 and resolve_res (unif_res: Typ.unify_result): Typ.unify_results * Typ.rec_unify_results =
 ;;
 
