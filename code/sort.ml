@@ -33,26 +33,27 @@ use the smaller list first or try to use the simple item::list instead of [item]
 (*********************)
 
 module CycleTrack = struct
-    type t = TypeInferenceVar.t list
+    type t = Typ.t list
 
     let empty : t = [];;
 
-    let track_var (var: TypeInferenceVar.t) (vars: t): t =
-        var::vars
+    let track_typ (typ: Typ.t) (typs: t): t =
+        typ::typs
     ;;
 
-    let is_tracked (var: TypeInferenceVar.t) (vars: t): bool =
-        let is_var (scrut: TypeInferenceVar.t): bool =
-            var == scrut
+    let is_tracked (typ: Typ.t) (typs: t): bool =
+        let is_typ (scrut: Typ.t): bool =
+            typ == scrut
         in
-        List.exists is_var vars
+        List.exists is_typ typs
     ;;
 end
 
 (*a sub result is some updated set of unify_results after resolving dependencies to simplest form and the result associated 
 with the root called upon *)
-type sub_result = Typ.unify_results * Typ.unify_result
+type sub_result = Typ.unify_results * Typ.rec_unify_results * Typ.unify_result
 
+(*
 (*  A node can be:
         -free from cycles in its dependencies, 
         -cyclic,
@@ -67,6 +68,7 @@ type sub_status =
     | SubSuccess of sub_result
     | Cyclic of TypeInferenceVar.t 
     | DependentlyCyclic of sub_result * (TypeInferenceVar.t list)
+*)
 
 (* checks if the type of var is used to determine the type of any other type infernce variable
     i.e. if the result type of any variable depends on var's result*)
@@ -87,6 +89,15 @@ let rec retrieve_result_for_inf_var (var: TypeInferenceVar.t) (results: Typ.unif
     | [] -> None
     | (ty_var, result)::tl -> (
         if (ty_var == var) then (Some result) else retrieve_result_for_inf_var var tl
+    )
+;;
+
+let rec retrieve_result_for_rec_typ (typ: Typ.t) (results: Typ.rec_unify_results)
+    : Typ.unify_result option =
+    match results with
+    | [] -> None
+    | (hd_typ, hd_result)::tl -> (
+        if (typ = hd_typ) then (Some hd_result) else retrieve_result_for_inf_var typ tl
     )
 ;;
 
@@ -199,14 +210,15 @@ ex:     THole 0 = Solved THole 1
     6) Return final type
     *)
 (*New methods needed:
-    1) Simplify --> to change ambiguous statuses to solved and bring all equal hole references to one id
+    0) Simplify --> to generate a single type representative of a list or the smallest set thereof
+    1) Simplify_and_update --> to change ambiguous statuses to solved and bring all equal hole references to one id
     2) Accumulate cycle types --> to DFS out types in a first pass in ambig/unsolved cases
     3) Adjust status and dependencies --> for updating children of a recursive type *)
 (*Values no longer needed:
     Dependently Cyclic
     lots of solved logic *)
 let rec sub_on_root_by_dependence (root: Typ.t) (u_results: Typ.unify_results) (r_results: Typ.rec_unify_results) 
-    (tracked: CycleTrack.t): sub_status =
+    : sub_result =
     match root with
     | TBool -> SubSuccess (results, Solved TBool)
     | TNum -> SubSuccess (results, Solved TNum)
@@ -227,19 +239,9 @@ let rec sub_on_root_by_dependence (root: Typ.t) (u_results: Typ.unify_results) (
             match (retrieve_result_for_inf_var var results) with
             | Some unif_res -> (
                 match unif_res with
-                | Solved ty -> (
-                    let subres = sub_on_root_by_dependence ty results tracked in
-                    match subres with 
-                    | SubSuccess (results, result_sol) -> (
-                        SubSuccess ((sub_inf_var_for_child var result_sol results), result_sol)
-                    )
-                    | Cyclic cyc -> (
-                        let result_sol: Typ.unify_result = Solved (THole cyc) in
-                        DependentlyCyclic (((sub_inf_var_for_child var result_sol results), result_sol), cyc::[])
-                    )
-                    | DependentlyCyclic ((results, result_sol), cycles) -> (
-                        DependentlyCyclic (((sub_inf_var_for_child var result_sol results), result_sol), cycles)
-                    )
+                | Solved ty -> Solved ty
+                | Ambiguous (ty_op, eq_hole_tys) -> (
+                    
                 )
                 | UnSolved tys -> (
                     (*the following function accumulates the current state of the unify results and list set
@@ -294,8 +296,8 @@ let rec sub_on_root_by_dependence (root: Typ.t) (u_results: Typ.unify_results) (
     )
 (* a common instance for recursive types *)
 and sub_two_of_constructor (ctr: Typ.t -> Typ.t -> Typ.t) (ty1: Typ.t) (ty2: Typ.t) 
-    (u_results: Typ.unify_results) (r_results: Typ.rec_unify_results) (tracked: CycleTrack.t)
-    : sub_status =
+    (u_results: Typ.unify_results) (r_results: Typ.rec_unify_results)
+    : sub_result =
     let sub_res_ty1 = sub_on_root_by_dependence ty1 results tracked in
     let (results, result_ty1, cycles1, has_cyc1) =
         match sub_res_ty1 with
@@ -330,6 +332,92 @@ and sub_two_of_constructor (ctr: Typ.t -> Typ.t -> Typ.t) (ty1: Typ.t) (ty2: Typ
         DependentlyCyclic ((results, updated_unify_result), (List.rev_append (List.rev cycles1) cycles2))
     ) else (
         SubSuccess (results, updated_unify_result)
+    )
+(*accumulates all types in cycle with the root; bool is for occurs type failures *)
+and dfs_types (root: Typ.t) (u_results: Typ.unify_results) (r_results: Typ.rec_unify_results) 
+    (tracked: CycleTrack.t): bool * (Typ.t list) = 
+    match root with
+    | TNum -> [TNum]
+    | TBool -> [TBool]
+    | TArrow (ty1, ty2)
+    | TProd (ty1, ty2)
+    | TSum (ty1, ty2) -> (
+        (*
+        1) Evaluate children
+        2) Generate resultant type
+        3) Recurse on any paths in the rec_unify_results (if present, guaranteed cyclic)
+        4) Use returned type to assess additional incurred types for children and generate a modified status
+        5) Use other subroutine to update children and their dependencies with the new status
+        6) Return final type
+        *)
+        let (occ1, ty1_res) = 
+            dfs_types ty1 u_results r_results
+        in
+        let (occ2, ty2_res) = 
+            dfs_types ty2 u_results r_results
+        in
+        let mk_ctr_types (ctr: Typ.t -> Typ.t -> Typ.t) (const: Typ.t) (const_is_left: bool) (acc: Typ.t list) (variant: Typ.t)
+            : Typ.t list =
+            if (const_is_left) then (ctr const variant)::acc else (ctr variant const)::acc
+        in
+        let updated_unify_result : Typ.unify_result =
+            match (result_ty1, result_ty2) with
+            | ((Solved resolved_ty1), (Solved resolved_ty2)) -> Solved (ctr resolved_ty1 resolved_ty2)
+            | ((UnSolved tys), (Solved resolved_ty2)) -> UnSolved (List.fold_left (mk_ctr_types ctr resolved_ty2 false) [] tys)
+            | ((Solved resolved_ty1), (UnSolved tys)) -> UnSolved (List.fold_left (mk_ctr_types ctr resolved_ty1 true) [] tys)
+            | ((UnSolved tys1), (UnSolved tys2)) -> (
+                let acc_mk_ctr_types (acc: Typ.t list) (const_of_left: Typ.t): Typ.t list = 
+                    List.fold_left (mk_ctr_types ctr const_of_left true) acc tys2
+                in
+                UnSolved (List.fold_left acc_mk_ctr_types [] tys1)
+            )
+        match (retrieve_result_for_rec_typ root r_results) with
+        | Some unif_res -> (
+            
+        )
+        | None -> (
+
+        )
+    )
+    | THole var -> (
+        match (retrieve_result_for_inf_var var u_results) with
+        | Some unif_res -> (
+            match unif_res with
+            | Solved ty -> (true, [ty])
+            | Ambiguous (ty_op, ty_ls)
+            | UnSolved ty_ls -> (
+                let new_hd = 
+                    match unify_res with
+                    | Ambiguous ((Some ty), _) -> [ty]
+                    | _ -> []
+                in
+                let tracked = CycleTrack.track root tracked in
+                let in_domain_and_unequal (list_elt: Typ.t) (tracked_elt: CycleTrack.t): bool =
+                    ((Typ.THole tracked_elt) <> list_elt) && (Typ.contains_var tracked_elt list_elt)
+                in
+                let traverse_if_valid (acc: bool * (Typ.t list) * CycleTrack.t) (list_elt: Typ.t)
+                    : bool*(Typ.t list) =
+                    let (acc_b, acc_typs, tracked) = acc in
+                    if (List.exists (in_domain_and_unequal list_elt) tracked) then (
+                        (false, acc_typs)
+                    ) else (
+                        if (CycleTrack.is_tracked list_elt tracked) then (
+                            (acc_b, acc_typs)
+                        ) else (
+                            (acc_b, 
+                            (List.rev_append (dfs_types list_elt u_results r_results tracked) acc_typs))
+                        )
+                    )
+                in
+                let (status, dfs_res, _) = 
+                    List.fold_left (true, [], tracked) traverse_if_valid ty_holes
+                in
+                (status, new_hd @ dfs_res)
+            )
+        )
+        | None -> (
+
+        )
     )
 ;;
 
