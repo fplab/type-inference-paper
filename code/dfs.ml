@@ -1,6 +1,41 @@
 open Syntax
 open Impl
 
+module ResTrack = struct
+    type t = Typ.t list
+
+    (*gets rid of a typ from the list *)
+    let remove_typ (typ: Typ.t) (ls: t): t =
+        let pred (elt: Typ.t): bool =
+            elt <> typ
+        in
+        List.filter pred ls
+    ;;
+
+    let u_results_to_t (u_results: Typ.unify_results): t =
+        let extend_by_u_res (acc: t) (u_res: TypeInferenceVar.t * unify_result): t =
+            let (u_var, _) = u_res in
+            (Typ.THole u_var)::acc
+        in
+        List.fold_left extend_by_u_res [] u_results
+    ;;
+
+    let r_results_to_t (r_results: Typ.rec_unify_results): t =
+        let extend_by_r_res (acc: t) (r_res: Typ.t * unify_result): t =
+            let (r_typ, _) = r_res in
+            r_typ::acc
+        in
+        List.fold_left extend_by_r_res [] r_results
+    ;;
+
+    (*generates a list of the types involved in (r) unify results. recursive results first *)
+    let results_to_t (u_results: Typ.unify_results) (r_results: Typ.rec_unify_results): t =
+        let ls_u = u_results_to_t u_results in
+        let ls_r = r_results_to_t r_results in
+        List.rev_append ls_r ls_u
+    ;;
+end
+
 module CycleTrack = struct
     type t = Typ.t list
 
@@ -49,7 +84,7 @@ let rec find_literal (typs: Typ.t list): Typ.t option =
     | hd::tl -> if (is_literal hd) then (Some hd) else (find_literal tl)
 ;;
 
-let simplify (typs: Typ.t list): Typ.unify_result =
+let condense (typs: Typ.t list): Typ.unify_result =
     match typs with
     | [] -> UnSolved []
     | hd::_ -> (
@@ -135,7 +170,7 @@ let split_as_ctr (ctr: Typ.t -> Typ.t -> Typ.t) (res: Typ.unify_result)
     let is_of_struc, _ = all_of_ctr ctr ty_ls in
     let lhs_tys, rhs_tys = split_ls ty_ls in
     if (is_of_struc) then (
-        ((simplify lhs_tys), (simplify rhs_tys))
+        ((condense lhs_tys), (condense rhs_tys))
     ) else (
         (*NOTE! Currently, this will not note why things are unsolved if fitting in this case
             ex: Num used as arrow, sum used as arrow, etc
@@ -156,52 +191,6 @@ let fuse_lists (ctr: Typ.t -> Typ.t -> Typ.t) (ty1_ls: Typ.t list) (ty2_ls: Typ.
         List.fold_left (mk_ctr_types ctr const_of_left true) acc (ty2_ls)
     in
     List.fold_left acc_mk_ctr_types [] ty1_ls
-;;
-
-let fuse_results (ctr: Typ.t -> Typ.t -> Typ.t) (result_ty1: Typ.unify_result) (result_ty2: Typ.unify_result)
-    : Typ.unify_result =
-    let op_to_ctr_op (op: Typ.t option) (ctr: Typ.t -> Typ.t -> Typ.t) (op_left: bool) (second: Typ.t)
-        : Typ.t option =
-        match op with
-        | Some ty -> (if (op_left) then (Some (ctr ty second)) else (Some (ctr second ty)))
-        | None -> None
-    in
-    let op_to_ls (op: Typ.t option): Typ.t list =
-        match op with
-        | Some ty -> [ty]
-        | None -> []
-    in
-    match (result_ty1, result_ty2) with
-    | ((Solved resolved_ty1), (Solved resolved_ty2)) -> Solved (ctr resolved_ty1 resolved_ty2)
-    | ((UnSolved tys), (Solved resolved_ty2)) -> UnSolved (List.fold_left (mk_ctr_types ctr resolved_ty2 false) [] tys)
-    | ((Solved resolved_ty1), (UnSolved tys)) -> UnSolved (List.fold_left (mk_ctr_types ctr resolved_ty1 true) [] tys)
-    | ((UnSolved tys1), (UnSolved tys2)) -> UnSolved (fuse_lists ctr tys1 tys2)
-    | ((Solved resolved_ty1), (Ambiguous (ty_op2, ty_ls2))) -> (
-        Ambiguous (
-            (op_to_ctr_op ty_op2 ctr false resolved_ty1), 
-            (List.fold_left (mk_ctr_types ctr resolved_ty1 true) [] ty_ls2)
-        )
-    )
-    | ((Ambiguous (ty_op1, ty_ls1)), (Solved resolved_ty2)) -> (
-        Ambiguous (
-            (op_to_ctr_op ty_op1 ctr true resolved_ty2), 
-            (List.fold_left (mk_ctr_types ctr resolved_ty2 false) [] ty_ls1)
-        )
-    )
-    | ((UnSolved tys1), (Ambiguous (ty_op2, ty_ls2))) -> (
-        UnSolved (fuse_lists ctr tys1 ((op_to_ls ty_op2) @ ty_ls2))
-    )
-    | ((Ambiguous (ty_op1, ty_ls1)), (UnSolved tys2)) -> (
-        UnSolved (fuse_lists ctr ((op_to_ls ty_op1) @ ty_ls1) tys2)
-    )
-    | ((Ambiguous (ty_op1, ty_ls1)), (Ambiguous (ty_op2, ty_ls2))) -> (
-        let amb_op = 
-            match (ty_op1, ty_op2) with
-            | ((Some ty1), (Some ty2)) -> Some (ctr ty1 ty2)
-            | _ -> None
-        in
-        Ambiguous (amb_op, (fuse_lists ty_ls1 ty_ls2))
-    )
 ;;
 
 (*performs logic necessary to add a new unify_result to a list of results *)
@@ -235,32 +224,34 @@ let rec replace_rec_unify_result (new_result: Typ.t * Typ.unify_result) (old_res
 (*a method that dfs's on a type to accumulate all known types it is cyclic with. returns a boolean denoting
 if an occurs check was failed due to the results and a list of all types *)
 let rec dfs_typs (root: Typ.t) (u_results: Typ.unify_results) (r_results: Typ.rec_unify_results) (tracked: CycleTrack.t)
-    : bool * (Typ.t list) = 
+    (unseen_results: ResTrack.t): bool * (Typ.t list) * ResTrack.t = 
     let tracked = CycleTrack.track_typ root tracked in
+    let unseen_results = ResTrack.remove_typ root in
     match root with
     | TNum -> (true, [TNum])
     | TBool -> (true, [TBool])
-    | TArrow (ty1, ty2) -> (dfs_typs_of_ctr mk_arrow ty1 ty2 u_results r_results tracked)
-    | TProd (ty1, ty2) -> (dfs_typs_of_ctr mk_prod ty1 ty2 u_results r_results tracked)
-    | TSum (ty1, ty2) -> (dfs_typs_of_ctr mk_sum ty1 ty2 u_results r_results tracked)
+    | TArrow (ty1, ty2) -> (dfs_typs_of_ctr mk_arrow ty1 ty2 u_results r_results tracked unseen_results)
+    | TProd (ty1, ty2) -> (dfs_typs_of_ctr mk_prod ty1 ty2 u_results r_results tracked unseen_results)
+    | TSum (ty1, ty2) -> (dfs_typs_of_ctr mk_sum ty1 ty2 u_results r_results tracked unseen_results)
     | THole var -> (
         match (retrieve_result_for_inf_var var u_results) with
-        | Some unif_res -> (dfs_typs_res unif_res tracked)
+        | Some unif_res -> (dfs_typs_res unif_res tracked unseen_results)
         | None -> (true, [])
     )
 and dfs_typs_of_ctr (ctr: Typ.t -> Typ.t -> Typ.t) (ty1: Typ.t) (ty2: Typ.t) (u_results: Typ.unify_results) 
-    (r_results: Typ.rec_unify_results) (tracked: CycleTrack.t)
-    : bool * (Typ.t list) =
-    let (occ1, ty1_ls) = dfs_typs ty1 u_results r_results in
-    let (occ2, ty2_ls) = dfs_typs ty2 u_results r_results in
+    (r_results: Typ.rec_unify_results) (tracked: CycleTrack.t) (unseen_results: ResTrack.t)
+    : bool * (Typ.t list) * ResTrack.t =
+    let (occ1, ty1_ls) = dfs_typs ty1 u_results r_results CycleTrack.empty unseen_results in
+    let (occ2, ty2_ls) = dfs_typs ty2 u_results r_results CycleTrack.empty unseen_results in
     let rec_tys = fuse_lists ty1_ls ty2_ls in
     let (dfs_occ, dfs_tys) = 
         match (retrieve_result_for_rec_typ (ctr ty1 ty2) r_results) with
-        | Some unif_res -> dfs_typs_res unif_res tracked
+        | Some unif_res -> dfs_typs_res unif_res tracked unseen_results
         | None -> (true, [])
     in
     (occ1 && occ2 && dfs_occ, (List.rev_append rec_tys dfs_tys))
-and dfs_typs_res (unif_res: Typ.unify_result) (tracked: CycleTrack.t): bool * (Typ.t list)=
+and dfs_typs_res (unif_res: Typ.unify_result) (tracked: CycleTrack.t) (unseen_results: ResTrack.t)
+    : bool * (Typ.t list) * ResTrack.t =
     match unif_res with
     | Solved ty -> (true, [ty])
     | Ambiguous (ty_op, ty_ls)
@@ -285,7 +276,7 @@ and dfs_typs_res (unif_res: Typ.unify_result) (tracked: CycleTrack.t): bool * (T
                     (acc_b, acc_typs)
                 ) else (
                     (acc_b, 
-                    (List.rev_append (dfs_typs list_elt u_results r_results tracked) acc_typs))
+                    (List.rev_append (dfs_typs list_elt u_results r_results tracked unseen_results) acc_typs))
                 )
             )
         in
@@ -368,3 +359,115 @@ and resolve_res (solution: Typ.unify_result): Typ.unify_results * Typ.rec_unify_
         (u_results, r_results)
     )
 ;;
+
+(* Appends the item to the list only if the item is not consistent with any items in the list *)
+let cat_if_inconsistent_for_all (target_list: Typ.t list) (item: Typ.t)
+    : Typ.t list =
+    if (List.exists (Typ.consistent item) target_list) then (
+        target_list
+    ) else (
+        item::target_list
+    )
+;;
+
+(* Combines a pair of lists by adding elements from l2 only if they are inconsistent with those currently added/in l1 *)
+let smallest_inconsistent_pair (l1: Typ.t list) (l2: Typ.t list)
+    : Typ.t list =
+    List.fold_left cat_if_inconsistent_for_all l1 l2
+;;
+
+let disambiguate (u_results: Typ.unify_results) (r_results: Typ.rec_unify_results)
+    : Typ.unify_results * Typ.rec_unify_results =
+    let new_u_results = [] in
+    let new_r_results = [] in
+
+;;
+
+(*converts all ambiguous statuses to a fully simplified non ambiguous solution status *)
+let disambiguate_res (res: Typ.unify_result) (unseen_results: ResTrack.t)
+    : Typ.unify_results * Typ.rec_unify_results * ResTrack.t =
+;;
+let disambiguate_u (u_result: TypeInferenceVar.t * Typ.unify_result) (unseen_results: ResTrack.t)
+    : Typ.unify_results * Typ.rec_unify_results * ResTrack.t = 
+    let (id, res) = u_result in
+    match res with
+    | Solved _ -> [u_result], [], (ResTrack.remove_typ (Typ.THole id) unseen_results)
+    | Ambiguous (ty_op, children) -> (
+        let res' = 
+            match ty_op with
+            | Some ty -> (Typ.Solved ty)
+            | None -> (Typ.Solved THole id)
+        in
+        let add_res_and_track (acc: Typ.unify_results * ResTrack) (child: Typ.t)
+            : Typ.unify_results * Typ.rec_unify_results * ResTrack.t =
+            let acc_ls_u, acc_ls_r, unseen_results = acc in
+            let unseen_results = ResTrack.remove_typ child unseen_results in
+            match child with
+            | TNum
+            | TBool -> acc
+            | THole var -> ((var, res')::acc_ls_u, acc_ls_r, unseen_results)
+            | TArrow _
+            | TProd _
+            | TSum _ -> (acc_ls_u, (child, res')::acc_ls_r, unseen_results)
+        in
+        List.fold_left add_res_and_track ([], [], unseen_results) (Typ.THole id)::children
+    )
+    | UnSolved tys -> (
+        ([(id, (Typ.UnSolved (smallest_inconsistent_pair [] tys)))], 
+        [], 
+        (ResTrack.remove_typ (Typ.THole id) unseen_results))
+    )
+;;
+
+let disambiguate_r (r_result: Typ.t * Typ.unify_result) (unseen_results: ResTrack.t)
+    : Typ.unify_results * Typ.rec_unify_results * ResTrack.t = 
+    let (r_typ, res) = r_result in
+    match res with
+    | Solved _ -> [], [r_result], (ResTrack.remove_typ typ unseen_results)
+    | Ambiguous (ty_op, children) -> (
+        let res' = 
+            match ty_op with
+            | Some ty -> (Typ.Solved ty)
+            | None -> (Typ.Solved r_typ)
+        in
+        let add_res_and_track (acc: Typ.unify_results * ResTrack) (child: Typ.t)
+            : Typ.unify_results * Typ.rec_unify_results * ResTrack.t =
+            let acc_ls_u, acc_ls_r, unseen_results = acc in
+            let unseen_results = ResTrack.remove_typ child unseen_results in
+            match child with
+            | TNum
+            | TBool -> acc
+            | THole var -> ((var, res')::acc_ls_u, acc_ls_r, unseen_results)
+            | TArrow _
+            | TProd _
+            | TSum _ -> (acc_ls_u, (child, res')::acc_ls_r, unseen_results)
+        in
+        List.fold_left add_res_and_track ([], [], unseen_results) r_typ::children
+    )
+    | UnSolved tys -> (
+        ([], 
+        [(r_typ, (Typ.UnSolved (smallest_inconsistent_pair [] tys)))], 
+        (ResTrack.remove_typ r_typ unseen_results))
+    )
+;;
+
+let rec fix_tracked_results (results_to_fix: ResTrack.t) (u_results: Typ.unify_results) (r_results: Typ.rec_unify_results)
+    : ResTrack.t * Typ.unify_results * Typ.rec_unify_results =
+    match results_to_fix with
+    | [] -> results_to_fix, u_results, r_results
+    | hd::tl -> (
+        let occ, dfs_tys, results_to_fix = dfs_typs hd acc_u acc_r CycleTrack.empty results_to_fix in
+        let cycle_res = condense dfs_tys in
+        let u_results, r_results = resolve hd cycle_res u_results r_results CycleTrack.empty in
+        fix_tracked_results results_to_fix u_results r_results
+    )
+;;
+
+let finalize_results (u_results: Typ.unify_results) (r_results: Typ.rec_unify_results)
+    : Typ.unify_results * Typ.rec_unify_results = 
+    let results_to_fix = ResTrack.results_to_t u_results r_results in
+    let (_, u_results, r_results) = 
+        fix_tracked_results results_to_fix u_results r_results 
+    in
+    disambiguate u_results r_results
+;; 
