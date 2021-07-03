@@ -87,6 +87,17 @@ module Typ = struct
         | _ -> false
     ;;
 
+    let rec contains_typ (typ: Typ.t) (check: Typ.t): bool =
+        if (typ = check) then true
+        else (
+            match typ with
+            | TArrow (ty1, ty2)
+            | TProd (ty1, ty2)
+            | TSum (ty1, ty2) -> (contains_typ typ ty1 || contains_typ typ ty2)
+            | _ -> false
+        )
+    ;;
+
     (*Moved consistency to be a typ function *)
     let rec consistent (t1: t) (t2: t) : bool = 
     match (t1,t2) with

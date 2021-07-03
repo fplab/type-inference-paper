@@ -41,16 +41,6 @@ let rec retrieve_result_for_rec_typ (typ: Typ.t) (results: Typ.rec_unify_results
     )
 ;;
 
-let rec contains_hole (typ: Typ.t): bool =
-    match typ with
-    | TNum
-    | TBool -> false
-    | THole _ -> true
-    | TArrow(ty1, ty2)
-    | TProd(ty1, ty2)
-    | TSum(ty1, ty2) -> (contains_hole ty1) || (contains_hole ty2)
-;;
-
 let is_literal (typ: Typ.t): bool = (hd = TNum || hd = TBool) ;;
 
 let rec find_literal (typs: Typ.t list): Typ.t option = 
@@ -90,17 +80,6 @@ let ty_to_res_id (typ: Typ.t): TypeInferenceVar.t option * Typ.t option =
     | TArrow _ 
     | TProd _ 
     | TSum _ -> (None, (Some typ))
-;;
-
-let rec enforce_res (res: Typ.unify_result) (typ: Typ.t) (u_results: Typ.unify_results) (r_results: Typ.rec_unify_results)
-    : result_update =
-    match typ with
-    | TNum
-    | TBool -> if (typ )
-    | THole
-    | TArrow
-    | TProd
-    | TSum ->
 ;;
 
 let split (typ: Typ.t): (Typ.t * Typ.t) option = 
@@ -225,33 +204,63 @@ let fuse_results (ctr: Typ.t -> Typ.t -> Typ.t) (result_ty1: Typ.unify_result) (
     )
 ;;
 
-let rec dfs (root: Typ.t) (u_results: Typ.unify_results) (r_results: Typ.rec_unify_results) (tracked: CycleTrack.t)
+(*performs logic necessary to add a new unify_result to a list of results *)
+let rec replace_unify_result (new_result: TypeInferenceVar.t * Typ.unify_result) (old_results: Typ.unify_results)
+    : Typ.unify_results =
+    match old_results with
+    | [] -> new_result::[]
+    | (hd_var, _)::tl -> (
+        let (new_var, new_res) = new_result in
+        if hd_var == new_var then (
+            (hd_var, new_res)::tl
+        )
+        else (hd_var, hd_res)::(add_unify_result new_result tl)
+    )
+;;
+
+(*performs logic necessary to add a new rec_unify_result to a list of results *)
+let rec replace_rec_unify_result (new_result: Typ.t * Typ.unify_result) (old_results: Typ.rec_unify_results)
+    : Typ.rec_unify_results =
+    match old_results with
+    | [] -> new_result::[]
+    | (hd_typ, _)::tl -> (
+        let (new_typ, new_res) = new_result in
+        if hd_typ = new_typ then (
+            (hd_typ, new_res)::tl
+        )
+        else (hd_typ, hd_res)::(add_rec_unify_result new_result tl)
+    )
+;;
+
+(*a method that dfs's on a type to accumulate all known types it is cyclic with. returns a boolean denoting
+if an occurs check was failed due to the results and a list of all types *)
+let rec dfs_typs (root: Typ.t) (u_results: Typ.unify_results) (r_results: Typ.rec_unify_results) (tracked: CycleTrack.t)
     : bool * (Typ.t list) = 
     let tracked = CycleTrack.track_typ root tracked in
     match root with
     | TNum -> (true, [TNum])
     | TBool -> (true, [TBool])
-    | TArrow (ty1, ty2) -> (dfs_of_ctr mk_arrow ty1 ty2 u_results r_results tracked)
-    | TProd (ty1, ty2) -> (dfs_of_ctr mk_prod ty1 ty2 u_results r_results tracked)
-    | TSum (ty1, ty2) -> (dfs_of_ctr mk_sum ty1 ty2 u_results r_results tracked)
+    | TArrow (ty1, ty2) -> (dfs_typs_of_ctr mk_arrow ty1 ty2 u_results r_results tracked)
+    | TProd (ty1, ty2) -> (dfs_typs_of_ctr mk_prod ty1 ty2 u_results r_results tracked)
+    | TSum (ty1, ty2) -> (dfs_typs_of_ctr mk_sum ty1 ty2 u_results r_results tracked)
     | THole var -> (
         match (retrieve_result_for_inf_var var u_results) with
-        | Some unif_res -> (dfs_res unif_res tracked)
+        | Some unif_res -> (dfs_typs_res unif_res tracked)
         | None -> (true, [])
     )
-and dfs_of_ctr (ctr: Typ.t -> Typ.t -> Typ.t) (ty1: Typ.t) (ty2: Typ.t) (u_results: Typ.unify_results) 
+and dfs_typs_of_ctr (ctr: Typ.t -> Typ.t -> Typ.t) (ty1: Typ.t) (ty2: Typ.t) (u_results: Typ.unify_results) 
     (r_results: Typ.rec_unify_results) (tracked: CycleTrack.t)
     : bool * (Typ.t list) =
-    let (occ1, ty1_ls) = dfs ty1 u_results r_results in
-    let (occ2, ty2_ls) = dfs ty2 u_results r_results in
+    let (occ1, ty1_ls) = dfs_typs ty1 u_results r_results in
+    let (occ2, ty2_ls) = dfs_typs ty2 u_results r_results in
     let rec_tys = fuse_lists ty1_ls ty2_ls in
     let (dfs_occ, dfs_tys) = 
         match (retrieve_result_for_rec_typ (ctr ty1 ty2) r_results) with
-        | Some unif_res -> dfs_res unif_res tracked
+        | Some unif_res -> dfs_typs_res unif_res tracked
         | None -> (true, [])
     in
     (occ1 && occ2 && dfs_occ, (List.rev_append rec_tys dfs_tys))
-and dfs_res (unif_res: Typ.unify_result) (tracked: CycleTrack.t): bool * (Typ.t list)=
+and dfs_typs_res (unif_res: Typ.unify_result) (tracked: CycleTrack.t): bool * (Typ.t list)=
     match unif_res with
     | Solved ty -> (true, [ty])
     | Ambiguous (ty_op, ty_ls)
@@ -262,19 +271,21 @@ and dfs_res (unif_res: Typ.unify_result) (tracked: CycleTrack.t): bool * (Typ.t 
             | _ -> []
         in
         let in_domain_and_unequal (list_elt: Typ.t) (tracked_elt: CycleTrack.t): bool =
-            ((Typ.THole tracked_elt) <> list_elt) && (Typ.contains_var tracked_elt list_elt)
+            (tracked_elt <> list_elt) && (Typ.contains_typ tracked_elt list_elt)
         in
         let traverse_if_valid (acc: bool * (Typ.t list) * CycleTrack.t) (list_elt: Typ.t)
-            : bool*(Typ.t list) =
+            : bool * (Typ.t list) =
             let (acc_b, acc_typs, tracked) = acc in
+            (*if invalid *)
             if (List.exists (in_domain_and_unequal list_elt) tracked) then (
                 (false, acc_typs)
             ) else (
+                (*if already traversed *)
                 if (CycleTrack.is_tracked list_elt tracked) then (
                     (acc_b, acc_typs)
                 ) else (
                     (acc_b, 
-                    (List.rev_append (dfs list_elt u_results r_results tracked) acc_typs))
+                    (List.rev_append (dfs_typs list_elt u_results r_results tracked) acc_typs))
                 )
             )
         in
@@ -312,8 +323,8 @@ and resolve_of_ctr (ctr: Typ.t -> Typ.t -> Typ.t) (ty1: Typ.t) (ty2: Typ.t) (sol
         : Typ.unify_results * Typ.rec_unify_results =
         match id with
         | None, None -> (u_results, r_results)
-        | (Some var), None -> ((Impl.replace_unify_result (var, res) u_results), r_results)
-        | None, (Some typ) -> (u_results, (Impl.replace_rec_unify_result (typ, res) r_results))
+        | (Some var), None -> ((replace_unify_result (var, res) u_results), r_results)
+        | None, (Some typ) -> (u_results, (replace_rec_unify_result (typ, res) r_results))
         | _ -> raise Impossible
     in
     (*update results with information for children *)
@@ -355,33 +366,5 @@ and resolve_res (solution: Typ.unify_result): Typ.unify_results * Typ.rec_unify_
             List.fold_left (u_results, r_results, tracked) traverse_if_valid ty_ls
         in
         (u_results, r_results)
-    )
-;;
-
-(*performs logic necessary to add a new unify_result to a list of results *)
-let rec replace_unify_result (new_result: TypeInferenceVar.t*Typ.unify_result) (old_results: Typ.unify_results)
-    : Typ.unify_results =
-    match old_results with
-    | [] -> new_result::[]
-    | (hd_var, _)::tl -> (
-        let (new_var, new_res) = new_result in
-        if hd_var == new_var then (
-            (hd_var, new_res)::tl
-        )
-        else (hd_var, hd_res)::(add_unify_result new_result tl)
-    )
-;;
-
-(*performs logic necessary to add a new rec_unify_result to a list of results *)
-let rec replace_rec_unify_result (new_result: Typ.t*Typ.unify_result) (old_results: Typ.rec_unify_results)
-    : Typ.rec_unify_results =
-    match old_results with
-    | [] -> new_result::[]
-    | (hd_typ, _)::tl -> (
-        let (new_typ, new_res) = new_result in
-        if hd_typ = new_typ then (
-            (hd_typ, new_res)::tl
-        )
-        else (hd_typ, hd_res)::(add_rec_unify_result new_result tl)
     )
 ;;
