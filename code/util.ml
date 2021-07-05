@@ -1,4 +1,5 @@
 open Syntax
+open Dfs
 
 let rec string_of_typ(typ:Typ.t) =
   match typ with
@@ -182,6 +183,13 @@ let solve (ctx: Ctx.t) (e: Exp.t) =
     let (_, u_results, r_results) = Impl.unify cons in 
     Printf.printf "%s\n" (string_of_u_results u_results); 
     Printf.printf "%s\n" (string_of_r_results r_results); 
+    (*calls to new dfs code *)
+    Printf.printf "depth first search simplified results\n";
+    let (u_results, r_results) = Dfs.finalize_results in
+    Printf.printf "%s" (string_of_u_results u_results);
+    Printf.printf "%s" (string_of_r_results r_results);
+  )
+    (*
     (*calls to new topsort code *)
     Printf.printf "topologically simplified unify results:\n";
     let (results, cycles) = Sort.top_sort_and_sub results in
@@ -192,5 +200,5 @@ let solve (ctx: Ctx.t) (e: Exp.t) =
 (*       let new_typ = Impl.apply subs typ in
       Printf.printf "+ final result of infer typ:\n %s\n" (string_of_typ new_typ); *)
     
-  )
+  *)
 ;;

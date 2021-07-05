@@ -12,24 +12,22 @@ module ResTrack = struct
         List.filter pred ls
     ;;
 
-    let u_results_to_t (u_results: Typ.unify_results): t =
-        let extend_by_u_res (acc: t) (u_res: TypeInferenceVar.t * unify_result): t =
-            let (u_var, _) = u_res in
-            (Typ.THole u_var)::acc
-        in
-        List.fold_left extend_by_u_res [] u_results
-    ;;
-
-    let r_results_to_t (r_results: Typ.rec_unify_results): t =
-        let extend_by_r_res (acc: t) (r_res: Typ.t * unify_result): t =
-            let (r_typ, _) = r_res in
-            r_typ::acc
-        in
-        List.fold_left extend_by_r_res [] r_results
-    ;;
-
     (*generates a list of the types involved in (r) unify results. recursive results first *)
     let results_to_t (u_results: Typ.unify_results) (r_results: Typ.rec_unify_results): t =
+        let u_results_to_t (u_results: Typ.unify_results): t =
+            let extend_by_u_res (acc: t) (u_res: TypeInferenceVar.t * unify_result): t =
+                let (u_var, _) = u_res in
+                (Typ.THole u_var)::acc
+            in
+            List.fold_left extend_by_u_res [] 
+        in
+        let r_results_to_t (r_results: Typ.rec_unify_results): t =
+            let extend_by_r_res (acc: t) (r_res: Typ.t * unify_result): t =
+                let (r_typ, _) = r_res in
+                r_typ::acc
+            in
+            List.fold_left extend_by_r_res [] r_results
+        in
         let ls_u = u_results_to_t u_results in
         let ls_r = r_results_to_t r_results in
         List.rev_append ls_r ls_u
@@ -376,17 +374,34 @@ let smallest_inconsistent_pair (l1: Typ.t list) (l2: Typ.t list)
     List.fold_left cat_if_inconsistent_for_all l1 l2
 ;;
 
-let disambiguate (u_results: Typ.unify_results) (r_results: Typ.rec_unify_results)
+let disambiguate (u_results: Typ.unify_results) (r_results: Typ.rec_unify_results) (unseen_results: ResTrack.t)
     : Typ.unify_results * Typ.rec_unify_results =
-    let new_u_results = [] in
-    let new_r_results = [] in
-
+    let acc_u_res (acc: Typ.unify_results * Typ.rec_unify_results * ResTrack.t) (res: TypeInferenceVar.t * Typ.unify_result)
+        : Typ.unify_results * Typ.rec_unify_results * ResTrack.t =
+        let (acc_u, acc_r, unseen_results) = acc in
+        let (upd_u, upd_r, unseen_results) = disambiguate_u res unseen_results in
+        let u_res = List.rev_append upd_u acc_u in
+        let r_res = List.rev_append upd_r acc_r in
+        (u_res, r_res, unseen_results)
+    in
+    let acc_r_res (acc: Typ.unify_results * Typ.rec_unify_results * ResTrack.t) (res: Typ.t * Typ.unify_result)
+        : Typ.unify_results * Typ.rec_unify_results * ResTrack.t =
+        let (acc_u, acc_r, unseen_results) = acc in
+        let (upd_u, upd_r, unseen_results) = disambiguate_r res unseen_results in
+        let u_res = List.rev_append upd_u acc_u in
+        let r_res = List.rev_append upd_r acc_r in
+        (u_res, r_res, unseen_results)
+    in
+    let (new_u_results, new_r_results, unseen_results) = 
+        List.fold_left acc_u_res ([], [], unseen_results) u_results 
+    in
+    let (new_u_results, new_r_results, unseen_results) = 
+        List.fold_left acc_r_res (new_u_results, new_r_results, unseen_results) r_results 
+    in
+    (new_u_results, new_r_results)
 ;;
 
 (*converts all ambiguous statuses to a fully simplified non ambiguous solution status *)
-let disambiguate_res (res: Typ.unify_result) (unseen_results: ResTrack.t)
-    : Typ.unify_results * Typ.rec_unify_results * ResTrack.t =
-;;
 let disambiguate_u (u_result: TypeInferenceVar.t * Typ.unify_result) (unseen_results: ResTrack.t)
     : Typ.unify_results * Typ.rec_unify_results * ResTrack.t = 
     let (id, res) = u_result in
@@ -396,9 +411,9 @@ let disambiguate_u (u_result: TypeInferenceVar.t * Typ.unify_result) (unseen_res
         let res' = 
             match ty_op with
             | Some ty -> (Typ.Solved ty)
-            | None -> (Typ.Solved THole id)
+            | None -> (Typ.Solved (THole id))
         in
-        let add_res_and_track (acc: Typ.unify_results * ResTrack) (child: Typ.t)
+        let add_res_and_track (acc: Typ.unify_results * ResTrack.t) (child: Typ.t)
             : Typ.unify_results * Typ.rec_unify_results * ResTrack.t =
             let acc_ls_u, acc_ls_r, unseen_results = acc in
             let unseen_results = ResTrack.remove_typ child unseen_results in
@@ -423,14 +438,14 @@ let disambiguate_r (r_result: Typ.t * Typ.unify_result) (unseen_results: ResTrac
     : Typ.unify_results * Typ.rec_unify_results * ResTrack.t = 
     let (r_typ, res) = r_result in
     match res with
-    | Solved _ -> [], [r_result], (ResTrack.remove_typ typ unseen_results)
+    | Solved _ -> ([], [r_result], (ResTrack.remove_typ typ unseen_results))
     | Ambiguous (ty_op, children) -> (
         let res' = 
             match ty_op with
             | Some ty -> (Typ.Solved ty)
             | None -> (Typ.Solved r_typ)
         in
-        let add_res_and_track (acc: Typ.unify_results * ResTrack) (child: Typ.t)
+        let add_res_and_track (acc: Typ.unify_results * ResTrack.t) (child: Typ.t)
             : Typ.unify_results * Typ.rec_unify_results * ResTrack.t =
             let acc_ls_u, acc_ls_r, unseen_results = acc in
             let unseen_results = ResTrack.remove_typ child unseen_results in
@@ -467,7 +482,7 @@ let finalize_results (u_results: Typ.unify_results) (r_results: Typ.rec_unify_re
     : Typ.unify_results * Typ.rec_unify_results = 
     let results_to_fix = ResTrack.results_to_t u_results r_results in
     let (_, u_results, r_results) = 
-        fix_tracked_results results_to_fix u_results r_results 
+        fix_tracked_results results_to_fix u_results r_results
     in
-    disambiguate u_results r_results
+    disambiguate u_results r_results results_to_fix
 ;; 

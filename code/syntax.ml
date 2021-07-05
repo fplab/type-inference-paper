@@ -87,7 +87,7 @@ module Typ = struct
         | _ -> false
     ;;
 
-    let rec contains_typ (typ: Typ.t) (check: Typ.t): bool =
+    let rec contains_typ (typ: t) (check: t): bool =
         if (typ = check) then true
         else (
             match typ with

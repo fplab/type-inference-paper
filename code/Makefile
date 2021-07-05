@@ -20,10 +20,10 @@ clean:
 bytecode:
 	ocamllex lexer.mll
 	menhir parser.mly
-	ocamlc -g syntax.ml parser.mli lexer.ml parser.ml myparse.ml impl.ml sort.ml util.ml test.ml
+	ocamlc -g syntax.ml parser.mli lexer.ml parser.ml myparse.ml impl.ml dfs.ml util.ml test.ml
 
 debug:
 	ocamllex lexer.mll
 	menhir parser.mly
-	ocamlc -g syntax.ml parser.mli lexer.ml parser.ml myparse.ml impl.ml sort.ml util.ml test.ml
+	ocamlc -g syntax.ml parser.mli lexer.ml parser.ml myparse.ml impl.ml dfs.ml util.ml test.ml
 	ocamldebug a.out
