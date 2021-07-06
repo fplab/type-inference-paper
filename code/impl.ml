@@ -1,5 +1,6 @@
 (*  *)
 exception Impossible
+exception InvalidUse of string
 open Syntax
 
 

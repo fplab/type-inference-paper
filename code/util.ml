@@ -1,5 +1,4 @@
 open Syntax
-open Dfs
 
 let rec string_of_typ(typ:Typ.t) =
   match typ with
@@ -185,7 +184,7 @@ let solve (ctx: Ctx.t) (e: Exp.t) =
     Printf.printf "%s\n" (string_of_r_results r_results); 
     (*calls to new dfs code *)
     Printf.printf "depth first search simplified results\n";
-    let (u_results, r_results) = Dfs.finalize_results in
+    let (u_results, r_results) = Dfs.finalize_results u_results r_results in
     Printf.printf "%s" (string_of_u_results u_results);
     Printf.printf "%s" (string_of_r_results r_results);
   )
