@@ -329,7 +329,7 @@ and ana (ctx: Ctx.t) (e: Exp.t) (ty: Typ.t): Constraints.t option =
 
 let rec is_in_dom (v: TypeInferenceVar.t) (t: Typ.t) : bool =
   match t with
-    | THole v' -> v' == v 
+    | THole v' -> v' = v 
     | TNum 
     | TBool -> false
     | TArrow (t1, t2) 
@@ -450,7 +450,7 @@ let rec add_unify_result (new_result: TypeInferenceVar.t*Typ.unify_result) (old_
   | [] -> new_result::[]
   | (hd_var, hd_res)::tl -> (
     let (new_var, new_res) = new_result in
-    if hd_var == new_var then (
+    if hd_var = new_var then (
       (hd_var, (combine_results new_res hd_res))::tl
     )
     else (hd_var, hd_res)::(add_unify_result new_result tl)

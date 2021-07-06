@@ -83,14 +83,14 @@ module Typ = struct
         | TArrow (ty1, ty2)
         | TProd (ty1, ty2)
         | TSum (ty1, ty2) -> (contains_var var ty1) || (contains_var var ty2)
-        | THole ty_var -> (ty_var == var)
+        | THole ty_var -> (ty_var = var)
         | _ -> false
     ;;
 
-    let rec contains_typ (typ: t) (check: t): bool =
-        if (typ = check) then true
+    let rec contains_typ (typ: t) (container: t): bool =
+        if (typ = container) then true
         else (
-            match typ with
+            match container with
             | TArrow (ty1, ty2)
             | TProd (ty1, ty2)
             | TSum (ty1, ty2) -> (contains_typ typ ty1 || contains_typ typ ty2)
@@ -114,7 +114,7 @@ module Typ = struct
     let rec in_dom lst typ = 
         match lst with
         | [] -> false
-        | hd::tl -> hd==typ || (in_dom tl typ)
+        | hd::tl -> hd=typ || (in_dom tl typ)
     ;;
     
     let add_to_typ_lst  (typ: t) (ls: t list)  =

@@ -135,7 +135,7 @@ let rec _test (testcases: (Ctx.t * Exp.t) list) (index: int) = (
     Printf.printf "\n";
     solve ctx exp;
     Printf.printf "%s\n" "=============";
-    if (index == 27) then (
+    if (index == 5) then (
       Printf.printf "deb\n"
     )
     else (

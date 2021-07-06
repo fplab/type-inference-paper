@@ -45,7 +45,7 @@ module CycleTrack = struct
 
     let is_tracked (typ: Typ.t) (typs: t): bool =
         let is_typ (scrut: Typ.t): bool =
-            typ == scrut
+            typ = scrut
         in
         List.exists is_typ typs
     ;;
@@ -61,7 +61,7 @@ let rec retrieve_result_for_inf_var (var: TypeInferenceVar.t) (results: Typ.unif
     match results with
     | [] -> None
     | (ty_var, result)::tl -> (
-        if (ty_var == var) then (Some result) else retrieve_result_for_inf_var var tl
+        if (ty_var = var) then (Some result) else retrieve_result_for_inf_var var tl
     )
 ;;
 
@@ -200,7 +200,7 @@ let rec replace_unify_result (new_result: TypeInferenceVar.t * Typ.unify_result)
     | [] -> new_result::[]
     | (hd_var, hd_res)::tl -> (
         let (new_var, new_res) = new_result in
-        if hd_var == new_var then (
+        if hd_var = new_var then (
             (hd_var, new_res)::tl
         )
         else (hd_var, hd_res)::(replace_unify_result new_result tl)
@@ -227,17 +227,20 @@ let rec dfs_typs (root: Typ.t) (u_results: Typ.unify_results) (r_results: Typ.re
     (unseen_results: ResTrack.t): bool * (Typ.t list) * CycleTrack.t * ResTrack.t = 
     let tracked = CycleTrack.track_typ root tracked in
     let unseen_results = ResTrack.remove_typ root unseen_results in
-    match root with
-    | TNum -> (true, [TNum], tracked, unseen_results)
-    | TBool -> (true, [TBool], tracked, unseen_results)
-    | TArrow (ty1, ty2) -> (dfs_typs_of_ctr Typ.mk_arrow ty1 ty2 u_results r_results tracked unseen_results)
-    | TProd (ty1, ty2) -> (dfs_typs_of_ctr Typ.mk_prod ty1 ty2 u_results r_results tracked unseen_results)
-    | TSum (ty1, ty2) -> (dfs_typs_of_ctr Typ.mk_sum ty1 ty2 u_results r_results tracked unseen_results)
-    | THole var -> (
-        match (retrieve_result_for_inf_var var u_results) with
-        | Some unif_res -> (dfs_typs_res unif_res u_results r_results tracked unseen_results)
-        | None -> (true, [], tracked, unseen_results)
-    )
+    let (occ, dfs_all, tracked, unseen_results) = 
+        match root with
+        | TNum -> (true, [], tracked, unseen_results)
+        | TBool -> (true, [], tracked, unseen_results)
+        | TArrow (ty1, ty2) -> (dfs_typs_of_ctr Typ.mk_arrow ty1 ty2 u_results r_results tracked unseen_results)
+        | TProd (ty1, ty2) -> (dfs_typs_of_ctr Typ.mk_prod ty1 ty2 u_results r_results tracked unseen_results)
+        | TSum (ty1, ty2) -> (dfs_typs_of_ctr Typ.mk_sum ty1 ty2 u_results r_results tracked unseen_results)
+        | THole var -> (
+            match (retrieve_result_for_inf_var var u_results) with
+            | Some unif_res -> (dfs_typs_res unif_res u_results r_results tracked unseen_results)
+            | None -> (true, [], tracked, unseen_results)
+        )
+    in
+    (occ, root::dfs_all, tracked, unseen_results)
 and dfs_typs_of_ctr (ctr: Typ.t -> Typ.t -> Typ.t) (ty1: Typ.t) (ty2: Typ.t) (u_results: Typ.unify_results) 
     (r_results: Typ.rec_unify_results) (tracked: CycleTrack.t) (unseen_results: ResTrack.t)
     : bool * (Typ.t list) * CycleTrack.t * ResTrack.t =
@@ -454,7 +457,7 @@ let disambiguate_r (r_result: Typ.t * Typ.unify_result) (unseen_results: ResTrac
     )
 ;;
 
-let disambiguate (u_results: Typ.unify_results) (r_results: Typ.rec_unify_results) (unseen_results: ResTrack.t)
+let disambiguate (old_u_results: Typ.unify_results) (old_r_results: Typ.rec_unify_results) (unseen_results: ResTrack.t)
     : Typ.unify_results * Typ.rec_unify_results =
     let acc_u_res (acc: Typ.unify_results * Typ.rec_unify_results * ResTrack.t) (res: TypeInferenceVar.t * Typ.unify_result)
         : Typ.unify_results * Typ.rec_unify_results * ResTrack.t =
@@ -472,13 +475,90 @@ let disambiguate (u_results: Typ.unify_results) (r_results: Typ.rec_unify_result
         let r_res = List.rev_append upd_r acc_r in
         (u_res, r_res, unseen_results)
     in
-    let (new_u_results, new_r_results, unseen_results) = 
-        List.fold_left acc_u_res ([], [], unseen_results) u_results 
+    let rec over_restrack (new_u: Typ.unify_results) (new_r: Typ.rec_unify_results) (unseen_results: ResTrack.t)
+        : Typ.unify_results * Typ.rec_unify_results * ResTrack.t =
+        match unseen_results with
+        | [] -> (new_u, new_r, [])
+        | hd::_ -> (
+            let (new_u, new_r, unseen_results) =
+                match hd with
+                | TNum
+                | TBool -> raise Impossible
+                | THole var -> (
+                    match (retrieve_result_for_inf_var var old_u_results) with
+                    | Some unif_res -> (acc_u_res (new_u, new_r, unseen_results) (var, unif_res))
+                    | None -> raise Impossible
+                )
+                | _ -> (
+                    match (retrieve_result_for_rec_typ hd old_r_results) with
+                    | Some unif_res -> (acc_r_res (new_u, new_r, unseen_results) (hd, unif_res))
+                    | None -> raise Impossible
+                )
+            in
+            over_restrack new_u new_r unseen_results
+        )
     in
-    let (new_u_results, new_r_results, _) = 
-        List.fold_left acc_r_res (new_u_results, new_r_results, unseen_results) r_results 
-    in
-    (new_u_results, new_r_results)
+    let (new_u, new_r, _) = over_restrack [] [] unseen_results in
+    (new_u, new_r)
+;;
+
+let rec string_of_typ(typ:Typ.t) =
+    match typ with
+    | THole var ->  "THole["^string_of_int(var)^"]"
+    | TNum -> "TNum"
+    | TBool -> "TBool"
+    | TArrow (t1,t2) -> string_of_typ(t1) ^ "->"^ string_of_typ(t2)
+    | TSum (t1,t2) -> string_of_typ(t1) ^ "+"^ string_of_typ(t2)
+    | TProd (t1,t2) -> string_of_typ(t1) ^ "*"^ string_of_typ(t2)
+;;
+
+let rec string_of_typ_ls(typ_ls:Typ.t list) =
+    match typ_ls with
+    | [] -> " "
+    | hd::tl -> 
+        (string_of_typ hd)^ ", " ^ (string_of_typ_ls tl);
+;;
+
+let rec string_of_u_results(results: Typ.unify_results) =
+    match results with
+    | [] -> "\n"
+    | hd::tl -> (
+        let (var,typ) = hd in
+        (
+        match typ with 
+        | Solved typ' -> ("solved: (" ^ string_of_int(var) ^ ") ("^ string_of_typ(typ') ^ ")\n");
+        | Ambiguous (typ_op, typ_ls) -> (
+            match typ_op with
+            | Some typ -> 
+            ("ambiguous: (" ^ string_of_int(var) ^ ") (" ^ string_of_typ(typ) ^ "; "
+                ^ string_of_typ_ls(typ_ls) ^ ")\n");
+            | None -> ("ambiguous: (" ^ string_of_int(var) ^ ") (None; "^ string_of_typ_ls(typ_ls) ^ ")\n");
+        )
+        | UnSolved typ_ls -> 
+            ("unsolved: (" ^ string_of_int(var) ^ ") ("^ string_of_typ_ls(typ_ls) ^ ")\n");
+        ) ^ string_of_u_results(tl);
+    )
+;;
+
+let rec string_of_r_results(results: Typ.rec_unify_results) =
+    match results with
+    | [] -> "\n"
+    | hd::tl -> (
+        let (typ,res) = hd in
+        (
+        match res with 
+        | Solved res' -> ("solved: (" ^ string_of_typ(typ) ^ ") ("^ string_of_typ(res') ^ ")\n");
+        | Ambiguous (res_op, res_ls) -> (
+            match res_op with
+            | Some res' -> 
+            ("ambiguous: (" ^ string_of_typ(typ) ^ ") (" ^ 
+                string_of_typ(res') ^ "; " ^ string_of_typ_ls(res_ls) ^ ")\n");
+            | None -> ("ambiguous: (" ^ string_of_typ(typ) ^ ") (None; "^ string_of_typ_ls(res_ls) ^ ")\n");
+        )
+        | UnSolved res_ls -> 
+            ("unsolved: (" ^ string_of_typ(typ) ^ ") ("^ string_of_typ_ls(res_ls) ^ ")\n");
+        ) ^ string_of_r_results(tl);
+    )
 ;;
 
 let rec fix_tracked_results (results_to_fix: ResTrack.t) (u_results: Typ.unify_results) (r_results: Typ.rec_unify_results)
@@ -486,11 +566,15 @@ let rec fix_tracked_results (results_to_fix: ResTrack.t) (u_results: Typ.unify_r
     match results_to_fix with
     | [] -> results_to_fix, u_results, r_results
     | hd::_ -> (
+        Printf.printf "%s\n" ("fix track results on " ^ (string_of_typ hd));
         let (occ, dfs_tys, _, results_to_fix) = dfs_typs hd u_results r_results CycleTrack.empty results_to_fix in
         let cycle_res = 
-            if (occ) then (Typ.UnSolved dfs_tys) else condense dfs_tys 
+            if (occ) then (condense dfs_tys) else (Typ.UnSolved dfs_tys)
         in
+        Printf.printf "%s\n" (string_of_typ_ls dfs_tys);
         let (u_results, r_results, _) = resolve hd cycle_res u_results r_results CycleTrack.empty in
+        Printf.printf "%s" (string_of_u_results u_results);
+        Printf.printf "%s" (string_of_r_results r_results);
         fix_tracked_results results_to_fix u_results r_results
     )
 ;;
