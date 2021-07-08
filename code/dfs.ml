@@ -291,11 +291,11 @@ let rec dfs_typs (root: Typ.t) (u_results: Typ.unify_results) (r_results: Typ.re
 and dfs_typs_of_ctr (ctr: Typ.t -> Typ.t -> Typ.t) (ty1: Typ.t) (ty2: Typ.t) (u_results: Typ.unify_results) 
     (r_results: Typ.rec_unify_results) (tracked: CycleTrack.t) (unseen_results: ResTrack.t)
     : bool * (Typ.t list) * CycleTrack.t * ResTrack.t =
-    let (occ1, ty1_ls, _, unseen_results) = 
-        dfs_typs ty1 u_results r_results CycleTrack.empty unseen_results 
+    let (occ1, ty1_ls, _, _) = 
+        dfs_typs ty1 u_results r_results CycleTrack.empty [] 
     in
-    let (occ2, ty2_ls, _, unseen_results) = 
-        dfs_typs ty2 u_results r_results CycleTrack.empty unseen_results 
+    let (occ2, ty2_ls, _, _) = 
+        dfs_typs ty2 u_results r_results CycleTrack.empty [] 
     in
     let rec_tys = fuse_lists ctr ty1_ls ty2_ls in
     let (dfs_occ, dfs_tys, tracked, unseen_results) = 
@@ -631,12 +631,12 @@ let rec fix_tracked_results (results_to_fix: ResTrack.t) (u_results: Typ.unify_r
     match results_to_fix with
     | [] -> results_to_fix, u_results, r_results
     | hd::_ -> (
-        (*Printf.printf "%s\n" ("fix track results on " ^ (string_of_typ hd));*)
+        Printf.printf "%s\n" ("fix track results on " ^ (string_of_typ hd));
         let (occ, dfs_tys, _, results_to_fix) = dfs_typs hd u_results r_results CycleTrack.empty results_to_fix in
         let cycle_res = 
             if (occ) then (condense dfs_tys) else (Typ.UnSolved dfs_tys)
         in
-        (*Printf.printf "%s\n" (string_of_typ_ls dfs_tys);*)
+        Printf.printf "%s\n" (string_of_typ_ls dfs_tys);
         let (u_results, r_results, _) = resolve hd cycle_res u_results r_results CycleTrack.empty in
         (*Printf.printf "%s" (string_of_u_results u_results);
         Printf.printf "%s" (string_of_r_results r_results);*)
