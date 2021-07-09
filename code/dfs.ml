@@ -114,6 +114,55 @@ let rec string_of_r_results(results: Typ.rec_unify_results) =
     )
 ;;
 
+(* Appends the item to the list only if the item is unequal with all items in the list *)
+let cat_if_unequal_for_all (target_list: Typ.t list) (item: Typ.t)
+    : Typ.t list =
+    let is_eq (elt: Typ.t): bool = (elt = item) in
+    if (List.exists is_eq target_list) then (
+        target_list
+    ) else (
+        item::target_list
+    )
+;;
+
+(* Combines a pair of lists by adding elements from l2 only if they are unequal with those currently added/in l1 *)
+let smallest_unequal_pair (l1: Typ.t list) (l2: Typ.t list)
+    : Typ.t list =
+    List.fold_left cat_if_unequal_for_all l1 l2
+;;
+
+let rec remove_ids (ty: Typ.t): Typ.t =
+    match ty with
+    | TNum -> TNum
+    | TBool -> TBool
+    | THole _ -> THole 0
+    | TArrow (ty1, ty2) -> TArrow ((remove_ids ty1), (remove_ids ty2))
+    | TProd (ty1, ty2) -> TProd ((remove_ids ty1), (remove_ids ty2))
+    | TSum (ty1, ty2) -> TSum ((remove_ids ty1), (remove_ids ty2))
+;;
+
+let struc_eq_ignoring_ids (ty1: Typ.t) (ty2: Typ.t): bool =
+    let ty1 = remove_ids ty1 in
+    let ty2 = remove_ids ty2 in
+    ty1 = ty2
+;;
+
+let disamb_cat (target_list: Typ.t list) (item: Typ.t): Typ.t list =
+    let is_eq' (elt: Typ.t): bool = 
+        struc_eq_ignoring_ids item elt
+    in
+    if (List.exists is_eq' target_list) then (
+        target_list
+    ) else (
+        item::target_list
+    )
+;;
+
+let disamb_smallest_pair (l1: Typ.t list) (l2: Typ.t list)
+    : Typ.t list =
+    List.fold_left disamb_cat l1 l2
+;;
+
 (* retrieve's an inference variables associated solution in the results list (if present) *)
 let rec retrieve_result_for_inf_var (var: TypeInferenceVar.t) (results: Typ.unify_results)
     : Typ.unify_result option =
@@ -151,12 +200,6 @@ let rec is_fully_literal (typ: Typ.t): bool =
     | TArrow (ty1, ty2)
     | TProd (ty1, ty2)
     | TSum (ty1, ty2) -> is_fully_literal ty1 && is_fully_literal ty2
-;;  
-
-let rec find_literal (typs: Typ.t list): Typ.t option = 
-    match typs with
-    | [] -> None
-    | hd::tl -> if (is_fully_literal hd) then (Some hd) else (find_literal tl)
 ;;
 
 let condense (typs: Typ.t list): Typ.unify_result =
@@ -552,78 +595,6 @@ and resolve_res (solution: Typ.unify_result) (u_results: Typ.unify_results) (r_r
     )
 ;;
 
-(* Appends the item to the list only if the item is unequal with all items in the list *)
-let cat_if_unequal_for_all (target_list: Typ.t list) (item: Typ.t)
-    : Typ.t list =
-    let is_eq (elt: Typ.t): bool = (elt = item) in
-    if (List.exists is_eq target_list) then (
-        target_list
-    ) else (
-        item::target_list
-    )
-;;
-
-let rec struc_eq_ignoring_ids (ty1: Typ.t) (ty2: Typ.t): bool =
-    match ty1 with
-    | TNum
-    | TBool -> ty1 = ty2
-    | THole _ -> (
-        match ty2 with
-        | THole _ -> true
-        | _ -> false
-    )
-    | TArrow (ty1, ty2) -> (
-        match ty2 with
-        | TArrow (ty1', ty2') -> 
-            (struc_eq_ignoring_ids ty1 ty1') && (struc_eq_ignoring_ids ty2 ty2')
-        | _ -> false
-    )
-    | TProd (ty1, ty2) -> (
-        match ty2 with
-        | TProd (ty1', ty2') -> 
-            (struc_eq_ignoring_ids ty1 ty1') && (struc_eq_ignoring_ids ty2 ty2')
-        | _ -> false
-    )
-    | TSum (ty1, ty2) -> (
-        match ty2 with
-        | TSum (ty1', ty2') -> 
-            (struc_eq_ignoring_ids ty1 ty1') && (struc_eq_ignoring_ids ty2 ty2')
-        | _ -> false
-    )
-;;
-
-let disamb_cat (target_list: Typ.t list) (item: Typ.t): Typ.t list =
-    let is_eq' (elt: Typ.t): bool = 
-        struc_eq_ignoring_ids elt item
-    in
-    if (List.exists is_eq' target_list) then (
-        target_list
-    ) else (
-        item::target_list
-    )
-;;
-
-let disamb_smallest_pair (l1: Typ.t list) (l2: Typ.t list)
-    : Typ.t list =
-    List.fold_left disamb_cat l1 l2
-;;
-
-(* Combines a pair of lists by adding elements from l2 only if they are unequal with those currently added/in l1 *)
-let smallest_unequal_pair (l1: Typ.t list) (l2: Typ.t list)
-    : Typ.t list =
-    List.fold_left cat_if_unequal_for_all l1 l2
-;;
-
-(* A generalized version of above that simply concatenates the tail of a list set to be used in pair *)
-let smallest_unequal_set (list_set: (Typ.t list) list)
-    : Typ.t list =
-    match list_set with
-    | [] -> []
-    | hd::tl -> 
-        let tl = List.fold_left (@) [] tl in
-        smallest_unequal_pair hd tl
-;;
-
 (*converts all ambiguous statuses to a fully simplified non ambiguous solution status *)
 let disambiguate_u (u_result: TypeInferenceVar.t * Typ.unify_result) (unseen_results: ResTrack.t)
     (old_r_results: Typ.rec_unify_results)
@@ -649,18 +620,22 @@ let disambiguate_u (u_result: TypeInferenceVar.t * Typ.unify_result) (unseen_res
         let add_res_and_track (acc: Typ.unify_results * Typ.rec_unify_results * ResTrack.t) (child: Typ.t)
             : Typ.unify_results * Typ.rec_unify_results * ResTrack.t =
             let acc_ls_u, acc_ls_r, unseen_results = acc in
-            let unseen_results = ResTrack.remove_typ child unseen_results in
-            match child with
-            | TNum
-            | TBool -> acc
-            | THole var -> ((var, res')::acc_ls_u, acc_ls_r, unseen_results)
-            | TArrow _
-            | TProd _
-            | TSum _ -> (
-                match (retrieve_result_for_rec_typ child old_r_results) with
-                | Some _ -> (acc_ls_u, (child, res')::acc_ls_r, unseen_results)
-                | _ -> acc
+            match (List.find_opt (fun elt -> (elt = child)) unseen_results) with
+            | Some _ -> (
+                let unseen_results = ResTrack.remove_typ child unseen_results in
+                match child with
+                | TNum
+                | TBool -> acc
+                | THole var -> ((var, res')::acc_ls_u, acc_ls_r, unseen_results)
+                | TArrow _
+                | TProd _
+                | TSum _ -> (
+                    match (retrieve_result_for_rec_typ child old_r_results) with
+                    | Some _ -> (acc_ls_u, (child, res')::acc_ls_r, unseen_results)
+                    | _ -> acc
+                )
             )
+            | None -> acc
         in
         List.fold_left add_res_and_track ([], [], unseen_results) ((Typ.THole id)::children)
     )
@@ -690,18 +665,22 @@ let disambiguate_r (r_result: Typ.t * Typ.unify_result) (unseen_results: ResTrac
         let add_res_and_track (acc: Typ.unify_results * Typ.rec_unify_results * ResTrack.t) (child: Typ.t)
             : Typ.unify_results * Typ.rec_unify_results * ResTrack.t =
             let acc_ls_u, acc_ls_r, unseen_results = acc in
-            let unseen_results = ResTrack.remove_typ child unseen_results in
-            match child with
-            | TNum
-            | TBool -> acc
-            | THole var -> ((var, res')::acc_ls_u, acc_ls_r, unseen_results)
-            | TArrow _
-            | TProd _
-            | TSum _ -> (
-                match (retrieve_result_for_rec_typ child old_r_results) with
-                | Some _ -> (acc_ls_u, (child, res')::acc_ls_r, unseen_results)
-                | _ -> acc
+            match (List.find_opt (fun elt -> (elt = child)) unseen_results) with
+            | Some _ -> (
+                let unseen_results = ResTrack.remove_typ child unseen_results in
+                match child with
+                | TNum
+                | TBool -> acc
+                | THole var -> ((var, res')::acc_ls_u, acc_ls_r, unseen_results)
+                | TArrow _
+                | TProd _
+                | TSum _ -> (
+                    match (retrieve_result_for_rec_typ child old_r_results) with
+                    | Some _ -> (acc_ls_u, (child, res')::acc_ls_r, unseen_results)
+                    | _ -> acc
+                )
             )
+            | None -> acc
         in
         List.fold_left add_res_and_track ([], [], unseen_results) (r_typ::children)
     )
@@ -772,5 +751,36 @@ let finalize_results (u_results: Typ.unify_results) (r_results: Typ.rec_unify_re
     let (_, u_results, r_results) = 
         fix_tracked_results results_to_fix u_results r_results
     in
-    disambiguate u_results r_results results_to_fix
+    let comp_u_res (res1: TypeInferenceVar.t * Typ.unify_result) (res2: TypeInferenceVar.t * Typ.unify_result)
+        : int =
+        let (var1, _) = res1 in
+        let (var2, _) = res2 in
+        Stdlib.compare var1 var2
+    in
+    let rec extract_leftmost (typ: Typ.t): int =
+        match typ with
+        | TNum
+        | TBool -> -1
+        | THole var -> var
+        | TArrow (ty1, ty2)
+        | TProd (ty1, ty2)
+        | TSum (ty1, ty2) -> (
+            let lhs = extract_leftmost ty1 in
+            let rhs = extract_leftmost ty2 in
+            match (lhs, rhs) with
+            | (-1, -1) -> -1
+            | (-1, _) -> rhs
+            | _ -> lhs
+        )
+    in
+    let comp_r_res (res1: Typ.t * Typ.unify_result) (res2: Typ.t * Typ.unify_result)
+        : int =
+        let (ty1, _) = res1 in
+        let (ty2, _) = res2 in
+        let id1 = extract_leftmost ty1 in
+        let id2 = extract_leftmost ty2 in
+        Stdlib.compare id1 id2
+    in
+    let (u_results, r_results) = disambiguate u_results r_results results_to_fix in
+    (List.fast_sort comp_u_res u_results), (List.fast_sort comp_r_res r_results)
 ;; 
