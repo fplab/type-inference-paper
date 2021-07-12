@@ -314,7 +314,9 @@ let fuse_lists (ctr: Typ.t -> Typ.t -> Typ.t) (ty1_ls: Typ.t list) (ty2_ls: Typ.
     List.fold_left acc_mk_ctr_types [] ty1_ls
 ;;
 
-let find_upper_bound (typs: Typ.t list): Typ.t option =
+(*select the longest value with the most literals that most different to self
+    order of imp: lit num, longest, diff to self; could proceed lexicographically with this ordering *)
+let find_representative (typs: Typ.t list): Typ.t option =
     let rec count_lits (typ: Typ.t): int =
         match typ with
         | TNum
@@ -324,21 +326,44 @@ let find_upper_bound (typs: Typ.t list): Typ.t option =
         | TProd (ty1, ty2)
         | TSum (ty1, ty2) -> (count_lits ty1) + (count_lits ty2)
     in
-    let acc_max_lit (acc: int * Typ.t) (typ: Typ.t): int * Typ.t =
-        let (acc_max, _) = acc in
-        let typ_count = count_lits typ in
+    let acc_max (find_value: Typ.t -> int) (acc: int * (Typ.t list)) (typ: Typ.t)
+        : int * (Typ.t list) =
+        let (acc_max, acc_ls) = acc in
+        let typ_count = find_value typ in
         if (typ_count > acc_max) then (
-            (typ_count, typ)
+            (typ_count, typ::[])
         ) else (
-            acc
+            if (typ_count = acc_max) then (
+                (acc_max, typ::acc_ls)
+            ) else (
+                acc
+            )
         )
     in
     match typs with
     | [] -> None
     | hd::tl -> (
-        let acc = ((count_lits hd), hd) in
-        let (_, out_ty) = (List.fold_left acc_max_lit acc tl) in
-        Some out_ty
+        let acc = ((count_lits hd), [hd]) in
+        let (_, out_tys) = List.fold_left (acc_max count_lits) acc tl in
+        match out_tys with
+        | [] -> raise Impossible
+        | hd::[] -> Some hd
+        | hd::tl -> (
+            let rec typ_len (typ: Typ.t): int =
+                match typ with
+                | TNum
+                | TBool
+                | THole _ -> 1
+                | TArrow (ty1, ty2)
+                | TProd (ty1, ty2)
+                | TSum (ty1, ty2) -> (typ_len ty1) + (typ_len ty2)
+            in
+            let acc = ((typ_len hd), [hd]) in
+            let (_, out_tys) = List.fold_left (acc_max typ_len) acc tl in
+            match out_tys with
+            | [] -> raise Impossible
+            | hd::_ -> Some hd
+        )
     )
 ;;
 
@@ -610,7 +635,7 @@ let disambiguate_u (u_result: TypeInferenceVar.t * Typ.unify_result) (unseen_res
                 match ty_op with
                 | Some ty -> (Typ.Solved ty)
                 | None -> (
-                    match (find_upper_bound children) with
+                    match (find_representative children) with
                     | Some ub -> Typ.Solved ub
                     | None -> Typ.Solved (Typ.THole id)
                 )
@@ -655,7 +680,7 @@ let disambiguate_r (r_result: Typ.t * Typ.unify_result) (unseen_results: ResTrac
                 match ty_op with
                 | Some ty -> (Typ.Solved ty)
                 | None -> (
-                    match (find_upper_bound children) with
+                    match (find_representative children) with
                     | Some ub -> Typ.Solved ub
                     | None -> Typ.Solved r_typ
                 )

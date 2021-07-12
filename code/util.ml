@@ -177,27 +177,13 @@ let solve (ctx: Ctx.t) (e: Exp.t) =
     Printf.printf "\n+ constraints:\n";
     print_cons cons;
     Printf.printf "\n+ unify results: (<hole_id>) (<type>)\n";
-    (* let var_ls = TypeInferenceVar.group_create !Typ.type_variable in
-    Printf.printf "\n@@@variable@@@: %s\n" (string_of_int !Typ.type_variable); *)
     let (_, u_results, r_results) = Impl.unify cons in 
-    Printf.printf "%s\n" (string_of_u_results u_results); 
-    Printf.printf "%s\n" (string_of_r_results r_results); 
+    Printf.printf "%s" (string_of_u_results u_results); 
+    Printf.printf "%s" (string_of_r_results r_results); 
     (*calls to new dfs code *)
     Printf.printf "depth first search simplified results\n";
     let (u_results, r_results) = Dfs.finalize_results u_results r_results in
     Printf.printf "%s" (string_of_u_results u_results);
     Printf.printf "%s" (string_of_r_results r_results);
   )
-    (*
-    (*calls to new topsort code *)
-    Printf.printf "topologically simplified unify results:\n";
-    let (results, cycles) = Sort.top_sort_and_sub results in
-    Printf.printf "\nresults\n";
-    Printf.printf "%s" (string_of_results results);
-    Printf.printf "independent cycles found\n";
-    print_cycles cycles
-(*       let new_typ = Impl.apply subs typ in
-      Printf.printf "+ final result of infer typ:\n %s\n" (string_of_typ new_typ); *)
-    
-  *)
 ;;
