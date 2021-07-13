@@ -142,6 +142,20 @@ let testcases: (Ctx.t * Exp.t) list = [
       ))
     ))
   );
+
+  ([],
+  parse "let f:Hole[0] be fun (x:Hole[1]) -> (fun (y:Hole[2]) -> x y 2) in (f (|7|) (|8|))");
+  ([],
+  parse "let f:Hole[0] be fun (x:Hole[1]) -> (fun (y:Hole[2]) -> x y 2) in (f (fun z -> z + 2) (|8|))");
+  ([],
+  parse "let f:Hole[0] be fun (x:Hole[1]) -> (fun (y:Hole[2]) -> x y 2) in (f (|7|) (fun z -> z + 2))");
+  ([("g", (TArrow(TNum, TNum)));],
+  parse "let f:Hole[0] be fun (x:Hole[1]) -> (fun (y:Hole[2]) -> x y 2) in (f (fun z -> z z) (g))");
+  ([],
+  parse "let f:Hole[0] be fun (x:Hole[1]) -> (fun (y:Hole[2]) -> x y 2) in (f (fun z -> z z) (fun i -> (i+2)))");
+  ([],
+  parse "let f:Hole[0] be fun (x:Hole[1]) -> (fun (y:Hole[2]) -> x y 2) in (f (fun z -> z) (fun z -> z + 2))");
+  
 ]
 ;;
 
@@ -158,10 +172,9 @@ let rec _test (testcases: (Ctx.t * Exp.t) list) (index: int) = (
     Printf.printf "\n";
     solve ctx exp;
     Printf.printf "%s\n" "=============";
-    if (index == 5) then (
-      Printf.printf "deb\n"
-    )
-    else (
+    if (index = 47) then (
+      ()
+    ) else (
       ()
     );
     _test tl (index+1);

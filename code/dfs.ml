@@ -147,7 +147,7 @@ let struc_eq_ignoring_ids (ty1: Typ.t) (ty2: Typ.t): bool =
     ty1 = ty2
 ;;
 
-let disamb_cat (target_list: Typ.t list) (item: Typ.t): Typ.t list =
+let cat_if_unequal_no_id_all (target_list: Typ.t list) (item: Typ.t): Typ.t list =
     let is_eq' (elt: Typ.t): bool = 
         struc_eq_ignoring_ids item elt
     in
@@ -158,9 +158,9 @@ let disamb_cat (target_list: Typ.t list) (item: Typ.t): Typ.t list =
     )
 ;;
 
-let disamb_smallest_pair (l1: Typ.t list) (l2: Typ.t list)
+let smallest_unequal_no_id_pair (l1: Typ.t list) (l2: Typ.t list)
     : Typ.t list =
-    List.fold_left disamb_cat l1 l2
+    List.fold_left cat_if_unequal_no_id_all l1 l2
 ;;
 
 (* retrieve's an inference variables associated solution in the results list (if present) *)
@@ -447,6 +447,20 @@ let link_to_res (ty: Typ.t) (res: Typ.unify_result) (u_results: Typ.unify_result
     List.fold_left (add_by_form (condense [ty])) (u_results, r_results) tys
 ;;
 
+let dfs_cat (u_results: Typ.unify_results) (r_results: Typ.rec_unify_results) (curr_ls: Typ.t list)
+    (item: Typ.t): Typ.t list =
+    let retrieval =
+        match item with
+        | TNum
+        | TBool -> None
+        | THole var -> (retrieve_result_for_inf_var var u_results)
+        | _ -> (retrieve_result_for_rec_typ item r_results)
+    in
+    match retrieval with
+    | Some _ -> cat_if_unequal_for_all curr_ls item
+    | None -> cat_if_unequal_no_id_all curr_ls item
+;;
+
 (*a method that dfs's on a type to accumulate all known types it is cyclic with. returns a boolean denoting
 if an occurs check was failed due to the results and a list of all types *)
 let rec dfs_typs (root: Typ.t) (u_results: Typ.unify_results) (r_results: Typ.rec_unify_results) (tracked: CycleTrack.t)
@@ -476,7 +490,7 @@ let rec dfs_typs (root: Typ.t) (u_results: Typ.unify_results) (r_results: Typ.re
             | None -> (true, [], tracked, unseen_results)
         )
     in
-    (occ, root::dfs_all, tracked, unseen_results)
+    (occ, (dfs_cat u_results r_results dfs_all root), tracked, unseen_results)
 and dfs_typs_of_ctr (ctr: Typ.t -> Typ.t -> Typ.t) (ty1: Typ.t) (ty2: Typ.t) (u_results: Typ.unify_results) 
     (r_results: Typ.rec_unify_results) (tracked: CycleTrack.t) (unseen_results: ResTrack.t)
     : bool * (Typ.t list) * CycleTrack.t * ResTrack.t =
@@ -500,7 +514,10 @@ and dfs_typs_of_ctr (ctr: Typ.t -> Typ.t -> Typ.t) (ty1: Typ.t) (ty2: Typ.t) (u_
         | Some unif_res -> dfs_typs_res unif_res u_results r_results tracked unseen_results true
         | None -> (true, [], tracked, unseen_results)
     in
-    (occ1 && occ2 && dfs_occ, (List.rev_append rec_tys dfs_tys), tracked, unseen_results)
+    let final_tys =
+        List.fold_left (dfs_cat u_results r_results) dfs_tys rec_tys
+    in
+    (occ1 && occ2 && dfs_occ, final_tys, tracked, unseen_results)
 and dfs_typs_res (unif_res: Typ.unify_result) (u_results: Typ.unify_results) (r_results: Typ.rec_unify_results) 
     (tracked: CycleTrack.t) (unseen_results: ResTrack.t) (ctr_exp: bool)
     : bool * (Typ.t list) * CycleTrack.t * ResTrack.t =
@@ -508,11 +525,6 @@ and dfs_typs_res (unif_res: Typ.unify_result) (u_results: Typ.unify_results) (r_
     | Solved ty -> (true, [ty], tracked, unseen_results)
     | Ambiguous (_, ty_ls)
     | UnSolved ty_ls -> (
-        let new_hd = 
-            match unif_res with
-            | Ambiguous ((Some ty), _) -> [ty]
-            | _ -> []
-        in
         let in_domain_and_unequal (list_elt: Typ.t) (tracked_elt: Typ.t): bool =
             (tracked_elt <> list_elt) && (Typ.contains_typ tracked_elt list_elt)
         in
@@ -530,8 +542,11 @@ and dfs_typs_res (unif_res: Typ.unify_result) (u_results: Typ.unify_results) (r_
                     let (occ_all, dfs_all, tracked, unseen_results) = 
                         dfs_typs list_elt u_results r_results tracked unseen_results ctr_exp
                     in
+                    let final_tys =
+                        List.fold_left (dfs_cat u_results r_results) acc_typs dfs_all
+                    in
                     (acc_b && occ_all, 
-                    (List.rev_append dfs_all acc_typs),
+                    final_tys,
                     tracked,
                     unseen_results)
                 )
@@ -540,7 +555,12 @@ and dfs_typs_res (unif_res: Typ.unify_result) (u_results: Typ.unify_results) (r_
         let (status, dfs_out, tracked, unseen_results) = 
             List.fold_left traverse_if_valid (true, [], tracked, unseen_results) ty_ls
         in
-        (status, new_hd @ dfs_out, tracked, unseen_results)
+        let final_ls = 
+            match unif_res with
+            | Ambiguous ((Some ty), _) -> dfs_cat u_results r_results dfs_out ty
+            | _ -> dfs_out
+        in
+        (status, final_ls, tracked, unseen_results)
     )
 ;;
 
@@ -640,7 +660,7 @@ let disambiguate_u (u_result: TypeInferenceVar.t * Typ.unify_result) (unseen_res
                     | None -> Typ.Solved (Typ.THole id)
                 )
             )
-            | _ -> (Typ.UnSolved (disamb_smallest_pair [] (List.filter contains_literal children)))
+            | _ -> (Typ.UnSolved (smallest_unequal_no_id_pair [] (List.filter contains_literal children)))
         in
         let add_res_and_track (acc: Typ.unify_results * Typ.rec_unify_results * ResTrack.t) (child: Typ.t)
             : Typ.unify_results * Typ.rec_unify_results * ResTrack.t =
@@ -685,7 +705,7 @@ let disambiguate_r (r_result: Typ.t * Typ.unify_result) (unseen_results: ResTrac
                     | None -> Typ.Solved r_typ
                 )
             )   
-            | _ -> (Typ.UnSolved (disamb_smallest_pair [] (List.filter contains_literal children)))
+            | _ -> (Typ.UnSolved (smallest_unequal_no_id_pair [] (List.filter contains_literal children)))
         in
         let add_res_and_track (acc: Typ.unify_results * Typ.rec_unify_results * ResTrack.t) (child: Typ.t)
             : Typ.unify_results * Typ.rec_unify_results * ResTrack.t =
@@ -765,8 +785,6 @@ let rec fix_tracked_results (results_to_fix: ResTrack.t) (u_results: Typ.unify_r
         let cycle_res = 
             if (occ) then (condense dfs_tys) else (Typ.UnSolved dfs_tys)
         in
-        (*Printf.printf "debug\n";
-        Printf.printf "%s\n" (string_of_typ_ls dfs_tys);*)
         let (u_results, r_results, _) = resolve hd cycle_res u_results r_results CycleTrack.empty in
         fix_tracked_results results_to_fix u_results r_results
     )
