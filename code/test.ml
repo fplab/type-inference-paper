@@ -119,6 +119,29 @@ let testcases: (Ctx.t * Exp.t) list = [
 
   ([("o", THole 0);], unsolved_node_o);
   ([("g", TArrow((THole 9), (THole 9))); ("o", THole 0);], (EBinOp((EVar "g"), OpAp, unsolved_node_o)));
+
+  (*new dfs tests 
+  the dfs aspect seems to work perfectly well and whatnot
+  ideas:
+    - unsolved due to inconsistent structure as informed to recursive types from children
+      *)
+  ([("x", THole 0); ("y", THole 3); ("f", TArrow(TNum, TNum));],
+    (ELet ("z", None, (EBinOp ((EVar "y"), OpAp, (EEmptyHole 7))), 
+      (EPair (
+        (EBinOp ((EVar "x"), OpAp, (EEmptyHole 6))),
+        (EPair (
+          (EIf ((EBoolLiteral true), (EVar "z"), (EVar "x"))),
+          (EPair (
+            (EIf ((EBoolLiteral true), (EVar "x"), (EVar "f"))), 
+            (EPair (
+              (EIf ((EVar "z"), (EVar "z"), (EEmptyHole 10))), 
+              (EBinOp((EEmptyHole 19), OpAp, (EVar "x")))
+            ))
+          ))
+        ))
+      ))
+    ))
+  );
 ]
 ;;
 

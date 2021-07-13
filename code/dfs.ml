@@ -765,6 +765,8 @@ let rec fix_tracked_results (results_to_fix: ResTrack.t) (u_results: Typ.unify_r
         let cycle_res = 
             if (occ) then (condense dfs_tys) else (Typ.UnSolved dfs_tys)
         in
+        (*Printf.printf "debug\n";
+        Printf.printf "%s\n" (string_of_typ_ls dfs_tys);*)
         let (u_results, r_results, _) = resolve hd cycle_res u_results r_results CycleTrack.empty in
         fix_tracked_results results_to_fix u_results r_results
     )
