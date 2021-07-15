@@ -447,13 +447,50 @@ let link_to_res (ty: Typ.t) (res: Typ.unify_result) (u_results: Typ.unify_result
     List.fold_left (add_by_form (condense [ty])) (u_results, r_results) tys
 ;;
 
-let dfs_cat (u_results: Typ.unify_results) (r_results: Typ.rec_unify_results) (curr_ls: Typ.t list)
+let add_all_refs_as_results (u_results: Typ.unify_results) (r_results: Typ.rec_unify_results)
+    : Typ.unify_results * Typ.rec_unify_results =
+    (*extends u results to include all holes contained within r results
+    logic: if in an r result, it technically is truly used as a hole with some potential result
+            and needs to be able to be referenced.
+    why all r_results in u_results need not have results: they already will; r results are only added
+            in concert with a link to a u_result. but an equivalence to an r result can be generated
+            without adding the types contained in the r result*)
+    (*accumulates all referenced holes in the recursive types *)
+    let rec acc_rec_holes (acc: TypeInferenceVar.t list) (typ: Typ.t): TypeInferenceVar.t list =
+        match typ with
+        | TNum
+        | TBool -> acc
+        | THole var -> var::acc
+        | TArrow (ty1, ty2)
+        | TProd (ty1, ty2)
+        | TSum (ty1, ty2) ->  (
+            let acc = acc_rec_holes acc ty1 in
+            acc_rec_holes acc ty2
+        )
+    in
+    (*converts the list of unify results to recursive types*)
+    let r_res_to_typ (acc: Typ.t list) (res: Typ.t * Typ.unify_result): Typ.t list =
+        let (r_typ, _) = res in
+        r_typ::acc
+    in
+    let r_typs = List.fold_left r_res_to_typ [] r_results in
+    let var_ls = List.fold_left acc_rec_holes [] r_typs in
+    let extend_u_results (acc: Typ.unify_results) (var: TypeInferenceVar.t): Typ.unify_results =
+        Impl.add_unify_result (var, (Typ.Ambiguous (None, [(Typ.THole var)]))) acc
+    in
+    (List.fold_left extend_u_results u_results var_ls), r_results
+;;
+
+let dfs_cat (r_results: Typ.rec_unify_results) (curr_ls: Typ.t list)
     (item: Typ.t): Typ.t list =
     let retrieval =
         match item with
         | TNum
         | TBool -> None
-        | THole var -> (retrieve_result_for_inf_var var u_results)
+        | THole _ -> (
+            let placeholder = Typ.UnSolved [] in
+            Some placeholder
+        )
         | _ -> (retrieve_result_for_rec_typ item r_results)
     in
     match retrieval with
@@ -490,7 +527,9 @@ let rec dfs_typs (root: Typ.t) (u_results: Typ.unify_results) (r_results: Typ.re
             | None -> (true, [], tracked, unseen_results)
         )
     in
-    (occ, (dfs_cat u_results r_results dfs_all root), tracked, unseen_results)
+    (*Printf.printf "DEBUG:\n";
+    Printf.printf "%s\n" ((string_of_typ root) ^ " {:} " ^ (string_of_typ_ls dfs_all));*)
+    (occ, (dfs_cat r_results dfs_all root), tracked, unseen_results)
 and dfs_typs_of_ctr (ctr: Typ.t -> Typ.t -> Typ.t) (ty1: Typ.t) (ty2: Typ.t) (u_results: Typ.unify_results) 
     (r_results: Typ.rec_unify_results) (tracked: CycleTrack.t) (unseen_results: ResTrack.t)
     : bool * (Typ.t list) * CycleTrack.t * ResTrack.t =
@@ -515,8 +554,13 @@ and dfs_typs_of_ctr (ctr: Typ.t -> Typ.t -> Typ.t) (ty1: Typ.t) (ty2: Typ.t) (u_
         | None -> (true, [], tracked, unseen_results)
     in
     let final_tys =
-        List.fold_left (dfs_cat u_results r_results) dfs_tys rec_tys
+        List.fold_left (dfs_cat r_results) dfs_tys rec_tys
     in
+    (*a fix; make it so that you split again and relink after dfsing your result so that your children can access it
+    in the future
+    do NOT mark children as explored *)
+    (*Printf.printf "DEBUG:\n";
+    Printf.printf "%s\n" ((string_of_typ (ctr ty1 ty2)) ^ " {:} "^ (string_of_typ_ls final_tys));*)
     (occ1 && occ2 && dfs_occ, final_tys, tracked, unseen_results)
 and dfs_typs_res (unif_res: Typ.unify_result) (u_results: Typ.unify_results) (r_results: Typ.rec_unify_results) 
     (tracked: CycleTrack.t) (unseen_results: ResTrack.t) (ctr_exp: bool)
@@ -543,7 +587,7 @@ and dfs_typs_res (unif_res: Typ.unify_result) (u_results: Typ.unify_results) (r_
                         dfs_typs list_elt u_results r_results tracked unseen_results ctr_exp
                     in
                     let final_tys =
-                        List.fold_left (dfs_cat u_results r_results) acc_typs dfs_all
+                        List.fold_left (dfs_cat r_results) acc_typs dfs_all
                     in
                     (acc_b && occ_all, 
                     final_tys,
@@ -557,7 +601,7 @@ and dfs_typs_res (unif_res: Typ.unify_result) (u_results: Typ.unify_results) (r_
         in
         let final_ls = 
             match unif_res with
-            | Ambiguous ((Some ty), _) -> dfs_cat u_results r_results dfs_out ty
+            | Ambiguous ((Some ty), _) -> dfs_cat r_results dfs_out ty
             | _ -> dfs_out
         in
         (status, final_ls, tracked, unseen_results)
@@ -785,6 +829,8 @@ let rec fix_tracked_results (results_to_fix: ResTrack.t) (u_results: Typ.unify_r
         let cycle_res = 
             if (occ) then (condense dfs_tys) else (Typ.UnSolved dfs_tys)
         in
+        Printf.printf "debug\n";
+        Printf.printf "%s\n" (string_of_u_results ((-1, cycle_res)::[]));
         let (u_results, r_results, _) = resolve hd cycle_res u_results r_results CycleTrack.empty in
         fix_tracked_results results_to_fix u_results r_results
     )
@@ -792,10 +838,15 @@ let rec fix_tracked_results (results_to_fix: ResTrack.t) (u_results: Typ.unify_r
 
 let finalize_results (u_results: Typ.unify_results) (r_results: Typ.rec_unify_results)
     : Typ.unify_results * Typ.rec_unify_results = 
+    let (u_results, r_results) = 
+        add_all_refs_as_results u_results r_results
+    in
     let results_to_fix = ResTrack.results_to_t u_results r_results in
     let (_, u_results, r_results) = 
         fix_tracked_results results_to_fix u_results r_results
     in
+    Printf.printf "%s\n" (string_of_u_results u_results);
+    Printf.printf "%s\n" (string_of_r_results r_results);
     let comp_u_res (res1: TypeInferenceVar.t * Typ.unify_result) (res2: TypeInferenceVar.t * Typ.unify_result)
         : int =
         let (var1, _) = res1 in

@@ -153,6 +153,14 @@ let testcases: (Ctx.t * Exp.t) list = [
   parse "let f:Hole[0] be fun (x:Hole[1]) -> (fun (y:Hole[2]) -> x y 2) in (f (fun z -> z z) (g))");
   ([],
   parse "let f:Hole[0] be fun (x:Hole[1]) -> (fun (y:Hole[2]) -> x y 2) in (f (fun z -> z z) (fun i -> (i+2)))");
+  (*didn't realize it at the time of writing it but this case technically should become
+  ((int -> int) -> int -> int -> int) -> (int -> int) -> int -> int
+    takes 
+      a function that, given an int->int and an int returns a function int->int
+      a function that given an int returns an int
+      an int
+    and returns an int
+   *)
   ([],
   parse "let f:Hole[0] be fun (x:Hole[1]) -> (fun (y:Hole[2]) -> x y 2) in (f (fun z -> z) (fun z -> z + 2))");
   
