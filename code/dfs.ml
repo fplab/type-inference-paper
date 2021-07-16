@@ -829,8 +829,8 @@ let rec fix_tracked_results (results_to_fix: ResTrack.t) (u_results: Typ.unify_r
         let cycle_res = 
             if (occ) then (condense dfs_tys) else (Typ.UnSolved dfs_tys)
         in
-        Printf.printf "debug\n";
-        Printf.printf "%s\n" (string_of_u_results ((-1, cycle_res)::[]));
+        (*Printf.printf "debug\n";
+        Printf.printf "%s\n" (string_of_u_results ((-1, cycle_res)::[]));*)
         let (u_results, r_results, _) = resolve hd cycle_res u_results r_results CycleTrack.empty in
         fix_tracked_results results_to_fix u_results r_results
     )
@@ -845,8 +845,8 @@ let finalize_results (u_results: Typ.unify_results) (r_results: Typ.rec_unify_re
     let (_, u_results, r_results) = 
         fix_tracked_results results_to_fix u_results r_results
     in
-    Printf.printf "%s\n" (string_of_u_results u_results);
-    Printf.printf "%s\n" (string_of_r_results r_results);
+    (*Printf.printf "%s\n" (string_of_u_results u_results);
+    Printf.printf "%s\n" (string_of_r_results r_results);*)
     let comp_u_res (res1: TypeInferenceVar.t * Typ.unify_result) (res2: TypeInferenceVar.t * Typ.unify_result)
         : int =
         let (var1, _) = res1 in
