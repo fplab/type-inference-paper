@@ -153,6 +153,158 @@ module Typ = struct
         )
 end
 
+(*All type gen operations preserve all possible type combinations EXCEPT those that produce a unify result (ie condense) *)
+module TypGen = struct
+    type base_typ = 
+        | Num
+        | Bool
+        | Hole of TypeInferenceVar.t
+    
+    type ctr =
+        | Arrow
+        | Prod
+        | Sum
+
+    type typ_gen =
+        | Base of base_typ
+        | Compound of ctr * typ_gens * typ_gens
+    
+    and typ_gens = typ_gen list
+
+    let get_mk_of_ctr (ctr_used: ctr): Typ.t -> Typ.t -> Typ.t =
+        match ctr_used with
+        | Arrow -> Typ.mk_arrow
+        | Prod -> Typ.mk_prod
+        | Sum -> Typ.mk_sum
+    ;;
+
+    let rec get_sig_of_typ_gen (gen: typ_gen): (ctr list) = 
+        match gen with
+        | Base -> []
+        | Compound (ctr, _, gens) -> ctr::(get_sig_of_typ_gen gens)
+    ;;
+
+    let rec has_sig (ctrs: (ctr list)) (gen: TypGen.typ_gen) : bool =
+        match gen with
+        | Base _ -> (ctrs = [])
+        | Compound (ctr, _, gens2) -> (
+            let (succ, ctrs) = 
+                match ctrs with
+                | [] -> (false, [])
+                | hd::tl -> ((ctr = hd), tl)
+            in
+            if (succ) then (has_sig ctrs gens2) else false
+        )
+    ;;
+
+    let rec typ_to_typ_gen (typ: Typ.t): typ_gen =
+        match typ with
+        | TNum -> Base Num
+        | TBool -> Base Bool
+        | THole var -> Base (Hole var)
+        | TArrow (ty1, ty2) -> Compound (Arrow, [(typ_to_typ_gen ty1)], [(typ_to_typ_gen ty2)])
+        | TProd (ty1, ty2) -> Compound (Prod, [(typ_to_typ_gen ty1)], [(typ_to_typ_gen ty2)])
+        | TSum (ty1, ty2) -> Compound (Sum, [(typ_to_typ_gen ty1)], [(typ_to_typ_gen ty2)])
+    ;;
+
+    let split_typ_gen (gen: typ_gen): typ_gen * typ_gen =
+        match gen with
+        | Base _ -> raise (InvalidUse "cannot split a base typ_gen")
+        | Compound (_, gens1, gens2) -> (gens1, gens2)
+    ;; 
+
+    let rec extend_with_typ_gen (gen: typ_gens) (gen_rep_typ: typ_gen): typ_gens =
+        match gen with
+        | [] -> [gen_rep_typ]
+        | hd::tl -> (
+            let gen_sig = get_sig_of_typ_gen gen_rep_typ in
+            if (has_sig gen_sig hd) then (
+                let replacement =
+                    match hd with
+                    | Base _ -> (
+                        if (hd = gen_rep_typ) then (
+                            gen
+                        ) else (
+                            hd::(extend_with_typ_gen tl gen_rep_typ)
+                        )
+                    )
+                    | Compound (ctr, gens1, gens2) -> (
+                        let (lhs_typ_gen, rhs_typ_gen) = split_typ_gen gen_rep_typ in
+                        let gens1 = extend_with_typ_gen gens1 lhs_typ_gen in
+                        let gens2 = extend_with_typ_gen gens2 rhs_typ_gen in
+                        Compound (ctr, gens1, gens2)
+                    )
+                in
+                replacement::tl
+            ) else (
+                hd::(extend_with_typ_gen tl gen_rep_typ)
+            )
+        )
+    ;;
+
+    let extend_with_typ (gen: typ_gens) (typ: Typ.t): typ_gens =
+        let gen_rep_typ = typ_to_typ_gen typ in
+        extend_with_typ_gen gen gen_rep_typ ty_sig
+    ;;
+
+    let combine (gens1: typ_gens) (gens2: typ_gens): typ_gens =
+        List.fold_left extend_with_typ_gen gens1 gens2
+    ;;
+
+    let all_of_ctr (ctr_used: ctr) (gen: typ_gens): bool =
+
+    ;;
+
+    let split (ctr_used: ctr) (gen: typ_gens): outcome * typ_gen * typ_gen =
+
+    ;;
+
+    let fuse (ctr_used: ctr) (gen1: typ_gens) (gen2: typ_gens): typ_gen =
+
+    ;;
+
+    let explorable_list (gen: typ_gens): Typ.t list =
+
+    ;;
+
+    let condense (gen: type_gens): Typ.unify_result =
+
+    ;;
+end
+
+module TypGenRes = struct
+    type t = Typ.t * TypGen.typ_gens
+
+    type results = t list
+
+    type u_res =
+        | Hole of Typ.unify_result
+        | Ctr of Typ.r
+
+    let retrieve_gen_for_typ (typ: Typ.t) (gen: results): t =
+
+    ;;
+
+    let unif_res_to_gen_res (u_res: Typ.unify_result): t = 
+
+    ;;
+
+    let gen_res_to_unif_res (res: t): Typ.unify_result = 
+
+    ;;
+
+    let unif_results_to_gen_results (u_res: Typ.unify_results) (r_res: Typ.rec_unify_results): results =
+
+    ;;
+
+    let gen_results_to_unif_results (gen: results): Typ.unify_results * Typ.rec_unify_results =
+
+    ;;
+
+    let link_typ_to_gen (typ: Typ.t) (gen: TypGen.typ_gens) (gens: TypGen.results): TypGen.results =
+
+    ;;
+end
 
 module Exp = struct
 

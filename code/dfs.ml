@@ -500,17 +500,17 @@ let dfs_cat (r_results: Typ.rec_unify_results) (curr_ls: Typ.t list)
 
 (*a method that dfs's on a type to accumulate all known types it is cyclic with. returns a boolean denoting
 if an occurs check was failed due to the results and a list of all types *)
-let rec dfs_typs (root: Typ.t) (u_results: Typ.unify_results) (r_results: Typ.rec_unify_results) (tracked: CycleTrack.t)
-    (unseen_results: ResTrack.t) (ctr_exp: bool): bool * (Typ.t list) * CycleTrack.t * ResTrack.t = 
+let rec dfs_typs (root: Typ.t) (gens: TypGenRes.results) (tracked: CycleTrack.t) (unseen_results: ResTrack.t) (ctr_exp: bool)
+    : bool * (TypGen.typ_gens) * CycleTrack.t * ResTrack.t = 
     let tracked = CycleTrack.track_typ root tracked in
     let unseen_results = ResTrack.remove_typ root unseen_results in
-    let by_ctr_exp (ctr_exp: bool) (ctr: Typ.t -> Typ.t -> Typ.t) (ty1: Typ.t) (ty2: Typ.t)
+    let by_ctr_exp (ctr_exp: bool) (ctr: TypGen.ctr) (ty1: Typ.t) (ty2: Typ.t)
         : bool * (Typ.t list) * CycleTrack.t * ResTrack.t =
         if (ctr_exp) then (
-            dfs_typs_of_ctr ctr ty1 ty2 u_results r_results tracked unseen_results
+            dfs_typs_of_ctr ctr ty1 ty2 gens tracked unseen_results
         ) else (
-            match (retrieve_result_for_rec_typ root r_results) with
-            | Some unif_res -> dfs_typs_res unif_res u_results r_results tracked unseen_results false
+            match (TypGenRes.retrieve_gen_for_typ root gens) with
+            | Some gen -> dfs_typs_res gen gens tracked unseen_results false
             | None -> (true, [], tracked, unseen_results)
         )
     in
@@ -518,94 +518,72 @@ let rec dfs_typs (root: Typ.t) (u_results: Typ.unify_results) (r_results: Typ.re
         match root with
         | TNum -> (true, [], tracked, unseen_results)
         | TBool -> (true, [], tracked, unseen_results)
-        | TArrow (ty1, ty2) -> (by_ctr_exp ctr_exp Typ.mk_arrow ty1 ty2)
-        | TProd (ty1, ty2) -> (by_ctr_exp ctr_exp Typ.mk_prod ty1 ty2)
-        | TSum (ty1, ty2) -> (by_ctr_exp ctr_exp Typ.mk_sum ty1 ty2)
-        | THole var -> (
-            match (retrieve_result_for_inf_var var u_results) with
-            | Some unif_res -> (dfs_typs_res unif_res u_results r_results tracked unseen_results ctr_exp)
+        | TArrow (ty1, ty2) -> (by_ctr_exp ctr_exp TypGen.Arrow ty1 ty2)
+        | TProd (ty1, ty2) -> (by_ctr_exp ctr_exp TypGen.Prod ty1 ty2)
+        | TSum (ty1, ty2) -> (by_ctr_exp ctr_exp TypGen.Sum ty1 ty2)
+        | THole _ -> (
+            match (TypGen.retrieve_gen_for_typ root gens) with
+            | Some gen -> (dfs_typs_gen gen gens tracked unseen_results ctr_exp)
             | None -> (true, [], tracked, unseen_results)
         )
     in
     (*Printf.printf "DEBUG:\n";
     Printf.printf "%s\n" ((string_of_typ root) ^ " {:} " ^ (string_of_typ_ls dfs_all));*)
-    (occ, (dfs_cat r_results dfs_all root), tracked, unseen_results)
-and dfs_typs_of_ctr (ctr: Typ.t -> Typ.t -> Typ.t) (ty1: Typ.t) (ty2: Typ.t) (u_results: Typ.unify_results) 
-    (r_results: Typ.rec_unify_results) (tracked: CycleTrack.t) (unseen_results: ResTrack.t)
-    : bool * (Typ.t list) * CycleTrack.t * ResTrack.t =
+    (occ, (TypGen.extend_with_typ dfs_all root), tracked, unseen_results)
+and dfs_typs_of_ctr (ctr: TypGen.ctr) (ty1: Typ.t) (ty2: Typ.t) (gens: TypGenRes.results) (tracked: CycleTrack.t) (unseen_results: ResTrack.t)
+    : bool * (TypGen.typ_gens) * CycleTrack.t * ResTrack.t =
+    let rec_ty = ((TypGen.get_mk_of_ctr ctr) ty1 ty2) in
     let (_, tys_u, _, _) =
-        match (retrieve_result_for_rec_typ (ctr ty1 ty2) r_results) with
-        | Some unif_res -> dfs_typs_res unif_res u_results r_results tracked unseen_results false
+        match (TypGen.retrieve_gen_for_typ rec_ty gens) with
+        | Some gen -> dfs_typs_res gen gens tracked unseen_results false
         | None -> (true, [], [], [])
     in
-    let (lhs_res, rhs_res) = split_as_ctr ctr (condense tys_u) in
-    let (u_results, r_results) = link_to_res ty1 lhs_res u_results r_results in
-    let (u_results, r_results) = link_to_res ty2 rhs_res u_results r_results in
-    let (occ1, ty1_ls, _, unseen_results) = 
-        dfs_typs ty1 u_results r_results CycleTrack.empty unseen_results true
+    let (lhs_tys, rhs_tys) = TypGen.split ctr tys_u in
+    let gens = TypGenRes.link_typ_to_gen ty1 lhs_tys gens in
+    let gens = TypGenRes.link_typ_to_gen ty2 rhs_tys gens in
+    let (occ1, ty1_gen, _, unseen_results) = 
+        dfs_typs ty1 gens CycleTrack.empty unseen_results true
     in
-    let (occ2, ty2_ls, _, unseen_results) = 
-        dfs_typs ty2 u_results r_results CycleTrack.empty unseen_results true
+    let (occ2, ty2_gen, _, unseen_results) = 
+        dfs_typs ty2 gens CycleTrack.empty unseen_results true
     in
-    let rec_tys = fuse_lists ctr ty1_ls ty2_ls in
+    let rec_tys_gen = TypGen.fuse ctr ty1_ls ty2_ls in
     let (dfs_occ, dfs_tys, tracked, unseen_results) = 
-        match (retrieve_result_for_rec_typ (ctr ty1 ty2) r_results) with
-        | Some unif_res -> dfs_typs_res unif_res u_results r_results tracked unseen_results true
+        match (TypGenRes.retrieve_gen_for_typ rec_ty r_results) with
+        | Some gen -> dfs_typs_gen gen gens tracked unseen_results true
         | None -> (true, [], tracked, unseen_results)
     in
-    let final_tys =
-        List.fold_left (dfs_cat r_results) dfs_tys rec_tys
-    in
-    (*a fix; make it so that you split again and relink after dfsing your result so that your children can access it
-    in the future
-    do NOT mark children as explored *)
     (*Printf.printf "DEBUG:\n";
     Printf.printf "%s\n" ((string_of_typ (ctr ty1 ty2)) ^ " {:} "^ (string_of_typ_ls final_tys));*)
-    (occ1 && occ2 && dfs_occ, final_tys, tracked, unseen_results)
-and dfs_typs_res (unif_res: Typ.unify_result) (u_results: Typ.unify_results) (r_results: Typ.rec_unify_results) 
-    (tracked: CycleTrack.t) (unseen_results: ResTrack.t) (ctr_exp: bool)
-    : bool * (Typ.t list) * CycleTrack.t * ResTrack.t =
-    match unif_res with
-    | Solved ty -> (true, [ty], tracked, unseen_results)
-    | Ambiguous (_, ty_ls)
-    | UnSolved ty_ls -> (
-        let in_domain_and_unequal (list_elt: Typ.t) (tracked_elt: Typ.t): bool =
-            (tracked_elt <> list_elt) && (Typ.contains_typ tracked_elt list_elt)
-        in
-        let traverse_if_valid (acc: bool * (Typ.t list) * CycleTrack.t * ResTrack.t) (list_elt: Typ.t)
-            : bool * (Typ.t list) * CycleTrack.t * ResTrack.t =
-            let (acc_b, acc_typs, tracked, unseen_results) = acc in
-            (*if invalid *)
-            if (List.exists (in_domain_and_unequal list_elt) tracked) then (
-                (false, acc_typs, tracked, unseen_results)
+    (occ1 && occ2 && dfs_occ, (TypGen.combine dfs_tys rec_tys_gen), tracked, unseen_results)
+and dfs_typs_gen (gen: TypGen.typ_gens) (gens: TypGenRes.results) (tracked: CycleTrack.t) (unseen_results: ResTrack.t) (ctr_exp: bool)
+    : bool * (TypGen.typ_gens) * CycleTrack.t * ResTrack.t =
+    let destinations = TypGen.explorable_list gen in
+    let in_domain_and_unequal (list_elt: Typ.t) (tracked_elt: Typ.t): bool =
+        (tracked_elt <> list_elt) && (Typ.contains_typ tracked_elt list_elt)
+    in
+    let traverse_if_valid (acc: bool * (TypGen.typ_gens) * CycleTrack.t * ResTrack.t) (list_elt: Typ.t)
+        : bool * (TypGen.typ_gens) * CycleTrack.t * ResTrack.t =
+        let (acc_b, acc_typs, tracked, unseen_results) = acc in
+        (*if invalid *)
+        if (List.exists (in_domain_and_unequal list_elt) tracked) then (
+            (false, acc_typs, tracked, unseen_results)
+        ) else (
+            (*if already traversed *)
+            if (CycleTrack.is_tracked list_elt tracked) then (
+                (acc_b, acc_typs, tracked, unseen_results)
             ) else (
-                (*if already traversed *)
-                if (CycleTrack.is_tracked list_elt tracked) then (
-                    (acc_b, acc_typs, tracked, unseen_results)
-                ) else (
-                    let (occ_all, dfs_all, tracked, unseen_results) = 
-                        dfs_typs list_elt u_results r_results tracked unseen_results ctr_exp
-                    in
-                    let final_tys =
-                        List.fold_left (dfs_cat r_results) acc_typs dfs_all
-                    in
-                    (acc_b && occ_all, 
-                    final_tys,
-                    tracked,
-                    unseen_results)
-                )
+                let (occ_all, dfs_all, tracked, unseen_results) = 
+                    dfs_typs list_elt gens tracked unseen_results ctr_exp
+                in
+                (acc_b && occ_all, 
+                (TypGen.combine acc_typs dfs_all),
+                tracked,
+                unseen_results)
             )
-        in
-        let (status, dfs_out, tracked, unseen_results) = 
-            List.fold_left traverse_if_valid (true, [], tracked, unseen_results) ty_ls
-        in
-        let final_ls = 
-            match unif_res with
-            | Ambiguous ((Some ty), _) -> dfs_cat r_results dfs_out ty
-            | _ -> dfs_out
-        in
-        (status, final_ls, tracked, unseen_results)
-    )
+        )
+    in
+    List.fold_left traverse_if_valid (true, [], tracked, unseen_results) ty_ls
 ;;
 
 (*since the final solution contains all references, there is technically no need to dfs; you could just 
