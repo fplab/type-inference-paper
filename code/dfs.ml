@@ -445,76 +445,50 @@ and dfs_typs_gen (gen: TypGen.typ_gens) (gens: TypGenRes.results) (tracked: Cycl
 replace the solution for all members of the list and call recursive protocol for any recursive types in it
 wouldn't be a hard change. just remove calls to resolve_res and wrap calls to the other two in a standard
 recursive matching on a list generated from the solution *)
-let rec resolve (root: Typ.t) (solution: Typ.unify_result) (u_results: Typ.unify_results) (r_results: Typ.rec_unify_results)
-    (tracked: CycleTrack.t): Typ.unify_results * Typ.rec_unify_results * CycleTrack.t =
+let rec resolve (root: Typ.t) (solution: TypGen.typ_gens) (gens: TypGenRes.results) (tracked: CycleTrack.t)
+    : TypGenRes.results * CycleTrack.t =
     let tracked = CycleTrack.track_typ root tracked in
     match root with
     | TNum
-    | TBool -> (u_results, r_results, tracked)
-    | TArrow (ty1, ty2) -> resolve_of_ctr Typ.mk_arrow ty1 ty2 solution u_results r_results tracked
-    | TProd (ty1, ty2) -> resolve_of_ctr Typ.mk_prod ty1 ty2 solution u_results r_results tracked
-    | TSum (ty1, ty2) -> resolve_of_ctr Typ.mk_sum ty1 ty2 solution u_results r_results tracked
-    | THole var -> (
-        let u_results = replace_unify_result (var, solution) u_results in
-        resolve_res solution u_results r_results tracked
+    | TBool -> (gens, tracked)
+    | TArrow (ty1, ty2) -> resolve_of_ctr TypGen.Arrow ty1 ty2 solution gens tracked
+    | TProd (ty1, ty2) -> resolve_of_ctr TypGen.Prod ty1 ty2 solution gens tracked
+    | TSum (ty1, ty2) -> resolve_of_ctr TypGen.Sum ty1 ty2 solution gens tracked
+    | THole _ -> (
+        let gens = TypGenRes.replace_gen_of_typ root solution gens in
+        resolve_typ_gens solution gens tracked
     )
-and resolve_of_ctr (ctr: Typ.t -> Typ.t -> Typ.t) (ty1: Typ.t) (ty2: Typ.t) (solution: Typ.unify_result)
-    (u_results: Typ.unify_results) (r_results: Typ.rec_unify_results) (tracked: CycleTrack.t)
-    : Typ.unify_results * Typ.rec_unify_results * CycleTrack.t =
-    let (lhs_res, rhs_res) = split_as_ctr ctr solution in
-    let id1 = ty_to_res_id ty1 in
-    let id2 = ty_to_res_id ty2 in
-    let update_results_by_id (id: TypeInferenceVar.t option * Typ.t option) (res: Typ.unify_result) 
-        (u_results: Typ.unify_results) (r_results: Typ.rec_unify_results) 
-        : Typ.unify_results * Typ.rec_unify_results =
-        match id with
-        | None, None -> (u_results, r_results)
-        | (Some var), None -> ((replace_unify_result (var, res) u_results), r_results)
-        | None, (Some typ) -> (u_results, (replace_rec_unify_result (typ, res) r_results))
-        | _ -> raise Impossible
-    in
+and resolve_of_ctr (ctr: TypGen.ctr) (ty1: Typ.t) (ty2: Typ.t) (solution: TypGen.typ_gens) (gens: TypGenRes.results) (tracked: CycleTrack.t)
+    : TypGenRes.results * CycleTrack.t =
+    let (lhs_tys, rhs_tys) = TypGen.split ctr solution in
+    (*no need to generate new type results since dfs should already have traversed this and constructed the necessary ones *)
     (*update results with information for children *)
-    let (u_results, r_results) = update_results_by_id id1 lhs_res u_results r_results in
-    let (u_results, r_results, tracked) = resolve_res lhs_res u_results r_results tracked in
-    let (u_results, r_results) = update_results_by_id id2 rhs_res u_results r_results in
-    let (u_results, r_results, tracked) = resolve_res rhs_res u_results r_results tracked in
-
-    match (retrieve_result_for_rec_typ (ctr ty1 ty2) r_results) with
+    let gens = TypGenRes.replace_gen_of_typ ty1 lhs_tys gens in
+    let (gens, tracked) = resolve_typ_gens lhs_tys gens tracked in
+    let gens = TypGenRes.replace_gen_of_typ ty2 rhs_tys gens in
+    let (gens, tracked) = resolve_typ_gens rhs_tys gens tracked in
+    match (TypGenRes.retrieve_gen_for_typ ((TypGen.get_mk_of_ctr ctr) ty1 ty2) r_results) with
     | Some _ -> (
-        let r_results = 
-            replace_rec_unify_result ((ctr ty1 ty2), solution) r_results 
+        let gens  = 
+            TypGenRes.replace_gen_of_typ ((TypGen.get_mk_of_ctr ctr) ty1 ty2) solution gens
         in
-        resolve_res solution u_results r_results tracked
+        resolve_typ_gens solution gens tracked
     )
-    | None -> (u_results, r_results, tracked)
+    | None -> (gens, tracked)
 (*already following a replaced value; just dfs so other funcs can replace *)
-and resolve_res (solution: Typ.unify_result) (u_results: Typ.unify_results) (r_results: Typ.rec_unify_results) (tracked: CycleTrack.t)
-    : Typ.unify_results * Typ.rec_unify_results * CycleTrack.t =
-    match solution with
-    (*no holes are present at all *)
-    | Solved _ -> (u_results, r_results, tracked)
-    (*holes present *)
-    | Ambiguous (_, ty_ls)
-    | UnSolved ty_ls -> (
-        let ty_ls = 
-            match solution with
-            | Ambiguous ((Some ty), _) -> ty::ty_ls
-            | _ -> ty_ls
-        in
-        let traverse_if_valid (acc: Typ.unify_results * Typ.rec_unify_results * CycleTrack.t) (list_elt: Typ.t)
-            : Typ.unify_results * Typ.rec_unify_results * CycleTrack.t =
-            let (acc_u, acc_r, tracked) = acc in
-            if (CycleTrack.is_tracked list_elt tracked) then (
-                (acc_u, acc_r, tracked)
-            ) else (
-                resolve list_elt solution u_results r_results tracked
-            )
-        in
-        let (u_results, r_results, tracked) = 
-            List.fold_left traverse_if_valid (u_results, r_results, tracked) ty_ls
-        in
-        (u_results, r_results, tracked)
-    )
+and resolve_typ_gens (solution: TypGen.typ_gens) (gens: TypGenRes.results) (tracked: CycleTrack.t)
+    : TypGenRes.results * CycleTrack.t =
+    let ty_ls = TypGen.explorable_list solution in
+    let traverse_if_valid (acc: TypGenRes.results * CycleTrack.t) (list_elt: Typ.t)
+        : TypGenRes.results * CycleTrack.t =
+        let (acc_res, tracked) = acc in
+        if (CycleTrack.is_tracked list_elt tracked) then (
+            (acc_res, tracked)
+        ) else (
+            resolve list_elt solution acc_res tracked
+        )
+    in
+    List.fold_left traverse_if_valid (gens, tracked) ty_ls
 ;;
 
 (*converts all ambiguous statuses to a fully simplified non ambiguous solution status *)

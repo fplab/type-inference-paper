@@ -541,16 +541,17 @@ module TypGenRes = struct
         List.fold_left acc_results ([], []) gens
     ;;
 
-    let replace_gen_of_typ (typ: Typ.t) (replacement: gens) (gens: results): results =
-        let replace_if_match (gen_res: t): t =
+    let rec replace_gen_of_typ (typ: Typ.t) (replacement: typ_gens) (gens: results): results =
+        match results with
+        | [] -> []
+        | hd::tl -> (
             let (key, value) = gen_res in
             if (typ = key) then (
-                replacement
+                replacement::tl
             ) else (
-                value
+                value::(replace_gen_of_typ typ replacement tl)
             )
-        in
-        List.rev_map replace_if_match gens
+        )
     ;;
 
     (*may need to add results for more than just those that have a result-> could be anything with a hole
