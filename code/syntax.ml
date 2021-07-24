@@ -249,6 +249,16 @@ module Typ = struct
             )
         )
     ;;
+
+    let rec is_fully_literal (typ: Typ.t): bool =
+        match typ with
+        | TNum 
+        | TBool -> true
+        | THole _ -> false
+        | TArrow (ty1, ty2)
+        | TProd (ty1, ty2)
+        | TSum (ty1, ty2) -> is_fully_literal ty1 && is_fully_literal ty2
+    ;;
 end
 
 (*All type gen operations preserve all possible type combinations EXCEPT those that produce a unify result (ie condense) *)
@@ -543,6 +553,9 @@ module TypGenRes = struct
         List.rev_map replace_if_match gens
     ;;
 
+    (*may need to add results for more than just those that have a result-> could be anything with a hole
+    however, it could also be that the preservation of all combinations makes it fine
+    N->?1 ana against ?3 and ?3 is against B; ?3 is unsolved but ?1 should be too *)
     let link_typ_to_gen (typ: Typ.t) (gen: TypGen.typ_gens) (gens: results): results =
         (*typ should be connected to gen in gens if typ has a result in gens
         all elements of gen that are explorable should be linked to typ *)
@@ -552,16 +565,28 @@ module TypGenRes = struct
                 let updated_gen = TypGen.combine gen gen' in
                 replace_gen_of_typ typ updated_gen gens
             )
-            | None -> gens
+            | None -> (
+                if (is_fully_literal typ) then (
+                    gens
+                ) else (
+                    (typ, gen)::gens
+                )
+            )
         in
         let to_be_linked_to_typ = TypGen.explorable_list gen gens in
         let update (addition: Typ.t) (acc: results) (key: Typ.t): results =
             match (retrieve_gen_for_typ key acc) with
             | Some gen' -> (
                 let updated_gen = TypGen.extend_with_typ gen' addition in
-                replace_gen_of_typ key updated_gen gens
+                replace_gen_of_typ key updated_gen acc
             )
-            | None -> gens
+            | None -> (
+                if (is_fully_literal typ) then (
+                    acc
+                ) else (
+                    (key, [(typ_to_typ_gen addition)])::acc
+                )
+            )
         in
         List.fold_left (update typ) gens to_be_linked_to_typ
     ;;

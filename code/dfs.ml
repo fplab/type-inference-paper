@@ -55,7 +55,7 @@ end
 with the root called upon *)
 type result_update = Typ.unify_results * Typ.rec_unify_results * Typ.unify_result
 
-let rec string_of_typ(typ:Typ.t) =
+let rec string_of_typ (typ:Typ.t) =
     match typ with
     | THole var ->  "THole["^string_of_int(var)^"]"
     | TNum -> "TNum"
@@ -65,14 +65,14 @@ let rec string_of_typ(typ:Typ.t) =
     | TProd (t1,t2) -> string_of_typ(t1) ^ "*"^ string_of_typ(t2)
 ;;
 
-let rec string_of_typ_ls(typ_ls:Typ.t list) =
+let rec string_of_typ_ls (typ_ls:Typ.t list) =
     match typ_ls with
     | [] -> " "
     | hd::tl -> 
         (string_of_typ hd)^ ", " ^ (string_of_typ_ls tl);
 ;;
 
-let rec string_of_u_results(results: Typ.unify_results) =
+let rec string_of_u_results (results: Typ.unify_results) =
     match results with
     | [] -> "\n"
     | hd::tl -> (
@@ -93,7 +93,7 @@ let rec string_of_u_results(results: Typ.unify_results) =
     )
 ;;
 
-let rec string_of_r_results(results: Typ.rec_unify_results) =
+let rec string_of_r_results (results: Typ.rec_unify_results) =
     match results with
     | [] -> "\n"
     | hd::tl -> (
@@ -190,16 +190,6 @@ let rec contains_literal (typ: Typ.t): bool =
     | TArrow (ty1, ty2)
     | TProd (ty1, ty2)
     | TSum (ty1, ty2) -> contains_literal ty1 || contains_literal ty2
-;;
-
-let rec is_fully_literal (typ: Typ.t): bool =
-    match typ with
-    | TNum 
-    | TBool -> true
-    | THole _ -> false
-    | TArrow (ty1, ty2)
-    | TProd (ty1, ty2)
-    | TSum (ty1, ty2) -> is_fully_literal ty1 && is_fully_literal ty2
 ;;
 
 let condense (typs: Typ.t list): Typ.unify_result =
@@ -329,58 +319,6 @@ let rec replace_rec_unify_result (new_result: Typ.t * Typ.unify_result) (old_res
     )
 ;;
 
-let add_by_form (res: Typ.unify_result) (acc: Typ.unify_results * Typ.rec_unify_results) (base: Typ.t)
-    : Typ.unify_results * Typ.rec_unify_results =
-    let (u_results, r_results) = acc in
-    match base with
-    | THole var -> (
-        ((Impl.add_unify_result (var, res) u_results), r_results)
-    )
-    | TArrow _
-    | TProd _
-    | TSum _ -> (
-        if (is_fully_literal base) then (
-            (u_results, r_results)
-        ) else (
-            (u_results, (Impl.add_rec_unify_result (base, res) r_results))
-        )
-    )
-    | _ -> (u_results, r_results)
-;;
-
-(*adds to the unify results so that ty is bidirectionally linked to all values in tys *)
-let link_to_res (ty: Typ.t) (res: Typ.unify_result) (u_results: Typ.unify_results) (r_results: Typ.rec_unify_results)
-    : Typ.unify_results * Typ.rec_unify_results =
-    let (u_results, r_results) = 
-        match ty with
-        | THole var -> ((Impl.add_unify_result (var, res) u_results), r_results) 
-        | TArrow _
-        | TProd _
-        | TSum _ -> (
-            if (is_fully_literal ty) then (
-                (u_results, r_results)
-            ) else (
-                (u_results, (Impl.add_rec_unify_result (ty, res) r_results))
-            )
-        ) 
-        | _ -> (u_results, r_results)
-    in
-    let tys =
-        match res with
-        | Solved ty -> [ty]
-        | Ambiguous (ty_op, tys') -> (
-            let hd =
-                match ty_op with
-                | Some ty -> [ty]
-                | None -> []
-            in
-            hd @ tys'
-        )
-        | UnSolved tys' -> tys'
-    in
-    List.fold_left (add_by_form (condense [ty])) (u_results, r_results) tys
-;;
-
 let add_all_refs_as_results (u_results: Typ.unify_results) (r_results: Typ.rec_unify_results)
     : Typ.unify_results * Typ.rec_unify_results =
     (*extends u results to include all holes contained within r results
@@ -413,23 +351,6 @@ let add_all_refs_as_results (u_results: Typ.unify_results) (r_results: Typ.rec_u
         Impl.add_unify_result (var, (Typ.Ambiguous (None, [(Typ.THole var)]))) acc
     in
     (List.fold_left extend_u_results u_results var_ls), r_results
-;;
-
-let dfs_cat (r_results: Typ.rec_unify_results) (curr_ls: Typ.t list)
-    (item: Typ.t): Typ.t list =
-    let retrieval =
-        match item with
-        | TNum
-        | TBool -> None
-        | THole _ -> (
-            let placeholder = Typ.UnSolved [] in
-            Some placeholder
-        )
-        | _ -> (retrieve_result_for_rec_typ item r_results)
-    in
-    match retrieval with
-    | Some _ -> cat_if_unequal_for_all curr_ls item
-    | None -> cat_if_unequal_no_id_all curr_ls item
 ;;
 
 (*a method that dfs's on a type to accumulate all known types it is cyclic with. returns a boolean denoting
