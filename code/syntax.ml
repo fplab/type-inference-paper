@@ -184,7 +184,7 @@ module TypGen = struct
         | Compound (ctr, _, gens) -> ctr::(get_sig_of_typ_gen gens)
     ;;
 
-    let rec has_sig (ctrs: (ctr list)) (gen: TypGen.typ_gen) : bool =
+    let rec has_sig (ctrs: (ctr list)) (gen: TypGen.typ_gen): bool =
         match gen with
         | Base _ -> (ctrs = [])
         | Compound (ctr, _, gens2) -> (
@@ -342,7 +342,7 @@ module TypGen = struct
         List.fold_left dest_check_and_acc [] destinations
     ;;
 
-    (*this function should only be called during disambiguation *)
+    (*this function should only be called during disambiguation, if at all *)
     let condense (gen: type_gens): Typ.unify_result =
 
     ;;
@@ -357,28 +357,85 @@ module TypGenRes = struct
         | Hole of Typ.unify_result
         | Ctr of Typ.r
 
-    let retrieve_gen_for_typ (typ: Typ.t) (gen: results): t =
-
+    let retrieve_gen_for_typ (typ: Typ.t) (gens: results): TypGen.typ_gens option =
+        let matches (elt: t): bool = 
+            let (key, _) = elt in
+            key = typ
+        in
+        let key_value = List.find_opt matches gens in
+        match key_value with
+        | Some (key, value) -> Some value
+        | None -> None
     ;;
 
-    let unif_res_to_gen_res (u_res: Typ.unify_result): t = 
-
+    let unif_res_to_gen_res (key: Typ.t) (u_res: Typ.unify_result): t =
+        let typ_ls = 
+            match u_res with
+            | Solved ty -> [ty]
+            | Ambiguous ((Some ty), tys) -> ty::tys
+            | UnSolved tys -> tys
+        in
+        let gen_of_key = List.fold_left TypGen.extend_with_typ [] typ_ls in
+        (key, gen_of_key)
     ;;
 
-    let gen_res_to_unif_res (res: t): Typ.unify_result = 
-
+    let unif_results_to_gen_results (u_results: Typ.unify_results) (r_results: Typ.rec_unify_results): results =
+        let u_convert_acc (acc: results) (elt: TypeInferenceVar.t * Typ.unify_result): results =
+            let (key_var, u_res) = elt in
+            (unif_res_to_gen_res (Typ.THole key_var) u_res)::acc
+        in
+        let acc = List.fold_left u_convert_acc [] u_results in
+        let r_convert_acc (acc: results) (elt: Typ.t * Typ.unify_result): results =
+            let (key, u_res) = elt in
+            (unif_res_to_gen_res key u_res)::acc
+        in
+        List.fold_left r_convert_acc acc r_results
     ;;
 
-    let unif_results_to_gen_results (u_res: Typ.unify_results) (r_res: Typ.rec_unify_results): results =
-
+    let gen_results_to_unif_results (gens: results): Typ.unify_results * Typ.rec_unify_results =
+        let acc_results (acc: Typ.unify_results * Typ.rec_unify_results) (gen_res: t)
+            : Typ.unify_results * Typ.rec_unify_results =
+            let (acc_u, acc_r) = acc in
+            match gen_res with
+            | ((Typ.THole key_var), gen) -> ((key_var * (TypGen.condense gen))::acc_u, acc_r)
+            | (key, gen) -> (acc_u, ((key, TypGen.condense gen)::acc_r))
+        in
+        List.fold_left acc_results ([], []) gens
     ;;
 
-    let gen_results_to_unif_results (gen: results): Typ.unify_results * Typ.rec_unify_results =
-
+    let replace_gen_of_typ (typ: Typ.t) (replacement: gens) (gens: results): results =
+        let replace_if_match (gen_res: t): t =
+            let (key, value) = gen_res in
+            if (typ = key) then (
+                replacement
+            ) else (
+                value
+            )
+        in
+        List.rev_map replace_if_match gens
     ;;
 
-    let link_typ_to_gen (typ: Typ.t) (gen: TypGen.typ_gens) (gens: TypGen.results): TypGen.results =
-
+    let link_typ_to_gen (typ: Typ.t) (gen: TypGen.typ_gens) (gens: results): results =
+        (*typ should be connected to gen in gens if typ has a result in gens
+        all elements of gen that are explorable should be linked to typ *)
+        let gens = 
+            match (retrieve_gen_for_typ typ gens) with
+            | Some gen' -> (
+                let updated_gen = TypGen.combine gen gen' in
+                replace_gen_of_typ typ updated_gen gens
+            )
+            | None -> gens
+        in
+        let to_be_linked_to_typ = TypGen.explorable_list gen gens in
+        let update (addition: Typ.t) (acc: results) (key: Typ.t): results =
+            match (retrieve_gen_for_typ key acc) with
+            | Some gen' -> (
+                let updated_gen = TypGen.extend_with_typ gen' addition in
+                replace_gen_of_typ key updated_gen gens
+            )
+            | None -> gens
+        in
+        List.fold_left (update typ) gens to_be_linked_to_typ
     ;;
 end
 

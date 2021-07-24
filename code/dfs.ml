@@ -555,7 +555,7 @@ and dfs_typs_of_ctr (ctr: TypGen.ctr) (ty1: Typ.t) (ty2: Typ.t) (gens: TypGenRes
     in
     (*Printf.printf "DEBUG:\n";
     Printf.printf "%s\n" ((string_of_typ (ctr ty1 ty2)) ^ " {:} "^ (string_of_typ_ls final_tys));*)
-    (occ1 && occ2 && dfs_occ, (TypGen.extend dfs_tys rec_tys_gen), tracked, unseen_results)
+    (occ1 && occ2 && dfs_occ, (TypGen.extend_with_typ_gen dfs_tys rec_tys_gen), tracked, unseen_results)
 and dfs_typs_gen (gen: TypGen.typ_gens) (gens: TypGenRes.results) (tracked: CycleTrack.t) (unseen_results: ResTrack.t) (ctr_exp: bool)
     : bool * (TypGen.typ_gens) * CycleTrack.t * ResTrack.t =
     let destinations = TypGen.explorable_list gen gens in
