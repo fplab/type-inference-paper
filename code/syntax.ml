@@ -151,6 +151,104 @@ module Typ = struct
         load_type_variable(ty1);
         load_type_variable(ty2);
         )
+
+    let mk_ctr_types (ctr: Typ.t -> Typ.t -> Typ.t) (const: Typ.t) (const_is_left: bool) (acc: Typ.t list) (variant: Typ.t)
+        : Typ.t list =
+        if (const_is_left) then (ctr const variant)::acc else (ctr variant const)::acc
+    ;;
+
+    let fuse_lists (ctr: Typ.t -> Typ.t -> Typ.t) (ty1_ls: Typ.t list) (ty2_ls: Typ.t list)
+        : Typ.t list = 
+        let acc_mk_ctr_types (acc: Typ.t list) (const_of_left: Typ.t): Typ.t list = 
+            List.fold_left (mk_ctr_types ctr const_of_left true) acc (ty2_ls)
+        in
+        List.fold_left acc_mk_ctr_types [] ty1_ls
+    ;;
+
+    let rec remove_ids (ty: Typ.t): Typ.t =
+        match ty with
+        | TNum -> TNum
+        | TBool -> TBool
+        | THole _ -> THole 0
+        | TArrow (ty1, ty2) -> TArrow ((remove_ids ty1), (remove_ids ty2))
+        | TProd (ty1, ty2) -> TProd ((remove_ids ty1), (remove_ids ty2))
+        | TSum (ty1, ty2) -> TSum ((remove_ids ty1), (remove_ids ty2))
+    ;;
+
+    let struc_eq_ignoring_ids (ty1: Typ.t) (ty2: Typ.t): bool =
+        let ty1 = remove_ids ty1 in
+        let ty2 = remove_ids ty2 in
+        ty1 = ty2
+    ;;
+
+    let cat_if_unequal_no_id_all (target_list: Typ.t list) (item: Typ.t): Typ.t list =
+        let is_eq' (elt: Typ.t): bool = 
+            struc_eq_ignoring_ids item elt
+        in
+        if (List.exists is_eq' target_list) then (
+            target_list
+        ) else (
+            item::target_list
+        )
+    ;;
+
+    let smallest_unequal_no_id_pair (l1: Typ.t list) (l2: Typ.t list)
+        : Typ.t list =
+        List.fold_left cat_if_unequal_no_id_all l1 l2
+    ;;
+
+    (*select the longest value with the most literals that most different to self
+        order of imp: lit num, longest, diff to self; could proceed lexicographically with this ordering *)
+    let find_representative (typs: Typ.t list): Typ.t option =
+        let rec count_lits (typ: Typ.t): int =
+            match typ with
+            | TNum
+            | TBool -> 1
+            | THole _ -> 0
+            | TArrow (ty1, ty2)
+            | TProd (ty1, ty2)
+            | TSum (ty1, ty2) -> (count_lits ty1) + (count_lits ty2)
+        in
+        let acc_max (find_value: Typ.t -> int) (acc: int * (Typ.t list)) (typ: Typ.t)
+            : int * (Typ.t list) =
+            let (acc_max, acc_ls) = acc in
+            let typ_count = find_value typ in
+            if (typ_count > acc_max) then (
+                (typ_count, typ::[])
+            ) else (
+                if (typ_count = acc_max) then (
+                    (acc_max, typ::acc_ls)
+                ) else (
+                    acc
+                )
+            )
+        in
+        match typs with
+        | [] -> None
+        | hd::tl -> (
+            let acc = ((count_lits hd), [hd]) in
+            let (_, out_tys) = List.fold_left (acc_max count_lits) acc tl in
+            match out_tys with
+            | [] -> raise Impossible
+            | hd::[] -> Some hd
+            | hd::tl -> (
+                let rec typ_len (typ: Typ.t): int =
+                    match typ with
+                    | TNum
+                    | TBool
+                    | THole _ -> 1
+                    | TArrow (ty1, ty2)
+                    | TProd (ty1, ty2)
+                    | TSum (ty1, ty2) -> (typ_len ty1) + (typ_len ty2)
+                in
+                let acc = ((typ_len hd), [hd]) in
+                let (_, out_tys) = List.fold_left (acc_max typ_len) acc tl in
+                match out_tys with
+                | [] -> raise Impossible
+                | hd::_ -> Some hd
+            )
+        )
+    ;;
 end
 
 (*All type gen operations preserve all possible type combinations EXCEPT those that produce a unify result (ie condense) *)
@@ -287,12 +385,12 @@ module TypGen = struct
         Compound (ctr_used, gen1, gen2)
     ;;
 
-    let rec dest_in_gens (dest_parts: Typ.t list) (dest_sig: ctr list) (gens: typ_gens): bool =
-        match gens with
+    let rec dest_in_gens (dest_parts: Typ.t list) (dest_sig: ctr list) (gen: typ_gens): bool =
+        match gen with
         | [] -> ((dest_parts = []) && (dest_sig = []))
         | hd::tl -> (if (dest_in_gen hd) then (true) else (dest_in_gens dest_parts dest_sig tl))
-    and dest_in_gen (dest_parts: Typ.t list) (dest_sig: ctr list) (gen: typ_gen): bool =
-        match gen with
+    and dest_in_gen (dest_parts: Typ.t list) (dest_sig: ctr list) (gen_elt: typ_gen): bool =
+        match gen_elt with
         | Base ty -> (
             match dest_parts with
             | hd::[] -> (hd = ty)
@@ -342,9 +440,39 @@ module TypGen = struct
         List.fold_left dest_check_and_acc [] destinations
     ;;
 
-    (*this function should only be called during disambiguation, if at all *)
-    let condense (gen: type_gens): Typ.unify_result =
+    let base_typ_to_typ (base: base_typ): Typ.t =
+        match base with
+        | Num -> TNum
+        | Bool -> TBool
+        | Hole var -> THole var 
+    ;;
 
+    let rec most_informative_in_typ_gens (gen: typ_gens): Typ.t list =
+        match gen with
+        | [] -> []
+        | hd::tl -> Typ.smallest_unequal_no_id_pair (most_informative_in_typ_gens tl) (most_informative_in_typ_gen hd)
+    and most_informative_in_typ_gen (gen_elt: typ_gen): Typ.t list =
+        match gen_elt with
+        | Base btyp -> base_typ_to_typ btyp
+        | Compound (ctr, gens1, gens1) -> (
+            let typ1_ls = most_informative_in_typ_gens gens1 in
+            let typ2_ls = most_informative_in_typ_gens gens2 in
+            Typ.fuse_lists (get_mk_of_ctr ctr) typ1_ls typ2_ls
+        )
+    ;;
+
+    (*this function should only be called during disambiguation, if at all *)
+    let condense (gen: typ_gens): Typ.unify_result =
+        let pruned_typs = most_informative_in_typ_gens gen in
+        let all_cons_with_typ (typs: Typ.t list) (typ: Typ.t): bool = 
+            List.for_all (Typ.consistent typ) typs 
+        in
+        let all_cons = List.for_all (all_cons_with_typ pruned_typs) pruned_typs in
+        if (all_cons) then (
+            Typ.Solved (find_representative pruned_typs)
+        ) else (
+            Typ.UnSolved pruned_typs
+        )
     ;;
 end
 
