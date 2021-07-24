@@ -547,7 +547,7 @@ and dfs_typs_of_ctr (ctr: TypGen.ctr) (ty1: Typ.t) (ty2: Typ.t) (gens: TypGenRes
     let (occ2, ty2_gen, _, unseen_results) = 
         dfs_typs ty2 gens CycleTrack.empty unseen_results true
     in
-    let rec_tys_gen = TypGen.fuse ctr ty1_ls ty2_ls in
+    let rec_tys_gen = TypGen.fuse ctr ty1_gen ty2_gen in
     let (dfs_occ, dfs_tys, tracked, unseen_results) = 
         match (TypGenRes.retrieve_gen_for_typ rec_ty r_results) with
         | Some gen -> dfs_typs_gen gen gens tracked unseen_results true
@@ -555,10 +555,10 @@ and dfs_typs_of_ctr (ctr: TypGen.ctr) (ty1: Typ.t) (ty2: Typ.t) (gens: TypGenRes
     in
     (*Printf.printf "DEBUG:\n";
     Printf.printf "%s\n" ((string_of_typ (ctr ty1 ty2)) ^ " {:} "^ (string_of_typ_ls final_tys));*)
-    (occ1 && occ2 && dfs_occ, (TypGen.combine dfs_tys rec_tys_gen), tracked, unseen_results)
+    (occ1 && occ2 && dfs_occ, (TypGen.extend dfs_tys rec_tys_gen), tracked, unseen_results)
 and dfs_typs_gen (gen: TypGen.typ_gens) (gens: TypGenRes.results) (tracked: CycleTrack.t) (unseen_results: ResTrack.t) (ctr_exp: bool)
     : bool * (TypGen.typ_gens) * CycleTrack.t * ResTrack.t =
-    let destinations = TypGen.explorable_list gen in
+    let destinations = TypGen.explorable_list gen gens in
     let in_domain_and_unequal (list_elt: Typ.t) (tracked_elt: Typ.t): bool =
         (tracked_elt <> list_elt) && (Typ.contains_typ tracked_elt list_elt)
     in
