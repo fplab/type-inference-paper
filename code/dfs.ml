@@ -445,38 +445,38 @@ and dfs_typs_gen (gen: TypGen.typ_gens) (gens: TypGenRes.results) (tracked: Cycl
 replace the solution for all members of the list and call recursive protocol for any recursive types in it
 wouldn't be a hard change. just remove calls to resolve_res and wrap calls to the other two in a standard
 recursive matching on a list generated from the solution *)
-let rec resolve (root: Typ.t) (solution: TypGen.typ_gens) (gens: TypGenRes.results) (tracked: CycleTrack.t)
+let rec resolve (root: Typ.t) (solution: TypGen.typ_gens) (sol_occ: bool) (gens: TypGenRes.results) (tracked: CycleTrack.t)
     : TypGenRes.results * CycleTrack.t =
     let tracked = CycleTrack.track_typ root tracked in
     match root with
     | TNum
     | TBool -> (gens, tracked)
-    | TArrow (ty1, ty2) -> resolve_of_ctr TypGen.Arrow ty1 ty2 solution gens tracked
-    | TProd (ty1, ty2) -> resolve_of_ctr TypGen.Prod ty1 ty2 solution gens tracked
-    | TSum (ty1, ty2) -> resolve_of_ctr TypGen.Sum ty1 ty2 solution gens tracked
+    | TArrow (ty1, ty2) -> resolve_of_ctr TypGen.Arrow ty1 ty2 solution sol_occ gens tracked
+    | TProd (ty1, ty2) -> resolve_of_ctr TypGen.Prod ty1 ty2 solution sol_occ gens tracked
+    | TSum (ty1, ty2) -> resolve_of_ctr TypGen.Sum ty1 ty2 solution sol_occ gens tracked
     | THole _ -> (
-        let gens = TypGenRes.replace_gen_of_typ root solution gens in
+        let gens = TypGenRes.replace_gen_and_occ_of_typ root solution sol_occ gens in
         resolve_typ_gens solution gens tracked
     )
-and resolve_of_ctr (ctr: TypGen.ctr) (ty1: Typ.t) (ty2: Typ.t) (solution: TypGen.typ_gens) (gens: TypGenRes.results) (tracked: CycleTrack.t)
-    : TypGenRes.results * CycleTrack.t =
+and resolve_of_ctr (ctr: TypGen.ctr) (ty1: Typ.t) (ty2: Typ.t) (solution: TypGen.typ_gens) (sol_occ: bool) (gens: TypGenRes.results) 
+    (tracked: CycleTrack.t): TypGenRes.results * CycleTrack.t =
     let (lhs_tys, rhs_tys) = TypGen.split ctr solution in
     (*no need to generate new type results since dfs should already have traversed this and constructed the necessary ones *)
     (*update results with information for children *)
-    let gens = TypGenRes.replace_gen_of_typ ty1 lhs_tys gens in
-    let (gens, tracked) = resolve_typ_gens lhs_tys gens tracked in
-    let gens = TypGenRes.replace_gen_of_typ ty2 rhs_tys gens in
-    let (gens, tracked) = resolve_typ_gens rhs_tys gens tracked in
+    let gens = TypGenRes.replace_gen_and_occ_of_typ ty1 lhs_tys sol_occ gens in
+    let (gens, tracked) = resolve_typ_gens lhs_tys sol_occ gens tracked in
+    let gens = TypGenRes.replace_gen_and_occ_of_typ ty2 rhs_tys sol_occ gens in
+    let (gens, tracked) = resolve_typ_gens rhs_tys sol_occ gens tracked in
     match (TypGenRes.retrieve_gen_for_typ ((TypGen.get_mk_of_ctr ctr) ty1 ty2) r_results) with
     | Some _ -> (
         let gens  = 
-            TypGenRes.replace_gen_of_typ ((TypGen.get_mk_of_ctr ctr) ty1 ty2) solution gens
+            TypGenRes.replace_gen_and_occ_of_typ ((TypGen.get_mk_of_ctr ctr) ty1 ty2) solution sol_occ gens
         in
-        resolve_typ_gens solution gens tracked
+        resolve_typ_gens solution sol_occ gens tracked
     )
     | None -> (gens, tracked)
 (*already following a replaced value; just dfs so other funcs can replace *)
-and resolve_typ_gens (solution: TypGen.typ_gens) (gens: TypGenRes.results) (tracked: CycleTrack.t)
+and resolve_typ_gens (solution: TypGen.typ_gens) (sol_occ: bool) (gens: TypGenRes.results) (tracked: CycleTrack.t)
     : TypGenRes.results * CycleTrack.t =
     let ty_ls = TypGen.explorable_list solution in
     let traverse_if_valid (acc: TypGenRes.results * CycleTrack.t) (list_elt: Typ.t)
@@ -485,7 +485,7 @@ and resolve_typ_gens (solution: TypGen.typ_gens) (gens: TypGenRes.results) (trac
         if (CycleTrack.is_tracked list_elt tracked) then (
             (acc_res, tracked)
         ) else (
-            resolve list_elt solution acc_res tracked
+            resolve list_elt solution sol_occ acc_res tracked
         )
     in
     List.fold_left traverse_if_valid (gens, tracked) ty_ls
@@ -627,19 +627,16 @@ let disambiguate (old_u_results: Typ.unify_results) (old_r_results: Typ.rec_unif
     (new_u, new_r)
 ;;
 
-let rec fix_tracked_results (results_to_fix: ResTrack.t) (u_results: Typ.unify_results) (r_results: Typ.rec_unify_results)
-    : ResTrack.t * Typ.unify_results * Typ.rec_unify_results =
+let rec fix_tracked_results (results_to_fix: ResTrack.t) (gens: TypGenRes.results)
+    : ResTrack.t * TypGenRes.results =
     match results_to_fix with
     | [] -> results_to_fix, u_results, r_results
     | hd::_ -> (
         let (occ, dfs_tys, _, results_to_fix) = dfs_typs hd u_results r_results CycleTrack.empty results_to_fix true in
-        let cycle_res = 
-            if (occ) then (condense dfs_tys) else (Typ.UnSolved dfs_tys)
-        in
         (*Printf.printf "debug\n";
         Printf.printf "%s\n" (string_of_u_results ((-1, cycle_res)::[]));*)
-        let (u_results, r_results, _) = resolve hd cycle_res u_results r_results CycleTrack.empty in
-        fix_tracked_results results_to_fix u_results r_results
+        let (gens, _) = resolve hd dfs_tys occ gens CycleTrack.empty in
+        fix_tracked_results results_to_fix gens
     )
 ;;
 
@@ -648,9 +645,10 @@ let finalize_results (u_results: Typ.unify_results) (r_results: Typ.rec_unify_re
     let (u_results, r_results) = 
         add_all_refs_as_results u_results r_results
     in
+    let gens = TypGenRes.unif_results_to_gen_results u_results r_results in
     let results_to_fix = ResTrack.results_to_t u_results r_results in
-    let (_, u_results, r_results) = 
-        fix_tracked_results results_to_fix u_results r_results
+    let (_, gens) = 
+        fix_tracked_results results_to_fix gens
     in
     (*Printf.printf "%s\n" (string_of_u_results u_results);
     Printf.printf "%s\n" (string_of_r_results r_results);*)

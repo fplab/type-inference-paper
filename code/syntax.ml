@@ -472,22 +472,27 @@ module TypGen = struct
     ;;
 
     (*this function should only be called during disambiguation, if at all *)
-    let condense (gen: typ_gens): Typ.unify_result =
+    let condense (gen: typ_gens) (occ_pass: bool): Typ.unify_result =
         let pruned_typs = most_informative_in_typ_gens gen in
-        let all_cons_with_typ (typs: Typ.t list) (typ: Typ.t): bool = 
-            List.for_all (Typ.consistent typ) typs 
-        in
-        let all_cons = List.for_all (all_cons_with_typ pruned_typs) pruned_typs in
-        if (all_cons) then (
-            Typ.Solved (find_representative pruned_typs)
+        if (occ_pass) then (
+            let all_cons_with_typ (typs: Typ.t list) (typ: Typ.t): bool = 
+                List.for_all (Typ.consistent typ) typs 
+            in
+            let all_cons = List.for_all (all_cons_with_typ pruned_typs) pruned_typs in
+            if (all_cons) then (
+                Typ.Solved (find_representative pruned_typs)
+            ) else (
+                Typ.UnSolved pruned_typs
+            )
         ) else (
-            Typ.UnSolved pruned_typs
+            UnSolved pruned_typs
         )
     ;;
 end
 
 module TypGenRes = struct
-    type t = Typ.t * TypGen.typ_gens
+    (*bool represents occurs check status; if false, condensation will make it unsolved *)
+    type t = Typ.t * bool * TypGen.typ_gens
 
     type results = t list
 
@@ -497,7 +502,7 @@ module TypGenRes = struct
 
     let retrieve_gen_for_typ (typ: Typ.t) (gens: results): TypGen.typ_gens option =
         let matches (elt: t): bool = 
-            let (key, _) = elt in
+            let (key, _, _) = elt in
             key = typ
         in
         let key_value = List.find_opt matches gens in
@@ -514,7 +519,7 @@ module TypGenRes = struct
             | UnSolved tys -> tys
         in
         let gen_of_key = List.fold_left TypGen.extend_with_typ [] typ_ls in
-        (key, gen_of_key)
+        (key, true, gen_of_key)
     ;;
 
     let unif_results_to_gen_results (u_results: Typ.unify_results) (r_results: Typ.rec_unify_results): results =
@@ -535,8 +540,8 @@ module TypGenRes = struct
             : Typ.unify_results * Typ.rec_unify_results =
             let (acc_u, acc_r) = acc in
             match gen_res with
-            | ((Typ.THole key_var), gen) -> ((key_var * (TypGen.condense gen))::acc_u, acc_r)
-            | (key, gen) -> (acc_u, ((key, TypGen.condense gen)::acc_r))
+            | ((Typ.THole key_var), occ, gen) -> ((key_var, (TypGen.condense gen occ))::acc_u, acc_r)
+            | (key, occ, gen) -> (acc_u, ((key, TypGen.condense gen occ)::acc_r))
         in
         List.fold_left acc_results ([], []) gens
     ;;
@@ -545,11 +550,25 @@ module TypGenRes = struct
         match results with
         | [] -> []
         | hd::tl -> (
-            let (key, value) = gen_res in
+            let (key, occ, _) = hd in
             if (typ = key) then (
-                replacement::tl
+                (key, occ, replacement)::tl
             ) else (
-                value::(replace_gen_of_typ typ replacement tl)
+                hd::(replace_gen_of_typ typ replacement tl)
+            )
+        )
+    ;;
+
+    let rec replace_gen_and_occ_of_typ (typ: Typ.t) (replacement: typ_gens) (replace_occ: bool) (gens: results)
+        : results =
+        match results with
+        | [] -> []
+        | hd::tl -> (
+            let (key, _, _) = hd in
+            if (typ = key) then (
+                (key, replace_occ, replacement)::tl
+            ) else (
+                hd::(replace_gen_of_typ typ replacement tl)
             )
         )
     ;;
@@ -570,7 +589,7 @@ module TypGenRes = struct
                 if (is_fully_literal typ) then (
                     gens
                 ) else (
-                    (typ, gen)::gens
+                    (typ, true, gen)::gens
                 )
             )
         in
@@ -585,7 +604,7 @@ module TypGenRes = struct
                 if (is_fully_literal typ) then (
                     acc
                 ) else (
-                    (key, [(typ_to_typ_gen addition)])::acc
+                    (key, true, [(typ_to_typ_gen addition)])::acc
                 )
             )
         in
