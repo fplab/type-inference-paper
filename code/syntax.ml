@@ -57,47 +57,6 @@ module Typ = struct
     let mk_prod (ty1: t) (ty2: t): t = TProd (ty1, ty2);;
     let mk_sum (ty1: t) (ty2: t): t = TSum (ty1, ty2);;
 
-    (*New helpers to extract the list of variables from unify_results *)
-    let extract_var (result: (TypeInferenceVar.t * unify_result)): TypeInferenceVar.t =
-        match result with
-        | (var, _) -> var
-    ;;
-
-    let extract_var_list (results: unify_results): TypeInferenceVar.t list =
-        List.map extract_var results
-    ;;
-
-    (*New helpers to extract a list results from unify_results *)
-    let extract_result (result: (TypeInferenceVar.t * unify_result)): unify_result = 
-        match result with
-        | (_, result) -> result
-    ;;
-
-    let extract_result_list (results: unify_results): unify_result list = 
-        List.map extract_result results
-    ;;
-
-    (* A function that checks if the given type is a Hole of the var id or is a recursive type involving the var id*)
-    let rec contains_var (var: TypeInferenceVar.t) (ty: t): bool =
-        match ty with
-        | TArrow (ty1, ty2)
-        | TProd (ty1, ty2)
-        | TSum (ty1, ty2) -> (contains_var var ty1) || (contains_var var ty2)
-        | THole ty_var -> (ty_var = var)
-        | _ -> false
-    ;;
-
-    let rec contains_typ (typ: t) (container: t): bool =
-        if (typ = container) then true
-        else (
-            match container with
-            | TArrow (ty1, ty2)
-            | TProd (ty1, ty2)
-            | TSum (ty1, ty2) -> (contains_typ typ ty1 || contains_typ typ ty2)
-            | _ -> false
-        )
-    ;;
-
     (*Moved consistency to be a typ function *)
     let rec consistent (t1: t) (t2: t) : bool = 
     match (t1,t2) with
@@ -197,59 +156,6 @@ module Typ = struct
         List.fold_left cat_if_unequal_no_id_all l1 l2
     ;;
 
-    (*select the longest value with the most literals that most different to self
-        order of imp: lit num, longest, diff to self; could proceed lexicographically with this ordering *)
-    let find_representative (typs: Typ.t list): Typ.t option =
-        let rec count_lits (typ: Typ.t): int =
-            match typ with
-            | TNum
-            | TBool -> 1
-            | THole _ -> 0
-            | TArrow (ty1, ty2)
-            | TProd (ty1, ty2)
-            | TSum (ty1, ty2) -> (count_lits ty1) + (count_lits ty2)
-        in
-        let acc_max (find_value: Typ.t -> int) (acc: int * (Typ.t list)) (typ: Typ.t)
-            : int * (Typ.t list) =
-            let (acc_max, acc_ls) = acc in
-            let typ_count = find_value typ in
-            if (typ_count > acc_max) then (
-                (typ_count, typ::[])
-            ) else (
-                if (typ_count = acc_max) then (
-                    (acc_max, typ::acc_ls)
-                ) else (
-                    acc
-                )
-            )
-        in
-        match typs with
-        | [] -> None
-        | hd::tl -> (
-            let acc = ((count_lits hd), [hd]) in
-            let (_, out_tys) = List.fold_left (acc_max count_lits) acc tl in
-            match out_tys with
-            | [] -> raise Impossible
-            | hd::[] -> Some hd
-            | hd::tl -> (
-                let rec typ_len (typ: Typ.t): int =
-                    match typ with
-                    | TNum
-                    | TBool
-                    | THole _ -> 1
-                    | TArrow (ty1, ty2)
-                    | TProd (ty1, ty2)
-                    | TSum (ty1, ty2) -> (typ_len ty1) + (typ_len ty2)
-                in
-                let acc = ((typ_len hd), [hd]) in
-                let (_, out_tys) = List.fold_left (acc_max typ_len) acc tl in
-                match out_tys with
-                | [] -> raise Impossible
-                | hd::_ -> Some hd
-            )
-        )
-    ;;
-
     let rec is_fully_literal (typ: Typ.t): bool =
         match typ with
         | TNum 
@@ -283,6 +189,9 @@ module TypGen = struct
         type t =
             | Solved Typ.t
             | UnSolved TypGen.typ_gens
+
+        type solution = Typ.t * t
+        type solutions = solution list
     end
 
     let get_mk_of_ctr (ctr_used: ctr): Typ.t -> Typ.t -> Typ.t =
@@ -510,14 +419,6 @@ module TypGen = struct
         filter_unneeded_holes_gen e_base_lit_or_comp gen
     ;;
 
-    let rec filtered_cons_gen (gen: typ_gens): bool =
-        match gen with
-        | [] -> true
-        | (Base _)::[] -> true
-        | (Compound (_, gens1, gens2))::[] -> (filtered_cons_gen gens1) && (filtered_cons_gen gens1)
-        | _ -> false
-    ;;
-
     (*returns the solved value associated with a filtered generator IF IT EXISTS; requires gen be nonempty *)
     let rec filtered_solved_val (gen: typ_gens): Typ.t option =
         match gen with
@@ -731,49 +632,3 @@ module Constraints = struct
 
     type t = consistent list
 end
-
-(*
-module Solver = struct 
-    type hole_eq = TypeInferenceVar.t * (Typ.t list)
-    type hole_eqs = hole_eq list
-    type result = 
-        | Solved of (t list)
-        | UnSolved of (t list)
-    type results = result list
-    
-    let rec lookup (hole_var : TypeInferenceVar.t) (eqs : hole_eqs) : (Typ.t list) option =
-        match eqs with
-        | [] -> None
-        | hd::tl -> (
-            let (hole_eq_var, hole_typ_ls) = hd in if hole_eq_var == hole_var 
-            then Some(hole_typ_ls) 
-            else (lookup hole_var tl)
-        )
-    (*
-    (*adds a type to the list of type equivalences if it is not already in the domain of it *)
-    let rec update_typ_in_hole_eqs (eqs : hole_eqs) (hole_var : TypeInferenceVar.t) (typ: Typ.t): hole_eqs =
-        match eqs with
-        | [] -> []
-        | hd::tl -> (
-            let (hole_eq_var, hole_typ_ls) = hd in 
-            if (hole_eq_var == hole_var) then (
-                if (Typ.in_dom hole_typ_ls typ) then (
-                    hd::tl
-                )
-                else (
-                    (*buggy; something about brackets? 
-                    if not in the domain then add it to the list of types*)
-                    (hole_eq_var, [typ, ...hole_typ_ls])::tl
-                )
-            )
-            else (
-                hd::(update_typ_in_hole_eqs tl hole_var typ)
-            )
-        )
-        *)
-    let rec merge_hole_eqs (eqs1 : hole_eqs) (eqs2 : hole_eqs): hole_eqs =
-        match eqs1 with 
-        | [] -> eqs2
-        | (hd_v, hd_typ)::tl -> merge_hole_eqs tl (update_typ_in_hole_eqs eqs2 hd_v hd_typ)
-end
-*)
