@@ -1,6 +1,6 @@
 open Syntax
 
-let rec string_of_typ(typ:Typ.t) =
+let rec string_of_typ (typ:Typ.t) =
   match typ with
   | THole var ->  "THole["^string_of_int(var)^"]"
   | TNum -> "TNum"
@@ -9,14 +9,15 @@ let rec string_of_typ(typ:Typ.t) =
   | TSum (t1,t2) -> string_of_typ(t1) ^ "+"^ string_of_typ(t2)
   | TProd (t1,t2) -> string_of_typ(t1) ^ "*"^ string_of_typ(t2)
 ;;
-let rec string_of_typ_ls(typ_ls:Typ.t list) =
+
+let rec string_of_typ_ls (typ_ls:Typ.t list) =
   match typ_ls with
   | [] -> " "
   | hd::tl -> 
     (string_of_typ hd)^ ", " ^ (string_of_typ_ls tl);
 ;;
 
-let rec string_of_u_results(results: Typ.unify_results) =
+let rec string_of_u_results (results: Typ.unify_results) =
   match results with
   | [] -> "\n"
   | hd::tl -> (
@@ -37,7 +38,7 @@ let rec string_of_u_results(results: Typ.unify_results) =
   )
 ;;
 
-let rec string_of_r_results(results: Typ.rec_unify_results) =
+let rec string_of_r_results (results: Typ.rec_unify_results) =
   match results with
   | [] -> "\n"
   | hd::tl -> (
@@ -55,6 +56,70 @@ let rec string_of_r_results(results: Typ.rec_unify_results) =
       | UnSolved res_ls -> 
         ("unsolved: (" ^ string_of_typ(typ) ^ ") ("^ string_of_typ_ls(res_ls) ^ ")\n");
     ) ^ string_of_r_results(tl);
+  )
+;;
+
+let comp_gen_elt (gen1: TypGen.typ_gen) (gen2: TypGen.typ_gen): int =
+  let gen_to_int (gen: TypGen.typ_gen): int =
+    match gen with
+    | Base _ -> 0
+    | Compound _ -> 1
+  in
+  Stdlib.compare (gen_to_int gen1) (gen_to_int gen2)
+;;
+
+let rec gen_sort_layer (gen: TypGen.typ_gens): TypGen.typ_gens =
+  let gen = List.fast_sort comp_gen_elt gen in
+  gen_sort_explore gen
+and gen_sort_explore (gen: TypGen.typ_gens): TypGen.typ_gens =
+  match gen with
+  | [] -> []
+  | hd::tl -> (
+    match hd with
+    | Base _ -> hd::(gen_sort_explore tl)
+    | Compound (ctr, gens1, gens2) -> (
+      let sorted1 = gen_sort_layer gens1 in
+      let sorted2 = gen_sort_layer gens2 in
+      (Compound (ctr, sorted1, sorted2))::(gen_sort_explore tl)
+    )
+  )
+;;
+
+let rec string_of_typ_gens (gen: TypGen.typ_gens) =
+  match gen with
+  | [] -> "\n"
+  | hd::[] -> (string_of_typ_gen hd);
+  | hd::tl -> (
+    let hd_str = string_of_typ_gen hd in
+    (hd ^ "/" ^ (string_of_typ_gens tl));
+  )
+and string_of_typ_gen (gen_elt: TypGen.typ_gen) =
+  match gen_elt with
+  | Base btyp -> (string_of_typ (TypGen.base_typ_to_typ btyp));
+  | Compound (ctr, gens1, gens2) -> (
+    let str1 = string_of_typ_gens gens1 in
+    let str2 = string_of_typ_gens gens2 in
+    let ctr_str = 
+      match ctr with
+      | Arrow -> " -> "
+      | Prod -> " * "
+      | Sum -> " + "
+    in
+    ("(" ^ str1 ^ ")" ^ ctr_str ^ "(" ^ str2 ^ ")");
+  )
+;;
+
+let rec string_of_solutions (sol: TypGen.Status.solutions) =
+  match sol with
+  | [] -> "\n";
+  | hd::tl -> (
+    let (key, res) = hd in
+    match res with
+    | Solved typ -> ("solved: (" ^ string_of_typ(key) ^ ") (" ^ string_of_typ(typ) ^ ")\n");
+    | UnSolved gen -> (
+      let sorted_gen = gen_sort_layer gen in
+      ("unsolved: (" ^ string_of_typ(key) ^ ") (" ^ string_of_typ_gens(gen) ^ ")\n");
+    )
   )
 ;;
 
@@ -182,8 +247,7 @@ let solve (ctx: Ctx.t) (e: Exp.t) =
     Printf.printf "%s" (string_of_r_results r_results); 
     (*calls to new dfs code *)
     Printf.printf "depth first search simplified results\n";
-    let (u_results, r_results) = Dfs.finalize_results u_results r_results in
-    Printf.printf "%s" (string_of_u_results u_results);
-    Printf.printf "%s" (string_of_r_results r_results);
+    let solutions_given = Dfs.finalize_results u_results r_results in
+    Printf.printf "%s" (string_of_solutions solutions_given);
   )
 ;;

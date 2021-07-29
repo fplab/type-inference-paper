@@ -51,10 +51,6 @@ module CycleTrack = struct
     ;;
 end
 
-(*a sub result is some updated set of unify_results after resolving dependencies to simplest form and the result associated 
-with the root called upon *)
-type result_update = Typ.unify_results * Typ.rec_unify_results * Typ.unify_result
-
 let rec string_of_typ (typ:Typ.t) =
     match typ with
     | THole var ->  "THole["^string_of_int(var)^"]"
@@ -286,7 +282,7 @@ and resolve_typ_gens (solution: TypGen.typ_gens) (sol_occ: bool) (gens: TypGenRe
     List.fold_left traverse_if_valid (gens, tracked) ty_ls
 ;;
 
-let gen_to_status (gens: TypGenRes.results): Status.solutions =
+let gen_to_status (gens: TypGenRes.results): TypGen.Status.solutions =
     match gens with
     | [] -> []
     | hd::tl -> (
