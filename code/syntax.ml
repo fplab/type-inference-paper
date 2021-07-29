@@ -279,6 +279,12 @@ module TypGen = struct
     
     and typ_gens = typ_gen list
 
+    module Status = struct
+        type t =
+            | Solved Typ.t
+            | UnSolved TypGen.typ_gens
+    end
+
     let get_mk_of_ctr (ctr_used: ctr): Typ.t -> Typ.t -> Typ.t =
         match ctr_used with
         | Arrow -> Typ.mk_arrow
@@ -358,7 +364,7 @@ module TypGen = struct
 
     let extend_with_typ (gen: typ_gens) (typ: Typ.t): typ_gens =
         let gen_rep_typ = typ_to_typ_gen typ in
-        extend_with_typ_gen gen gen_rep_typ ty_sig
+        extend_with_typ_gen gen gen_rep_typ
     ;;
 
     let combine (gens1: typ_gens) (gens2: typ_gens): typ_gens =
@@ -376,7 +382,7 @@ module TypGen = struct
                 | Bool -> false
                 | _ -> true
             )
-            | Compound (ctr', gens1, gens2) -> (ctr' = ctr_used)
+            | Compound (ctr', _, _) -> (ctr' = ctr_used)
         in
         let accumulate_splits (acc: typ_gens * typ_gens) (gen_elt: typ_gen)
             : typ_gens * typ_gens =
@@ -410,7 +416,7 @@ module TypGen = struct
             match dest_sig with
             | [] -> false
             | hd_sig::tl_sig -> (
-                if (hd = ctr) then (
+                if (hd_sig = ctr) then (
                     match dest_parts with
                     | [] -> false
                     | hd_parts::tl_parts -> (
@@ -423,6 +429,8 @@ module TypGen = struct
         )
     ;;
 
+    (*constructs a list of all values that can be explored from a typgen given a set of results
+    by listing all those types represented in gen that have a result in the result set supplied *)
     let explorable_list (gen: typ_gens) (gens: TypGenRes.results): Typ.t list =
         let get_key (acc: Typ.t list) (elt: TypGenRes.t): Typ.t list =
             let (ty, _) = elt in
@@ -457,35 +465,86 @@ module TypGen = struct
         | Hole var -> THole var 
     ;;
 
-    let rec most_informative_in_typ_gens (gen: typ_gens): Typ.t list =
+    let is_base_lit_or_comp (gen_elt: typ_gen): bool =
+        match gen_elt with
+        | Base (Hole _) -> false
+        | _ -> true
+    ;;
+
+    (*helper; call fn below *)
+    let rec filter_unneeded_holes_gen (remove: bool) (gen: typ_gens): gen =
         match gen with
         | [] -> []
-        | hd::tl -> Typ.smallest_unequal_no_id_pair (most_informative_in_typ_gens tl) (most_informative_in_typ_gen hd)
-    and most_informative_in_typ_gen (gen_elt: typ_gen): Typ.t list =
+        | hd::tl -> (
+            let had_hole, elt_op = filter_unneeded_holes_gen_elt remove hd in
+            let remove = had_hole || remove in
+            match elt_op with
+            | None -> filter_unneeded_holes_gen found tl
+            | Some hd' -> hd'::(filter_unneeded_holes_gen found tl)
+        )
+    and filter_unneeded_holes_gen_elt (remove: bool) (gen_elt: typ_gen): bool * gen_elt option =
         match gen_elt with
-        | Base btyp -> base_typ_to_typ btyp
-        | Compound (ctr, gens1, gens1) -> (
-            let typ1_ls = most_informative_in_typ_gens gens1 in
-            let typ2_ls = most_informative_in_typ_gens gens2 in
-            Typ.fuse_lists (get_mk_of_ctr ctr) typ1_ls typ2_ls
+        | Base btyp -> (
+            match btyp with
+            | Hole _ -> (
+                let op = if remove then None else gen_elt in
+                (true, op)
+            )
+            | _ -> (false, Some gen_elt)
+        )
+        | Compound (ctr, gens1, gens2) -> (
+            let e_base_lit_or_comp1 = List.exists is_base_lit_or_comp gens1 in
+            let e_base_lit_or_comp2 = List.exists is_base_lit_or_comp gens2 in
+            let gens1' = filter_unneeded_holes_gen e_base_lit_or_comp1 gens1 in
+            let gens2' = filter_unneeded_holes_gen e_base_lit_or_comp2 gens2 in
+            (false, (Some (Compound (ctr, gens1', gens2'))))
         )
     ;;
 
-    (*this function should only be called during disambiguation, if at all *)
-    let condense (gen: typ_gens) (occ_pass: bool): Typ.unify_result =
-        let pruned_typs = most_informative_in_typ_gens gen in
-        if (occ_pass) then (
-            let all_cons_with_typ (typs: Typ.t list) (typ: Typ.t): bool = 
-                List.for_all (Typ.consistent typ) typs 
-            in
-            let all_cons = List.for_all (all_cons_with_typ pruned_typs) pruned_typs in
-            if (all_cons) then (
-                Typ.Solved (find_representative pruned_typs)
-            ) else (
-                Typ.UnSolved pruned_typs
+    (*removes all base type holes in the generator that:
+        - have a literal as an option in the same position
+        - have a compound as an option in the same position
+        - are discovered after a needed hole in the same position *)
+    let filter_unneeded_holes (gen: typ_gens): gen =
+        let e_base_lit_or_comp = List.exists is_base_lit_or_comp gens in
+        filter_unneeded_holes_gen e_base_lit_or_comp gen
+    ;;
+
+    let rec filtered_cons_gen (gen: typ_gens): bool =
+        match gen with
+        | [] -> true
+        | (Base _)::[] -> true
+        | (Compound (_, gens1, gens2))::[] -> (filtered_cons_gen gens1) && (filtered_cons_gen gens1)
+        | _ -> false
+    ;;
+
+    (*returns the solved value associated with a filtered generator IF IT EXISTS; requires gen be nonempty *)
+    let rec filtered_solved_val (gen: typ_gens): Typ.t option =
+        match gen with
+        | [] -> None
+        | (Base btyp)::[] -> Some (base_typ_to_typ btyp)
+        | (Compound (ctr, gens1, gens2))::[] -> (
+            match (filtered_solved_val gens1) with 
+            | None -> None
+            | Some typ1 -> (
+                match (filtered_solved_val gens2) with
+                | None -> None
+                | Some typ2 -> (get_mk_of_ctr ctr) typ1 typ2
             )
+        )
+        | _ -> None
+    ;;
+
+    (*this function should only be called during completion *)
+    let condense (gen: typ_gens) (occ_pass: bool): Status.t =
+        let filtered_gen = filter_unneeded_holes gen in
+        if (occ_pass) then (
+            to_unsolved filtered_gen
         ) else (
-            UnSolved pruned_typs
+            let solved_op = filtered_solved_val filtered_gen in
+            match solved_op with
+            | Some typ -> Solved typ
+            | None -> UnSolved filtered_gen
         )
     ;;
 end
