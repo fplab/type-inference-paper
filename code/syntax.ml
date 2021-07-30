@@ -123,71 +123,20 @@ module Typ = struct
     ;;
 end
 
+(*can only represent types (not type generators) *)
 module Signature = struct
-    type sig_elt = bool * bool * bool
-    type t = sig_elt list
-
     type ctr =
         | Arrow
         | Prod
         | Sum
 
-    let empty_sig: sig_elt = false * false * false;;
-
-    let sig_of_ctr (ctr_used: ctr): sig_elt =
-        Signature.add_ctr ctr Signature.empty_sig
-    ;;
+    type t = ctr list
 
     let get_mk_of_ctr (ctr_used: ctr): Typ.t -> Typ.t -> Typ.t =
         match ctr_used with
         | Arrow -> Typ.mk_arrow
         | Prod -> Typ.mk_prod
         | Sum -> Typ.mk_sum
-    ;;
-
-    let elt_has_ctr (ctr_used: ctr) (elt: sig_elt): bool =
-        match ctr_used with
-        | Arrow -> (
-            match elt with
-            | (true, _, _) -> true
-            |  _ -> false
-        )
-        | Prod -> -> (
-            match elt with
-            | (_, true, _) -> true
-            |  _ -> false
-        )
-        | Sum -> -> (
-            match elt with
-            | (_, _, true) -> true
-            |  _ -> false
-        )
-    ;;
-
-    let merge_sig_elts (sig_elt1: sig_elt) (sig_elt2: sig_elt): sig_elt =
-        let (a1, p1, s1) = sig_elt1 in
-        let (a2, p2, s2) = sig_elt2 in
-        ((a1 || a2), (s1 || s2), (p1 || p2))
-    ;;
-
-    let add_ctr (ctr_used: ctr) (elt: sig_elt): sig_elt =
-        let (or_elt) =
-            match ctr_used with
-            | Arrow -> (true, false, false)
-            | Prod -> (false, true, false)
-            | Sum -> (false, false, true)
-        in
-        merge_sig_elts elt or_elt
-    ;;
-
-    let rec combine (sign1: t) (sign2: t): t =
-        match sign1 with
-        | [] -> sign2
-        | hd::tl -> (
-            match sign2 with
-            | [] -> sign1
-            | hd'::tl' -> ((merge_sig_elts hd hd')::(combine tl tl'))
-        )
     ;;
 end
 
@@ -207,11 +156,11 @@ module TypGen = struct
     let rec get_sig_of_typ_gens (gen: typ_gens): Signature.t =
         match gen with
         | [] -> []
-        | hd::tl -> (Signature.combine (get_sig_of_typ_gen hd) (get_sig_of_typ_gens tl))
+        | hd::tl -> (get_sig_of_typ_gen hd) @ (get_sig_of_typ_gens tl)
     and get_sig_of_typ_gen (gen_elt: typ_gen): Signature.t = 
         match gen_elt with
         | Base _ -> []
-        | Compound (ctr, _, gen) -> (Signature.sig_of_ctr ctr)::(get_sig_of_typ_gens gen)
+        | Compound (ctr, _, gen) -> ctr::(get_sig_of_typ_gens gen)
     ;;
 
     let rec has_sig (ctrs: Signature.t) (gen: TypGen.typ_gen): bool =
@@ -221,7 +170,7 @@ module TypGen = struct
             let (succ, ctrs) = 
                 match ctrs with
                 | [] -> (false, [])
-                | hd::tl -> ((ctr = hd), tl)
+                | hd::tl -> ((Signature.has_ctr ctr hd), tl)
             in
             if (succ) then (has_sig ctrs gens2) else false
         )
@@ -237,47 +186,52 @@ module TypGen = struct
         | TSum (ty1, ty2) -> Compound (Sum, [(typ_to_typ_gen ty1)], [(typ_to_typ_gen ty2)])
     ;;
 
-    let split_typ_gen (gen: typ_gen): (typ_gen * typ_gen) option =
+    let split_typ_gen (gen: typ_gen): (typ_gens * typ_gens) option =
         match gen with
         | Base _ -> None
         | Compound (_, gens1, gens2) -> Some (gens1, gens2)
     ;; 
 
-    let rec extend_with_typ_gen (gen: typ_gens) (gen_rep_typ: typ_gen): typ_gens =
-        match gen with
-        | [] -> [gen_rep_typ]
+    let rec extend_with_gen (gen: typ_gens) (gen': typ_gens): typ_gens =
+        match gen' with
+        | [] -> gen
         | hd::tl -> (
-            let gen_sig = get_sig_of_typ_gen gen_rep_typ in
-            (*if the head matches the desired signature *)
-            if (has_sig gen_sig hd) then (
-                match hd with
-                | Base _ -> (
-                    (*if already present exactly, stop *)
-                    if (hd = gen_rep_typ) then (
-                        gen
+            let gen = extend_with_gen_elt gen hd in
+            extend_with_gen gen tl
+        )
+    and extend_with_gen_elt (gen: typ_gens) (gen_elt: typ_gen): typ_gens = 
+        match gen with
+        | [] -> [gen_elt]
+        | hd::tl -> (
+            match gen_elt with
+            | Base _ -> (
+                if (hd = gen_elt) then (
+                    gen
+                ) else (
+                    hd::(extend_with_gen_elt tl gen_elt)
+                )
+            )
+            | Compound (ctr, gens1, gens2) -> (
+                match hd with 
+                | Base _ -> hd::(extend_with_gen_elt tl gen_elt)
+                | Compound (ctr_hd, gens1_hd, gens2_hd) -> (
+                    if (ctr_hd = ctr) then (
+                        let (lhs_gen_of_elt, rhs_gen_of_elt) = 
+                            match (split_typ_gen gen_elt) with
+                            | None -> raise Impossible
+                            | Some pair -> pair
+                        in
+                        let gens1_new = extend_with_gen gens1_hd lhs_gen_of_elt in
+                        let gens2_new = extend_with_gen gens2_hd rhs_gen_of_elt in
+                        (Compound (ctr_hd, gens1_new, gens2_new))::tl
                     ) else (
-                        hd::(extend_with_typ_gen tl gen_rep_typ)
+                        hd::(extend_with_gen_elt tl gen_elt)
                     )
                 )
-                | Compound (ctr, gens1, gens2) -> (
-                    (*split the rep into two parts *)
-                    let (lhs_typ_gen, rhs_typ_gen) = 
-                        match (split_typ_gen gen_rep_typ) with
-                        | None -> raise Impossible
-                        | Some pair -> pair
-                    in
-                    (*extend both parts of the matching compound to include the halves *)
-                    let gens1 = extend_with_typ_gen gens1 lhs_typ_gen in
-                    let gens2 = extend_with_typ_gen gens2 rhs_typ_gen in
-                    (*combine and complete *)
-                    (Compound (ctr, gens1, gens2))::tl
-                )
-            ) else (
-                hd::(extend_with_typ_gen tl gen_rep_typ)
             )
         )
     ;;
-
+    
     let extend_with_typ (gen: typ_gens) (typ: Typ.t): typ_gens =
         let gen_rep_typ = typ_to_typ_gen typ in
         extend_with_typ_gen gen gen_rep_typ
@@ -317,11 +271,11 @@ module TypGen = struct
         Compound (ctr_used, gen1, gen2)
     ;;
 
-    let rec dest_in_gens (dest_parts: Typ.t list) (dest_sig: Signature.t) (gen: typ_gens): bool =
+    let rec dest_in_gens (dest_parts: Typ.t list) (dest_sig: Signature.ctr list) (gen: typ_gens): bool =
         match gen with
         | [] -> ((dest_parts = []) && (dest_sig = []))
-        | hd::tl -> (if (dest_in_gen hd) then (true) else (dest_in_gens dest_parts dest_sig tl))
-    and dest_in_gen (dest_parts: Typ.t list) (dest_sig: Signature.t) (gen_elt: typ_gen): bool =
+        | hd::tl -> ((dest_in_gen dest_parts dest_sig hd) || (dest_in_gens dest_parts dest_sig tl))
+    and dest_in_gen (dest_parts: Typ.t list) (dest_sig: Signature.ctr list) (gen_elt: typ_gen): bool =
         match gen_elt with
         | Base ty -> (
             match dest_parts with
