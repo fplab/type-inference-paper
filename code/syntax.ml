@@ -1,3 +1,5 @@
+exception Impossible
+
 module Identifier = struct
     type t = string
 end
@@ -149,31 +151,18 @@ module TypGen = struct
 
     type typ_gen =
         | Base of base_typ
-        | Compound of ctr * typ_gens * typ_gens
+        | Compound of Signature.ctr * typ_gens * typ_gens
     
     and typ_gens = typ_gen list
     
-    let rec get_sig_of_typ_gens (gen: typ_gens): Signature.t =
-        match gen with
+    let rec get_sig_of_typ_gens (gens: typ_gens): Signature.t =
+        match gens with
         | [] -> []
         | hd::tl -> (get_sig_of_typ_gen hd) @ (get_sig_of_typ_gens tl)
-    and get_sig_of_typ_gen (gen_elt: typ_gen): Signature.t = 
-        match gen_elt with
-        | Base _ -> []
-        | Compound (ctr, _, gen) -> ctr::(get_sig_of_typ_gens gen)
-    ;;
-
-    let rec has_sig (ctrs: Signature.t) (gen: TypGen.typ_gen): bool =
+    and get_sig_of_typ_gen (gen: typ_gen): Signature.t = 
         match gen with
-        | Base _ -> (ctrs = [])
-        | Compound (ctr, _, gens2) -> (
-            let (succ, ctrs) = 
-                match ctrs with
-                | [] -> (false, [])
-                | hd::tl -> ((Signature.has_ctr ctr hd), tl)
-            in
-            if (succ) then (has_sig ctrs gens2) else false
-        )
+        | Base _ -> []
+        | Compound (ctr, _, gens) -> ctr::(get_sig_of_typ_gens gens)
     ;;
 
     let rec typ_to_typ_gen (typ: Typ.t): typ_gen =
@@ -192,60 +181,51 @@ module TypGen = struct
         | Compound (_, gens1, gens2) -> Some (gens1, gens2)
     ;; 
 
-    let rec extend_with_gen (gen: typ_gens) (gen': typ_gens): typ_gens =
-        match gen' with
-        | [] -> gen
+    let rec extend_with_gens (gens: typ_gens) (gens': typ_gens): typ_gens =
+        match gens' with
+        | [] -> gens
         | hd::tl -> (
-            let gen = extend_with_gen_elt gen hd in
-            extend_with_gen gen tl
+            let gens = extend_with_gen gens hd in
+            extend_with_gens gens tl
         )
-    and extend_with_gen_elt (gen: typ_gens) (gen_elt: typ_gen): typ_gens = 
-        match gen with
-        | [] -> [gen_elt]
+    and extend_with_gen (gens: typ_gens) (gen: typ_gen): typ_gens = 
+        match gens with
+        | [] -> [gen]
         | hd::tl -> (
-            match gen_elt with
+            match gen with
             | Base _ -> (
-                if (hd = gen_elt) then (
-                    gen
+                if (hd = gen) then (
+                    gens
                 ) else (
-                    hd::(extend_with_gen_elt tl gen_elt)
+                    hd::(extend_with_gen tl gen)
                 )
             )
             | Compound (ctr, gens1, gens2) -> (
                 match hd with 
-                | Base _ -> hd::(extend_with_gen_elt tl gen_elt)
+                | Base _ -> hd::(extend_with_gen tl gen)
                 | Compound (ctr_hd, gens1_hd, gens2_hd) -> (
                     if (ctr_hd = ctr) then (
-                        let (lhs_gen_of_elt, rhs_gen_of_elt) = 
-                            match (split_typ_gen gen_elt) with
-                            | None -> raise Impossible
-                            | Some pair -> pair
-                        in
-                        let gens1_new = extend_with_gen gens1_hd lhs_gen_of_elt in
-                        let gens2_new = extend_with_gen gens2_hd rhs_gen_of_elt in
+                        let gens1_new = extend_with_gens gens1_hd gens1 in
+                        let gens2_new = extend_with_gens gens2_hd gens2 in
                         (Compound (ctr_hd, gens1_new, gens2_new))::tl
                     ) else (
-                        hd::(extend_with_gen_elt tl gen_elt)
+                        hd::(extend_with_gen tl gen)
                     )
                 )
             )
         )
     ;;
     
-    let extend_with_typ (gen: typ_gens) (typ: Typ.t): typ_gens =
+    let extend_with_typ (gens: typ_gens) (typ: Typ.t): typ_gens =
         let gen_rep_typ = typ_to_typ_gen typ in
-        extend_with_typ_gen gen gen_rep_typ
-    ;;
-
-    let combine (gens1: typ_gens) (gens2: typ_gens): typ_gens =
-        List.fold_left extend_with_typ_gen gens1 gens2
+        extend_with_gen gens gen_rep_typ
     ;;
 
     (*maintains invariant of all combinations present; bool returned
     dictates whether the split was valid for all values split *)
-    let split (ctr_used: Signature.ctr) (gen: typ_gens): bool * typ_gen * typ_gen =
-        let of_ctr (gen_elt: typ_gen): bool = 
-            match gen_elt with
+    let split (ctr_used: Signature.ctr) (gens: typ_gens): bool * typ_gens * typ_gens =
+        let of_ctr (gen: typ_gen): bool = 
+            match gen with
             | Base ty -> (
                 match ty with
                 | Num
@@ -254,32 +234,39 @@ module TypGen = struct
             )
             | Compound (ctr', _, _) -> (ctr' = ctr_used)
         in
-        let accumulate_splits (acc: typ_gens * typ_gens) (gen_elt: typ_gen)
+        let accumulate_splits (acc: typ_gens * typ_gens) (gen: typ_gen)
             : typ_gens * typ_gens =
-            match (split_typ_gen gen_elt) with
+            match (split_typ_gen gen) with
             | None -> acc
             | Some (first, second) -> (
                 let (acc_first, acc_second) = acc in
-                (first::acc_first, second::acc_second)
+                ((extend_with_gens acc_first first), (extend_with_gens acc_second second))
             )
         in
-        let (lhs_gen, rhs_gen) = List.fold_left accumulate_splits ([], []) gen in
-        ((List.for_all of_ctr gen), lhs_gen, rhs_gen)
+        let (lhs_gen, rhs_gen) = List.fold_left accumulate_splits ([], []) gens in
+        ((List.for_all of_ctr gens), lhs_gen, rhs_gen)
     ;;
 
-    let fuse (ctr_used: Signature.ctr) (gen1: typ_gens) (gen2: typ_gens): typ_gen =
-        Compound (ctr_used, gen1, gen2)
+    let fuse (ctr_used: Signature.ctr) (gens1: typ_gens) (gens2: typ_gens): typ_gen =
+        Compound (ctr_used, gens1, gens2)
     ;;
 
-    let rec dest_in_gens (dest_parts: Typ.t list) (dest_sig: Signature.ctr list) (gen: typ_gens): bool =
-        match gen with
+    let base_typ_to_typ (base: base_typ): Typ.t =
+        match base with
+        | Num -> TNum
+        | Bool -> TBool
+        | Hole var -> THole var 
+    ;;
+
+    let rec dest_in_gens (dest_parts: Typ.t list) (dest_sig: Signature.ctr list) (gens: typ_gens): bool =
+        match gens with
         | [] -> ((dest_parts = []) && (dest_sig = []))
         | hd::tl -> ((dest_in_gen dest_parts dest_sig hd) || (dest_in_gens dest_parts dest_sig tl))
-    and dest_in_gen (dest_parts: Typ.t list) (dest_sig: Signature.ctr list) (gen_elt: typ_gen): bool =
-        match gen_elt with
+    and dest_in_gen (dest_parts: Typ.t list) (dest_sig: Signature.ctr list) (gen: typ_gen): bool =
+        match gen with
         | Base ty -> (
             match dest_parts with
-            | hd::[] -> (hd = ty)
+            | hd::[] -> (hd = (base_typ_to_typ ty))
             | _ -> false
         )
         | Compound (ctr, gens1, gens2) -> (
@@ -299,42 +286,6 @@ module TypGen = struct
         )
     ;;
 
-    (*constructs a list of all values that can be explored from a typgen given a set of results
-    by listing all those types represented in gen that have a result in the result set supplied *)
-    let explorable_list (gen: typ_gens) (gens: TypGenRes.results): Typ.t list =
-        let get_key (acc: Typ.t list) (elt: TypGenRes.t): Typ.t list =
-            let (ty, _) = elt in
-            ty::acc
-        in
-        let destinations = List.fold_left get_key [] gens in
-        let rec typ_to_typ_ls (typ: Typ.t): Typ.t list = 
-            match typ with 
-            | TNum
-            | TBool
-            | THole _ -> [typ]
-            | TArrow (ty1, ty2) 
-            | TProd (ty1, ty2)
-            | TSum (ty1, ty2) -> (typ_to_typ_ls ty1) @ (typ_to_typ_ls ty2)
-        in
-        let dest_check_and_acc (acc: Typ.t list) (dest: Typ.t): Typ.t list =
-            let dest_parts = typ_to_typ_ls dest in
-            let dest_sig = get_sig_of_typ_gen (typ_to_typ_gen dest) in
-            if (dest_in_gen dest_parts dest_sig gen) then (
-                dest::acc
-            ) else (
-                acc
-            )
-        in
-        List.fold_left dest_check_and_acc [] destinations
-    ;;
-
-    let base_typ_to_typ (base: base_typ): Typ.t =
-        match base with
-        | Num -> TNum
-        | Bool -> TBool
-        | Hole var -> THole var 
-    ;;
-
     let is_base_lit_or_comp (gen_elt: typ_gen): bool =
         match gen_elt with
         | Base (Hole _) -> false
@@ -342,31 +293,31 @@ module TypGen = struct
     ;;
 
     (*helper; call fn below *)
-    let rec filter_unneeded_holes_gen (remove: bool) (gen: typ_gens): gen =
-        match gen with
+    let rec filter_unneeded_holes_gens (remove: bool) (gens: typ_gens): typ_gens =
+        match gens with
         | [] -> []
         | hd::tl -> (
-            let had_hole, elt_op = filter_unneeded_holes_gen_elt remove hd in
+            let had_hole, elt_op = filter_unneeded_holes_gen remove hd in
             let remove = had_hole || remove in
             match elt_op with
-            | None -> filter_unneeded_holes_gen found tl
-            | Some hd' -> hd'::(filter_unneeded_holes_gen found tl)
+            | None -> filter_unneeded_holes_gens remove tl
+            | Some hd' -> hd'::(filter_unneeded_holes_gens remove tl)
         )
-    and filter_unneeded_holes_gen_elt (remove: bool) (gen_elt: typ_gen): bool * gen_elt option =
-        match gen_elt with
+    and filter_unneeded_holes_gen (remove: bool) (gen: typ_gen): bool * typ_gen option =
+        match gen with
         | Base btyp -> (
             match btyp with
             | Hole _ -> (
-                let op = if remove then None else gen_elt in
+                let op = if remove then None else Some gen in
                 (true, op)
             )
-            | _ -> (false, Some gen_elt)
+            | _ -> (false, Some gen)
         )
         | Compound (ctr, gens1, gens2) -> (
             let e_base_lit_or_comp1 = List.exists is_base_lit_or_comp gens1 in
             let e_base_lit_or_comp2 = List.exists is_base_lit_or_comp gens2 in
-            let gens1' = filter_unneeded_holes_gen e_base_lit_or_comp1 gens1 in
-            let gens2' = filter_unneeded_holes_gen e_base_lit_or_comp2 gens2 in
+            let gens1' = filter_unneeded_holes_gens e_base_lit_or_comp1 gens1 in
+            let gens2' = filter_unneeded_holes_gens e_base_lit_or_comp2 gens2 in
             (false, (Some (Compound (ctr, gens1', gens2'))))
         )
     ;;
@@ -375,14 +326,14 @@ module TypGen = struct
         - have a literal as an option in the same position
         - have a compound as an option in the same position
         - are discovered after a needed hole in the same position *)
-    let filter_unneeded_holes (gen: typ_gens): gen =
+    let filter_unneeded_holes (gens: typ_gens): typ_gens =
         let e_base_lit_or_comp = List.exists is_base_lit_or_comp gens in
-        filter_unneeded_holes_gen e_base_lit_or_comp gen
+        filter_unneeded_holes_gens e_base_lit_or_comp gens
     ;;
 
     (*returns the solved value associated with a filtered generator IF IT EXISTS; requires gen be nonempty *)
-    let rec filtered_solved_val (gen: typ_gens): Typ.t option =
-        match gen with
+    let rec filtered_solved_val (gens: typ_gens): Typ.t option =
+        match gens with
         | [] -> None
         | (Base btyp)::[] -> Some (base_typ_to_typ btyp)
         | (Compound (ctr, gens1, gens2))::[] -> (
@@ -391,7 +342,7 @@ module TypGen = struct
             | Some typ1 -> (
                 match (filtered_solved_val gens2) with
                 | None -> None
-                | Some typ2 -> (Signature.get_mk_of_ctr ctr) typ1 typ2
+                | Some typ2 -> Some ((Signature.get_mk_of_ctr ctr) typ1 typ2)
             )
         )
         | _ -> None
@@ -428,14 +379,14 @@ module TypGenRes = struct
 
     type results = t list
 
-    let retrieve_gen_for_typ (typ: Typ.t) (gens: results): TypGen.typ_gens option =
+    let retrieve_gens_for_typ (typ: Typ.t) (gen_results: results): TypGen.typ_gens option =
         let matches (elt: t): bool = 
             let (key, _, _) = elt in
             key = typ
         in
-        let key_value = List.find_opt matches gens in
+        let key_value = List.find_opt matches gen_results in
         match key_value with
-        | Some (key, value) -> Some value
+        | Some (_, _, value) -> Some value
         | None -> None
     ;;
 
@@ -444,6 +395,7 @@ module TypGenRes = struct
             match u_res with
             | Solved ty -> [ty]
             | Ambiguous ((Some ty), tys) -> ty::tys
+            | Ambiguous (None, tys) -> tys
             | UnSolved tys -> tys
         in
         let gen_of_key = List.fold_left TypGen.extend_with_typ [] typ_ls in
@@ -463,80 +415,109 @@ module TypGenRes = struct
         List.fold_left r_convert_acc acc r_results
     ;;
 
-    let gen_results_to_unif_results (gens: results): Typ.unify_results * Typ.rec_unify_results =
-        let acc_results (acc: Typ.unify_results * Typ.rec_unify_results) (gen_res: t)
-            : Typ.unify_results * Typ.rec_unify_results =
+    let gen_results_to_unif_results (gen_results: results): (TypeInferenceVar.t * Status.t) list * (Typ.t * Status.t) list =
+        let acc_results (acc: (TypeInferenceVar.t * Status.t) list * (Typ.t * Status.t) list) (gen_res: t)
+            : (TypeInferenceVar.t * Status.t) list * (Typ.t * Status.t) list =
             let (acc_u, acc_r) = acc in
             match gen_res with
-            | ((Typ.THole key_var), occ, gen) -> ((key_var, (Status.condense gen occ))::acc_u, acc_r)
-            | (key, occ, gen) -> (acc_u, ((key, Status.condense gen occ)::acc_r))
+            | ((Typ.THole key_var), occ, gens) -> ((key_var, (Status.condense gens occ))::acc_u, acc_r)
+            | (key, occ, gens) -> (acc_u, ((key, Status.condense gens occ)::acc_r))
         in
-        List.fold_left acc_results ([], []) gens
+        List.fold_left acc_results ([], []) gen_results
     ;;
 
-    let rec replace_gen_of_typ (typ: Typ.t) (replacement: typ_gens) (gens: results): results =
-        match results with
+    let rec replace_gens_of_typ (typ: Typ.t) (replacement: TypGen.typ_gens) (gen_results: results): results =
+        match gen_results with
         | [] -> []
         | hd::tl -> (
             let (key, occ, _) = hd in
             if (typ = key) then (
                 (key, occ, replacement)::tl
             ) else (
-                hd::(replace_gen_of_typ typ replacement tl)
+                hd::(replace_gens_of_typ typ replacement tl)
             )
         )
     ;;
 
-    let rec replace_gen_and_occ_of_typ (typ: Typ.t) (replacement: typ_gens) (replace_occ: bool) (gens: results)
+    let rec replace_gens_and_occ_of_typ (typ: Typ.t) (replacement: TypGen.typ_gens) (replace_occ: bool) (gen_results: results)
         : results =
-        match results with
+        match gen_results with
         | [] -> []
         | hd::tl -> (
             let (key, _, _) = hd in
             if (typ = key) then (
                 (key, replace_occ, replacement)::tl
             ) else (
-                hd::(replace_gen_of_typ typ replacement tl)
+                hd::(replace_gens_and_occ_of_typ typ replacement replace_occ tl)
             )
         )
+    ;;
+
+    (*constructs a list of all values that can be explored from a typgen given a set of results
+    by listing all those types represented in gen that have a result in the result set supplied *)
+    let explorable_list (gens: TypGen.typ_gens) (gen_results: results): Typ.t list =
+        let get_key (acc: Typ.t list) (elt: t): Typ.t list =
+            let (ty, _, _) = elt in
+            ty::acc
+        in
+        let destinations = List.fold_left get_key [] gen_results in
+        let rec typ_to_typ_ls (typ: Typ.t): Typ.t list = 
+            match typ with 
+            | TNum
+            | TBool
+            | THole _ -> [typ]
+            | TArrow (ty1, ty2) 
+            | TProd (ty1, ty2)
+            | TSum (ty1, ty2) -> (typ_to_typ_ls ty1) @ (typ_to_typ_ls ty2)
+        in
+        let dest_check_and_acc (acc: Typ.t list) (dest: Typ.t): Typ.t list =
+            let dest_parts = typ_to_typ_ls dest in
+            let dest_sig = TypGen.get_sig_of_typ_gen (TypGen.typ_to_typ_gen dest) in
+            if (TypGen.dest_in_gens dest_parts dest_sig gens) then (
+                dest::acc
+            ) else (
+                acc
+            )
+        in
+        List.fold_left dest_check_and_acc [] destinations
     ;;
 
     (*may need to add results for more than just those that have a result-> could be anything with a hole
     however, it could also be that the preservation of all combinations makes it fine
     N->?1 ana against ?3 and ?3 is against B; ?3 is unsolved but ?1 should be too *)
-    let link_typ_to_gen (typ: Typ.t) (gen: TypGen.typ_gens) (gens: results): results =
+    let link_typ_to_gen (typ: Typ.t) (gens: TypGen.typ_gens) (gen_results: results): results =
         (*typ should be connected to gen in gens if typ has a result in gens
         all elements of gen that are explorable should be linked to typ *)
-        let gens = 
-            match (retrieve_gen_for_typ typ gens) with
-            | Some gen' -> (
-                let updated_gen = TypGen.combine gen gen' in
-                replace_gen_of_typ typ updated_gen gens
+        let gen_results = 
+            match (retrieve_gens_for_typ typ gen_results) with
+            | Some gens' -> (
+                let updated_gens = TypGen.extend_with_gens gens gens' in
+                replace_gens_of_typ typ updated_gens gen_results
             )
             | None -> (
-                if (is_fully_literal typ) then (
-                    gens
+                if (Typ.is_fully_literal typ) then (
+                    gen_results
                 ) else (
-                    (typ, true, gen)::gens
+                    (typ, true, gens)::gen_results
                 )
             )
         in
-        let to_be_linked_to_typ = TypGen.explorable_list gen gens in
+        let to_be_linked_to_typ = explorable_list gens gen_results in
         let update (addition: Typ.t) (acc: results) (key: Typ.t): results =
-            match (retrieve_gen_for_typ key acc) with
-            | Some gen' -> (
-                let updated_gen = TypGen.extend_with_typ gen' addition in
-                replace_gen_of_typ key updated_gen acc
+            match (retrieve_gens_for_typ key acc) with
+            | Some gens' -> (
+                let updated_gens = TypGen.extend_with_typ gens' addition in
+                replace_gens_of_typ key updated_gens acc
             )
             | None -> (
-                if (is_fully_literal typ) then (
+                if (Typ.is_fully_literal typ) then (
                     acc
                 ) else (
-                    (key, true, [(typ_to_typ_gen addition)])::acc
+                    (key, true, [(TypGen.typ_to_typ_gen addition)])::acc
                 )
             )
         in
-        List.fold_left (update typ) gens to_be_linked_to_typ
+        List.fold_left (update typ) gen_results to_be_linked_to_typ
     ;;
 end
 
