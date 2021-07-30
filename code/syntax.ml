@@ -110,53 +110,9 @@ module Typ = struct
         load_type_variable(ty1);
         load_type_variable(ty2);
         )
-
-    let mk_ctr_types (ctr: Typ.t -> Typ.t -> Typ.t) (const: Typ.t) (const_is_left: bool) (acc: Typ.t list) (variant: Typ.t)
-        : Typ.t list =
-        if (const_is_left) then (ctr const variant)::acc else (ctr variant const)::acc
     ;;
 
-    let fuse_lists (ctr: Typ.t -> Typ.t -> Typ.t) (ty1_ls: Typ.t list) (ty2_ls: Typ.t list)
-        : Typ.t list = 
-        let acc_mk_ctr_types (acc: Typ.t list) (const_of_left: Typ.t): Typ.t list = 
-            List.fold_left (mk_ctr_types ctr const_of_left true) acc (ty2_ls)
-        in
-        List.fold_left acc_mk_ctr_types [] ty1_ls
-    ;;
-
-    let rec remove_ids (ty: Typ.t): Typ.t =
-        match ty with
-        | TNum -> TNum
-        | TBool -> TBool
-        | THole _ -> THole 0
-        | TArrow (ty1, ty2) -> TArrow ((remove_ids ty1), (remove_ids ty2))
-        | TProd (ty1, ty2) -> TProd ((remove_ids ty1), (remove_ids ty2))
-        | TSum (ty1, ty2) -> TSum ((remove_ids ty1), (remove_ids ty2))
-    ;;
-
-    let struc_eq_ignoring_ids (ty1: Typ.t) (ty2: Typ.t): bool =
-        let ty1 = remove_ids ty1 in
-        let ty2 = remove_ids ty2 in
-        ty1 = ty2
-    ;;
-
-    let cat_if_unequal_no_id_all (target_list: Typ.t list) (item: Typ.t): Typ.t list =
-        let is_eq' (elt: Typ.t): bool = 
-            struc_eq_ignoring_ids item elt
-        in
-        if (List.exists is_eq' target_list) then (
-            target_list
-        ) else (
-            item::target_list
-        )
-    ;;
-
-    let smallest_unequal_no_id_pair (l1: Typ.t list) (l2: Typ.t list)
-        : Typ.t list =
-        List.fold_left cat_if_unequal_no_id_all l1 l2
-    ;;
-
-    let rec is_fully_literal (typ: Typ.t): bool =
+    let rec is_fully_literal (typ: t): bool =
         match typ with
         | TNum 
         | TBool -> true
@@ -167,32 +123,20 @@ module Typ = struct
     ;;
 end
 
-(*All type gen operations preserve all possible type combinations EXCEPT those that produce a unify result (ie condense) *)
-module TypGen = struct
-    type base_typ = 
-        | Num
-        | Bool
-        | Hole of TypeInferenceVar.t
-    
+module Signature = struct
+    type sig_elt = bool * bool * bool
+    type t = sig_elt list
+
     type ctr =
         | Arrow
         | Prod
         | Sum
 
-    type typ_gen =
-        | Base of base_typ
-        | Compound of ctr * typ_gens * typ_gens
-    
-    and typ_gens = typ_gen list
+    let empty_sig: sig_elt = false * false * false;;
 
-    module Status = struct
-        type t =
-            | Solved Typ.t
-            | UnSolved TypGen.typ_gens
-
-        type solution = Typ.t * t
-        type solutions = solution list
-    end
+    let sig_of_ctr (ctr_used: ctr): sig_elt =
+        Signature.add_ctr ctr Signature.empty_sig
+    ;;
 
     let get_mk_of_ctr (ctr_used: ctr): Typ.t -> Typ.t -> Typ.t =
         match ctr_used with
@@ -201,13 +145,76 @@ module TypGen = struct
         | Sum -> Typ.mk_sum
     ;;
 
-    let rec get_sig_of_typ_gen (gen: typ_gen): (ctr list) = 
-        match gen with
-        | Base -> []
-        | Compound (ctr, _, gens) -> ctr::(get_sig_of_typ_gen gens)
+    let elt_has_ctr (ctr_used: ctr) (elt: sig_elt): bool =
+        match ctr_used with
+        | Arrow -> (
+            match elt with
+            | (true, _, _) -> true
+            |  _ -> false
+        )
+        | Prod -> -> (
+            match elt with
+            | (_, true, _) -> true
+            |  _ -> false
+        )
+        | Sum -> -> (
+            match elt with
+            | (_, _, true) -> true
+            |  _ -> false
+        )
     ;;
 
-    let rec has_sig (ctrs: (ctr list)) (gen: TypGen.typ_gen): bool =
+    let merge_sig_elts (sig_elt1: sig_elt) (sig_elt2: sig_elt): sig_elt =
+        let (a1, p1, s1) = sig_elt1 in
+        let (a2, p2, s2) = sig_elt2 in
+        ((a1 || a2), (s1 || s2), (p1 || p2))
+    ;;
+
+    let add_ctr (ctr_used: ctr) (elt: sig_elt): sig_elt =
+        let (or_elt) =
+            match ctr_used with
+            | Arrow -> (true, false, false)
+            | Prod -> (false, true, false)
+            | Sum -> (false, false, true)
+        in
+        merge_sig_elts elt or_elt
+    ;;
+
+    let rec combine (sign1: t) (sign2: t): t =
+        match sign1 with
+        | [] -> sign2
+        | hd::tl -> (
+            match sign2 with
+            | [] -> sign1
+            | hd'::tl' -> ((merge_sig_elts hd hd')::(combine tl tl'))
+        )
+    ;;
+end
+
+(*All type gen operations preserve all possible type combinations EXCEPT those that produce a unify result (ie condense) *)
+module TypGen = struct
+    type base_typ = 
+        | Num
+        | Bool
+        | Hole of TypeInferenceVar.t
+
+    type typ_gen =
+        | Base of base_typ
+        | Compound of ctr * typ_gens * typ_gens
+    
+    and typ_gens = typ_gen list
+    
+    let rec get_sig_of_typ_gens (gen: typ_gens): Signature.t =
+        match gen with
+        | [] -> []
+        | hd::tl -> (Signature.combine (get_sig_of_typ_gen hd) (get_sig_of_typ_gens tl))
+    and get_sig_of_typ_gen (gen_elt: typ_gen): Signature.t = 
+        match gen_elt with
+        | Base _ -> []
+        | Compound (ctr, _, gen) -> (Signature.sig_of_ctr ctr)::(get_sig_of_typ_gens gen)
+    ;;
+
+    let rec has_sig (ctrs: Signature.t) (gen: TypGen.typ_gen): bool =
         match gen with
         | Base _ -> (ctrs = [])
         | Compound (ctr, _, gens2) -> (
@@ -282,7 +289,7 @@ module TypGen = struct
 
     (*maintains invariant of all combinations present; bool returned
     dictates whether the split was valid for all values split *)
-    let split (ctr_used: ctr) (gen: typ_gens): bool * typ_gen * typ_gen =
+    let split (ctr_used: Signature.ctr) (gen: typ_gens): bool * typ_gen * typ_gen =
         let of_ctr (gen_elt: typ_gen): bool = 
             match gen_elt with
             | Base ty -> (
@@ -306,15 +313,15 @@ module TypGen = struct
         ((List.for_all of_ctr gen), lhs_gen, rhs_gen)
     ;;
 
-    let fuse (ctr_used: ctr) (gen1: typ_gens) (gen2: typ_gens): typ_gen =
+    let fuse (ctr_used: Signature.ctr) (gen1: typ_gens) (gen2: typ_gens): typ_gen =
         Compound (ctr_used, gen1, gen2)
     ;;
 
-    let rec dest_in_gens (dest_parts: Typ.t list) (dest_sig: ctr list) (gen: typ_gens): bool =
+    let rec dest_in_gens (dest_parts: Typ.t list) (dest_sig: Signature.t) (gen: typ_gens): bool =
         match gen with
         | [] -> ((dest_parts = []) && (dest_sig = []))
         | hd::tl -> (if (dest_in_gen hd) then (true) else (dest_in_gens dest_parts dest_sig tl))
-    and dest_in_gen (dest_parts: Typ.t list) (dest_sig: ctr list) (gen_elt: typ_gen): bool =
+    and dest_in_gen (dest_parts: Typ.t list) (dest_sig: Signature.t) (gen_elt: typ_gen): bool =
         match gen_elt with
         | Base ty -> (
             match dest_parts with
@@ -346,7 +353,7 @@ module TypGen = struct
             ty::acc
         in
         let destinations = List.fold_left get_key [] gens in
-        let rec typ_to_typ_ls (Typ.t): Typ.t list = 
+        let rec typ_to_typ_ls (typ: Typ.t): Typ.t list = 
             match typ with 
             | TNum
             | TBool
@@ -430,19 +437,30 @@ module TypGen = struct
             | Some typ1 -> (
                 match (filtered_solved_val gens2) with
                 | None -> None
-                | Some typ2 -> (get_mk_of_ctr ctr) typ1 typ2
+                | Some typ2 -> (Signature.get_mk_of_ctr ctr) typ1 typ2
             )
         )
         | _ -> None
     ;;
+end
+
+module Status = struct
+    (*can be solved of a type or unsolved with a generator containing possible types *)
+    type t =
+        | Solved of Typ.t
+        | UnSolved of TypGen.typ_gens
+
+    type solution = Typ.t * t
+    
+    type solutions = solution list
 
     (*this function should only be called during completion *)
-    let condense (gen: typ_gens) (occ_pass: bool): Status.t =
-        let filtered_gen = filter_unneeded_holes gen in
+    let condense (gen: TypGen.typ_gens) (occ_pass: bool): t =
+        let filtered_gen = TypGen.filter_unneeded_holes gen in
         if (occ_pass) then (
-            to_unsolved filtered_gen
+            UnSolved filtered_gen
         ) else (
-            let solved_op = filtered_solved_val filtered_gen in
+            let solved_op = TypGen.filtered_solved_val filtered_gen in
             match solved_op with
             | Some typ -> Solved typ
             | None -> UnSolved filtered_gen
@@ -455,10 +473,6 @@ module TypGenRes = struct
     type t = Typ.t * bool * TypGen.typ_gens
 
     type results = t list
-
-    type u_res =
-        | Hole of Typ.unify_result
-        | Ctr of Typ.r
 
     let retrieve_gen_for_typ (typ: Typ.t) (gens: results): TypGen.typ_gens option =
         let matches (elt: t): bool = 
@@ -500,8 +514,8 @@ module TypGenRes = struct
             : Typ.unify_results * Typ.rec_unify_results =
             let (acc_u, acc_r) = acc in
             match gen_res with
-            | ((Typ.THole key_var), occ, gen) -> ((key_var, (TypGen.condense gen occ))::acc_u, acc_r)
-            | (key, occ, gen) -> (acc_u, ((key, TypGen.condense gen occ)::acc_r))
+            | ((Typ.THole key_var), occ, gen) -> ((key_var, (Status.condense gen occ))::acc_u, acc_r)
+            | (key, occ, gen) -> (acc_u, ((key, Status.condense gen occ)::acc_r))
         in
         List.fold_left acc_results ([], []) gens
     ;;

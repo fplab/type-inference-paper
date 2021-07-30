@@ -109,7 +109,7 @@ and string_of_typ_gen (gen_elt: TypGen.typ_gen) =
   )
 ;;
 
-let rec string_of_solutions (sol: TypGen.Status.solutions) =
+let rec string_of_solutions (sol: Status.solutions) =
   match sol with
   | [] -> "\n";
   | hd::tl -> (
@@ -169,15 +169,6 @@ let rec print_ctx(ctx: Ctx.t) =
     let (id,typ) = hd in
     Printf.printf "%s\n" (id^" : "^ string_of_typ(typ));
     print_ctx(tl);
-  )
-;;
-
-let rec print_cycles(cycles: TypeInferenceVar.t list) =
-  match cycles with
-  | [] -> ();
-  | hd::tl -> (
-    Printf.printf "%s\n" (string_of_int(hd) ^ ", ");
-    print_cycles tl;
   )
 ;;
 
