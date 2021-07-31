@@ -123,6 +123,17 @@ module Typ = struct
         | TProd (ty1, ty2)
         | TSum (ty1, ty2) -> is_fully_literal ty1 && is_fully_literal ty2
     ;;
+
+    let rec contains_typ (typ: t) (container: t): bool =
+        if (typ = container) then true
+        else (
+            match container with
+            | TArrow (ty1, ty2)
+            | TProd (ty1, ty2)
+            | TSum (ty1, ty2) -> (contains_typ typ ty1 || contains_typ typ ty2)
+            | _ -> false
+        )
+    ;;
 end
 
 (*can only represent types (not type generators) *)
@@ -356,13 +367,11 @@ module Status = struct
         | UnSolved of TypGen.typ_gens
 
     type solution = Typ.t * t
-    
-    type solutions = solution list
 
     (*this function should only be called during completion *)
     let condense (gen: TypGen.typ_gens) (occ_pass: bool): t =
         let filtered_gen = TypGen.filter_unneeded_holes gen in
-        if (occ_pass) then (
+        if (Bool.not occ_pass) then (
             UnSolved filtered_gen
         ) else (
             let solved_op = TypGen.filtered_solved_val filtered_gen in
