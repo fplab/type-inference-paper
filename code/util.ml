@@ -91,7 +91,7 @@ let rec string_of_typ_gens (gen: TypGen.typ_gens) =
   | hd::[] -> (string_of_typ_gen hd);
   | hd::tl -> (
     let hd_str = string_of_typ_gen hd in
-    (hd_str ^ "/" ^ (string_of_typ_gens tl));
+    (hd_str ^ "||" ^ (string_of_typ_gens tl));
   )
 and string_of_typ_gen (gen_elt: TypGen.typ_gen) =
   match gen_elt with
@@ -101,11 +101,11 @@ and string_of_typ_gen (gen_elt: TypGen.typ_gen) =
     let str2 = string_of_typ_gens gens2 in
     let ctr_str = 
       match ctr with
-      | Arrow -> " -> "
-      | Prod -> " * "
-      | Sum -> " + "
+      | Arrow -> "->"
+      | Prod -> "*"
+      | Sum -> "+"
     in
-    ("(" ^ str1 ^ ")" ^ ctr_str ^ "(" ^ str2 ^ ")");
+    ("({" ^ str1 ^ "}" ^ ctr_str ^ "{" ^ str2 ^ "})");
   )
 ;;
 
@@ -123,6 +123,18 @@ let rec string_of_solutions (sol: Status.solution list) =
       )
     in
     hd_str ^ (string_of_solutions tl)
+  )
+;;
+
+let rec string_of_gen_res (gen_results: TypGenRes.results) =
+  match gen_results with
+  | [] -> "\n";
+  | hd::tl -> (
+    let (key, occ, res) = hd in
+    let hd_str = 
+      (string_of_typ key) ^ ": " ^ (if (occ) then "occ true" else "occ false") ^ ", ls: " ^ (string_of_typ_gens res) ^ "\n"
+    in
+    hd_str ^ (string_of_gen_res tl)
   )
 ;;
 

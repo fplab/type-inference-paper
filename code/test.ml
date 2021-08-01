@@ -28,6 +28,7 @@ let testcases: (Ctx.t * Exp.t) list = [
   ([("e1",TSum(TBool,THole 2));], parse "case e1 of L(x) -> x+1 else R(y) -> (if y then 1 else 0)");
   
   (Ctx.empty, parse "let y be fun (x:Hole[0]) -> x + 1 in y (|7|)");
+  
   (*to do: see if you can figure out the reason why the output of THole[2]'s ma_arrow  *)
   (Ctx.empty, parse "fun (x:Hole[2]) -> x (x+5)");
   (Ctx.empty, parse "fun (x:Hole[2]) -> x x");
@@ -36,6 +37,7 @@ let testcases: (Ctx.t * Exp.t) list = [
   ([("x",THole 1); ("y",THole 2);], parse "x 1 1 y");
   ([("f",TArrow(TNum,THole 1));("g",TArrow(TArrow(TNum, TNum),THole 2))], parse "fun (x:Hole[3]) -> f (g x)");
   ([("f",TArrow(TNum,THole 1));("g",TArrow(TArrow(TNum, TNum),THole 2))], parse "fun (x:Hole[3]) -> f (g (x 1))");
+  (*
   (Ctx.empty, parse "5+5+(|0|)");
   (Ctx.empty, parse "fun (x:Hole[2]) -> x + 5");
   (Ctx.empty, parse "fun (x:Hole[2]) -> x 5");
@@ -163,7 +165,7 @@ let testcases: (Ctx.t * Exp.t) list = [
    *)
   ([],
   parse "let f:Hole[0] be fun (x:Hole[1]) -> (fun (y:Hole[2]) -> x y 2) in (f (fun z -> z) (fun z -> z + 2))");
-  
+  *)
 ]
 ;;
 

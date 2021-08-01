@@ -109,6 +109,42 @@ let rec string_of_r_results (results: Typ.rec_unify_results) =
     )
 ;;
 
+let rec string_of_typ_gens (gen: TypGen.typ_gens) =
+  match gen with
+  | [] -> "\n"
+  | hd::[] -> (string_of_typ_gen hd);
+  | hd::tl -> (
+    let hd_str = string_of_typ_gen hd in
+    (hd_str ^ "//" ^ (string_of_typ_gens tl));
+  )
+and string_of_typ_gen (gen_elt: TypGen.typ_gen) =
+  match gen_elt with
+  | Base btyp -> (string_of_typ (TypGen.base_typ_to_typ btyp));
+  | Compound (ctr, gens1, gens2) -> (
+    let str1 = string_of_typ_gens gens1 in
+    let str2 = string_of_typ_gens gens2 in
+    let ctr_str = 
+      match ctr with
+      | Arrow -> "->"
+      | Prod -> "*"
+      | Sum -> "+"
+    in
+    ("({" ^ str1 ^ "}" ^ ctr_str ^ "{" ^ str2 ^ "})");
+  )
+;;
+
+let rec string_of_gen_res (gen_results: TypGenRes.results) =
+  match gen_results with
+  | [] -> "\n";
+  | hd::tl -> (
+    let (key, occ, res) = hd in
+    let hd_str = 
+      (string_of_typ key) ^ ": " ^ (if (occ) then "occ true" else "occ false") ^ ", ls: " ^ (string_of_typ_gens res) ^ "\n"
+    in
+    hd_str ^ (string_of_gen_res tl)
+  )
+;;
+
 let add_all_refs_as_results (u_results: Typ.unify_results) (r_results: Typ.rec_unify_results)
     : Typ.unify_results * Typ.rec_unify_results =
     (*extends u results to include all holes contained within r results
@@ -204,6 +240,11 @@ and dfs_typs_of_ctr (ctr: Signature.ctr) (ty1: Typ.t) (ty2: Typ.t) (gen_results:
 and dfs_typs_gen (gens: TypGen.typ_gens) (gen_results: TypGenRes.results) (tracked: CycleTrack.t) (unseen_results: ResTrack.t) (ctr_exp: bool)
     : bool * (TypGen.typ_gens) * CycleTrack.t * ResTrack.t =
     let destinations = TypGenRes.explorable_list gens gen_results in
+    (*
+    Printf.printf "To where?\n";
+    Printf.printf "%s\n" (string_of_typ_gens gens);
+    Printf.printf "%s\n" (string_of_typ_ls destinations);
+    *)
     let in_domain_and_unequal (list_elt: Typ.t) (tracked_elt: Typ.t): bool =
         (tracked_elt <> list_elt) && (Typ.contains_typ tracked_elt list_elt)
     in
@@ -221,6 +262,9 @@ and dfs_typs_gen (gens: TypGen.typ_gens) (gen_results: TypGenRes.results) (track
                 let (occ_all, dfs_all, tracked, unseen_results) = 
                     dfs_typs list_elt gen_results tracked unseen_results ctr_exp
                 in
+                Printf.printf "Debug pre extend in dfs gen\n";
+                Printf.printf "acc: %s\n" (string_of_typ_gens acc_typs);
+                Printf.printf "dfs: %s\n" (string_of_typ_gens dfs_all);
                 (acc_b && occ_all, 
                 (TypGen.extend_with_gens acc_typs dfs_all),
                 tracked,
@@ -228,7 +272,14 @@ and dfs_typs_gen (gens: TypGen.typ_gens) (gen_results: TypGenRes.results) (track
             )
         )
     in
-    List.fold_left traverse_if_valid (true, [], tracked, unseen_results) destinations
+    let (occ, typs, tracked, unseen_results) =
+        List.fold_left traverse_if_valid (true, [], tracked, unseen_results) destinations
+    in
+    (*combine explored results with those already known that weren't giving more info than present. *)
+    let original_with_dfs_typs = 
+        TypGen.extend_with_gens gens typs
+    in
+    (occ, original_with_dfs_typs, tracked, unseen_results)
 ;;
 
 (*since the final solution contains all references, there is technically no need to dfs; you could just 
@@ -297,7 +348,10 @@ let rec fix_tracked_results (results_to_fix: ResTrack.t) (gen_results: TypGenRes
     | [] -> results_to_fix, gen_results
     | hd::_ -> (
         let (occ, dfs_tys, _, results_to_fix) = dfs_typs hd gen_results CycleTrack.empty results_to_fix true in
+        Printf.printf "DEBUG DFS:\n";
+        Printf.printf "%s\n" (string_of_typ_gens dfs_tys);
         let (gen_results, _) = resolve hd dfs_tys occ gen_results CycleTrack.empty in
+        Printf.printf "%s\n" (string_of_gen_res gen_results);
         fix_tracked_results results_to_fix gen_results
     )
 ;;
@@ -308,6 +362,8 @@ let finalize_results (u_results: Typ.unify_results) (r_results: Typ.rec_unify_re
         add_all_refs_as_results u_results r_results
     in
     let gen_results = TypGenRes.unif_results_to_gen_results u_results r_results in
+    Printf.printf "Initial gen results:\n";
+    Printf.printf "%s\n" (string_of_gen_res gen_results);
     let results_to_fix = ResTrack.results_to_t u_results r_results in
     let (_, gen_results) = 
         fix_tracked_results results_to_fix gen_results

@@ -134,6 +134,21 @@ module Typ = struct
             | _ -> false
         )
     ;;
+
+    (*
+    let mk_ctr_types (ctr: t -> t -> t) (const: t) (const_is_left: bool) (acc: t list) (variant: t)
+        : Typ.t list =
+        if (const_is_left) then (ctr const variant)::acc else (ctr variant const)::acc
+    ;;
+
+    let fuse_lists (ctr: Typ.t -> Typ.t -> Typ.t) (ty1_ls: Typ.t list) (ty2_ls: Typ.t list)
+        : Typ.t list = 
+        let acc_mk_ctr_types (acc: Typ.t list) (const_of_left: Typ.t): Typ.t list = 
+            List.fold_left (mk_ctr_types ctr const_of_left true) acc (ty2_ls)
+        in
+        List.fold_left acc_mk_ctr_types [] ty1_ls
+    ;;
+    *)
 end
 
 (*can only represent types (not type generators) *)
@@ -297,6 +312,13 @@ module TypGen = struct
         )
     ;;
 
+    let is_base_lit (gen_elt: typ_gen): bool =
+        match gen_elt with
+        | Base Num
+        | Base Bool -> true
+        | _ -> false
+    ;;
+
     let is_base_lit_or_comp (gen_elt: typ_gen): bool =
         match gen_elt with
         | Base (Hole _) -> false
@@ -304,17 +326,17 @@ module TypGen = struct
     ;;
 
     (*helper; call fn below *)
-    let rec filter_unneeded_holes_gens (remove: bool) (gens: typ_gens): typ_gens =
+    let rec filter_unneeded_holes_gens (comp: typ_gen -> bool) (remove: bool) (gens: typ_gens): typ_gens =
         match gens with
         | [] -> []
         | hd::tl -> (
-            let had_hole, elt_op = filter_unneeded_holes_gen remove hd in
+            let had_hole, elt_op = filter_unneeded_holes_gen comp remove hd in
             let remove = had_hole || remove in
             match elt_op with
-            | None -> filter_unneeded_holes_gens remove tl
-            | Some hd' -> hd'::(filter_unneeded_holes_gens remove tl)
+            | None -> filter_unneeded_holes_gens comp remove tl
+            | Some hd' -> hd'::(filter_unneeded_holes_gens comp remove tl)
         )
-    and filter_unneeded_holes_gen (remove: bool) (gen: typ_gen): bool * typ_gen option =
+    and filter_unneeded_holes_gen (comp: typ_gen -> bool) (remove: bool) (gen: typ_gen): bool * typ_gen option =
         match gen with
         | Base btyp -> (
             match btyp with
@@ -325,10 +347,10 @@ module TypGen = struct
             | _ -> (false, Some gen)
         )
         | Compound (ctr, gens1, gens2) -> (
-            let e_base_lit_or_comp1 = List.exists is_base_lit_or_comp gens1 in
-            let e_base_lit_or_comp2 = List.exists is_base_lit_or_comp gens2 in
-            let gens1' = filter_unneeded_holes_gens e_base_lit_or_comp1 gens1 in
-            let gens2' = filter_unneeded_holes_gens e_base_lit_or_comp2 gens2 in
+            let e_comp1 = List.exists comp gens1 in
+            let e_comp2 = List.exists comp gens2 in
+            let gens1' = filter_unneeded_holes_gens comp e_comp1 gens1 in
+            let gens2' = filter_unneeded_holes_gens comp e_comp2 gens2 in
             (false, (Some (Compound (ctr, gens1', gens2'))))
         )
     ;;
@@ -337,9 +359,9 @@ module TypGen = struct
         - have a literal as an option in the same position
         - have a compound as an option in the same position
         - are discovered after a needed hole in the same position *)
-    let filter_unneeded_holes (gens: typ_gens): typ_gens =
-        let e_base_lit_or_comp = List.exists is_base_lit_or_comp gens in
-        filter_unneeded_holes_gens e_base_lit_or_comp gens
+    let filter_unneeded_holes (comp: typ_gen -> bool) (gens: typ_gens): typ_gens =
+        let e_comp = List.exists comp gens in
+        filter_unneeded_holes_gens comp e_comp gens
     ;;
 
     (*returns the solved value associated with a filtered generator IF IT EXISTS; requires gen be nonempty *)
@@ -370,10 +392,11 @@ module Status = struct
 
     (*this function should only be called during completion *)
     let condense (gen: TypGen.typ_gens) (occ_pass: bool): t =
-        let filtered_gen = TypGen.filter_unneeded_holes gen in
         if (Bool.not occ_pass) then (
+            let filtered_gen = TypGen.filter_unneeded_holes TypGen.is_base_lit gen in
             UnSolved filtered_gen
         ) else (
+            let filtered_gen = TypGen.filter_unneeded_holes TypGen.is_base_lit_or_comp gen in
             let solved_op = TypGen.filtered_solved_val filtered_gen in
             match solved_op with
             | Some typ -> Solved typ
@@ -463,7 +486,12 @@ module TypGenRes = struct
     ;;
 
     (*constructs a list of all values that can be explored from a typgen given a set of results
-    by listing all those types represented in gen that have a result in the result set supplied *)
+    by listing all those types represented in gen that have a result in the result set supplied 
+    note:
+        the explorable list is simply that: an explorable list detailing all the places that can spawn
+        further information within this scope; this does not bar the possibility of explorable locations
+        being nested within the types implied by the supplied gens
+        in order to generate a proper dfs, be sure to also dfs the most informative types currently seen*)
     let explorable_list (gens: TypGen.typ_gens) (gen_results: results): Typ.t list =
         let get_key (acc: Typ.t list) (elt: t): Typ.t list =
             let (ty, _, _) = elt in
@@ -490,6 +518,24 @@ module TypGenRes = struct
         in
         List.fold_left dest_check_and_acc [] destinations
     ;;
+
+    (*
+    let dfs_list (gens: TypGen.typ_gens) (gen_results: results): Typ.t list =
+        let filtered_gen = filter_unneeded_holes gens in
+        (*WARNING: This is potentially highly inefficient!  *)
+        let rec all_combinations_gens (gens: TypGen.typ_gens): Typ.t list =
+            match gens with
+            | [] -> []
+            | hd::tl -> List.rev_append (all_combinations_gen hd) (all_combinations_gens tl)
+        and all_combinations_gen (gen: TypGen.typ_gen): Typ.t list =
+            match gen with
+            | Base btyp -> [base_typ_to_typ btyp]
+            | Compound (ctr, gens1, gens2) -> (
+                let combs_left
+            )
+        ;;
+    ;;
+    *)
 
     (*may need to add results for more than just those that have a result-> could be anything with a hole
     however, it could also be that the preservation of all combinations makes it fine
