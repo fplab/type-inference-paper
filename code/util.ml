@@ -91,7 +91,7 @@ let rec string_of_typ_gens (gen: TypGen.typ_gens) =
   | hd::[] -> (string_of_typ_gen hd);
   | hd::tl -> (
     let hd_str = string_of_typ_gen hd in
-    (hd_str ^ "||" ^ (string_of_typ_gens tl));
+    (hd_str ^ "//" ^ (string_of_typ_gens tl));
   )
 and string_of_typ_gen (gen_elt: TypGen.typ_gen) =
   match gen_elt with
@@ -105,7 +105,7 @@ and string_of_typ_gen (gen_elt: TypGen.typ_gen) =
       | Prod -> "*"
       | Sum -> "+"
     in
-    ("({" ^ str1 ^ "}" ^ ctr_str ^ "{" ^ str2 ^ "})");
+    ("[{" ^ str1 ^ "}" ^ ctr_str ^ "{" ^ str2 ^ "}]");
   )
 ;;
 
@@ -116,10 +116,10 @@ let rec string_of_solutions (sol: Status.solution list) =
     let (key, res) = hd in
     let hd_str =
       match res with
-      | Solved typ -> ("solved: (" ^ string_of_typ(key) ^ ") (" ^ string_of_typ(typ) ^ ")\n");
+      | Solved typ -> ("solved: (" ^ string_of_typ(key) ^ ") - " ^ string_of_typ(typ) ^ "\n");
       | UnSolved gen -> (
         let sorted_gen = gen_sort_layer gen in
-        ("unsolved: (" ^ string_of_typ(key) ^ ") (" ^ string_of_typ_gens(sorted_gen) ^ ")\n");
+        ("unsolved: (" ^ string_of_typ(key) ^ ") - " ^ string_of_typ_gens(sorted_gen) ^ "\n");
       )
     in
     hd_str ^ (string_of_solutions tl)

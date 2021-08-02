@@ -37,7 +37,7 @@ let testcases: (Ctx.t * Exp.t) list = [
   ([("x",THole 1); ("y",THole 2);], parse "x 1 1 y");
   ([("f",TArrow(TNum,THole 1));("g",TArrow(TArrow(TNum, TNum),THole 2))], parse "fun (x:Hole[3]) -> f (g x)");
   ([("f",TArrow(TNum,THole 1));("g",TArrow(TArrow(TNum, TNum),THole 2))], parse "fun (x:Hole[3]) -> f (g (x 1))");
-  (*
+  
   (Ctx.empty, parse "5+5+(|0|)");
   (Ctx.empty, parse "fun (x:Hole[2]) -> x + 5");
   (Ctx.empty, parse "fun (x:Hole[2]) -> x 5");
@@ -46,7 +46,7 @@ let testcases: (Ctx.t * Exp.t) list = [
   (Ctx.empty, EAsc (parse "fun x -> 1+x", TArrow(TNum,TNum)));
   ([("x", TArrow(TNum,TNum));], parse "x 1");
   (Ctx.empty, parse "let x be (|0|) in (|1|)");
-
+  
   (*New test cases begin *)
   ([("f", TArrow(TNum,TNum));("g", TArrow(TBool,TNum));("z", TBool);], 
     parse "let h be fun (m:Hole[7]) -> (if z then f m else g m) in h");
@@ -85,6 +85,7 @@ let testcases: (Ctx.t * Exp.t) list = [
   (Ctx.empty, ELet ("f", (Some (THole 0)), (ELam ("x", (EVar "x"))), (EPair ((EBinOp ((EVar "f"), OpAp, (EBoolLiteral true))), (EBinOp ((EVar "f"), OpAp, (ENumLiteral 1)))))));
   (Ctx.empty, ELet ("f", (Some (TArrow (THole 0,THole 1))), (ELam ("x", (EVar "x"))), (EPair ((EBinOp ((EVar "f"), OpAp, (EBoolLiteral true))), (EBinOp ((EVar "f"), OpAp, (ENumLiteral 1)))))));
   (Ctx.empty, ELet ("x", (Some (TSum(THole 0, THole 1))), parse "(|1|)", parse "case x of L(x) -> (if x then 1 else 1) else R(x) -> x+1"));
+  
   (* (Ctx.empty, ELet ("x", (Some (TSum(THole 0, THole 1))), parse "(|1|)", parse "case x of L(x) -> (if x then 1 else 1) else R(x) -> x+1")); *)
   (Ctx.empty, ELet ("x", (Some (THole 0)), parse "(|1|)", parse "case x of L(x) -> 1 else R(x) -> 1"));
 
@@ -149,6 +150,7 @@ let testcases: (Ctx.t * Exp.t) list = [
   parse "let f:Hole[0] be fun (x:Hole[1]) -> (fun (y:Hole[2]) -> x y 2) in (f (|7|) (|8|))");
   ([],
   parse "let f:Hole[0] be fun (x:Hole[1]) -> (fun (y:Hole[2]) -> x y 2) in (f (fun z -> z + 2) (|8|))");
+  (*
   ([],
   parse "let f:Hole[0] be fun (x:Hole[1]) -> (fun (y:Hole[2]) -> x y 2) in (f (|7|) (fun z -> z + 2))");
   ([("g", (TArrow(TNum, TNum)));],

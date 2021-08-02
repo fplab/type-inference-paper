@@ -182,7 +182,7 @@ let add_all_refs_as_results (u_results: Typ.unify_results) (r_results: Typ.rec_u
 (*a method that dfs's on a type to accumulate all known types it is cyclic with. returns a boolean denoting
 if an occurs check was failed due to the results and a list of all types or if invalid split occurred *)
 let rec dfs_typs (root: Typ.t) (gen_results: TypGenRes.results) (tracked: CycleTrack.t) (unseen_results: ResTrack.t) (ctr_exp: bool)
-    : bool * (TypGen.typ_gens) * CycleTrack.t * ResTrack.t = 
+    : bool * (TypGen.typ_gens) * CycleTrack.t * ResTrack.t =
     let tracked = CycleTrack.track_typ root tracked in
     let unseen_results = ResTrack.remove_typ root unseen_results in
     let by_ctr_exp (ctr_exp: bool) (ctr: Signature.ctr) (ty1: Typ.t) (ty2: Typ.t)
@@ -262,9 +262,11 @@ and dfs_typs_gen (gens: TypGen.typ_gens) (gen_results: TypGenRes.results) (track
                 let (occ_all, dfs_all, tracked, unseen_results) = 
                     dfs_typs list_elt gen_results tracked unseen_results ctr_exp
                 in
+                (*
                 Printf.printf "Debug pre extend in dfs gen\n";
                 Printf.printf "acc: %s\n" (string_of_typ_gens acc_typs);
                 Printf.printf "dfs: %s\n" (string_of_typ_gens dfs_all);
+                *)
                 (acc_b && occ_all, 
                 (TypGen.extend_with_gens acc_typs dfs_all),
                 tracked,
@@ -348,10 +350,17 @@ let rec fix_tracked_results (results_to_fix: ResTrack.t) (gen_results: TypGenRes
     | [] -> results_to_fix, gen_results
     | hd::_ -> (
         let (occ, dfs_tys, _, results_to_fix) = dfs_typs hd gen_results CycleTrack.empty results_to_fix true in
+        (*
         Printf.printf "DEBUG DFS:\n";
         Printf.printf "%s\n" (string_of_typ_gens dfs_tys);
+        *)
+        
+        Printf.printf "currently running: %s " (string_of_typ hd);
+        Printf.printf "with occ pass status: %s\n" (if (occ) then "pass" else "fail");
         let (gen_results, _) = resolve hd dfs_tys occ gen_results CycleTrack.empty in
+        (*
         Printf.printf "%s\n" (string_of_gen_res gen_results);
+        *)
         fix_tracked_results results_to_fix gen_results
     )
 ;;
@@ -362,8 +371,10 @@ let finalize_results (u_results: Typ.unify_results) (r_results: Typ.rec_unify_re
         add_all_refs_as_results u_results r_results
     in
     let gen_results = TypGenRes.unif_results_to_gen_results u_results r_results in
+    (*
     Printf.printf "Initial gen results:\n";
     Printf.printf "%s\n" (string_of_gen_res gen_results);
+    *)
     let results_to_fix = ResTrack.results_to_t u_results r_results in
     let (_, gen_results) = 
         fix_tracked_results results_to_fix gen_results
