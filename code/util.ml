@@ -130,9 +130,9 @@ let rec string_of_gen_res (gen_results: TypGenRes.results) =
   match gen_results with
   | [] -> "\n";
   | hd::tl -> (
-    let (key, occ, res) = hd in
+    let (key, res) = hd in
     let hd_str = 
-      (string_of_typ key) ^ ": " ^ (if (occ) then "occ true" else "occ false") ^ ", ls: " ^ (string_of_typ_gens res) ^ "\n"
+      (string_of_typ key) ^ " ls: " ^ (string_of_typ_gens res) ^ "\n"
     in
     hd_str ^ (string_of_gen_res tl)
   )

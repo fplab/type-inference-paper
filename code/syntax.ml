@@ -181,6 +181,7 @@ module TypGen = struct
     
     and typ_gens = typ_gen list
     
+    (*
     let rec get_sig_of_typ_gens (gens: typ_gens): Signature.t =
         match gens with
         | [] -> []
@@ -189,7 +190,7 @@ module TypGen = struct
         match gen with
         | Base _ -> []
         | Compound (ctr, _, gens) -> ctr::(get_sig_of_typ_gens gens)
-    ;;
+    ;;*)
 
     let rec typ_to_typ_gen (typ: Typ.t): typ_gen =
         match typ with
@@ -284,32 +285,27 @@ module TypGen = struct
         | Hole var -> THole var 
     ;;
 
-    let rec dest_in_gens (dest_parts: Typ.t list) (dest_sig: Signature.ctr list) (gens: typ_gens): bool =
+    let rec dest_gen_in_gens (gens: typ_gens) (dest_gen: typ_gen): bool =
         match gens with
-        | [] -> ((dest_parts = []) && (dest_sig = []))
-        | hd::tl -> ((dest_in_gen dest_parts dest_sig hd) || (dest_in_gens dest_parts dest_sig tl))
-    and dest_in_gen (dest_parts: Typ.t list) (dest_sig: Signature.ctr list) (gen: typ_gen): bool =
+        | [] -> false
+        | hd::tl -> ((dest_gen_in_gen hd dest_gen) || (dest_gen_in_gens tl dest_gen))
+    and dest_gen_in_gen (gen: typ_gen) (dest_gen: typ_gen): bool =
         match gen with
-        | Base ty -> (
-            match dest_parts with
-            | hd::[] -> (hd = (base_typ_to_typ ty))
-            | _ -> false
-        )
+        | Base _ -> (dest_gen = gen)
         | Compound (ctr, gens1, gens2) -> (
-            match dest_sig with
-            | [] -> false
-            | hd_sig::tl_sig -> (
-                if (hd_sig = ctr) then (
-                    match dest_parts with
-                    | [] -> false
-                    | hd_parts::tl_parts -> (
-                        (dest_in_gens [hd_parts] [] gens1) && (dest_in_gens tl_parts tl_sig gens2) 
-                    )
+            match dest_gen with
+            | Base _ -> false
+            | Compound (dest_ctr, dest_gens1, dest_gens2) -> (
+                if (dest_ctr = ctr) then (
+                    (dest_gens_in_gens gens1 dest_gens1) && (dest_gens_in_gens gens2 dest_gens2)
                 ) else (
                     false
                 )
             )
         )
+    and dest_gens_in_gens (gens: typ_gens) (dest_gens: typ_gens): bool =
+        (*need all the dest_gen in dest_gens to be in gens  *)
+        List.for_all (dest_gen_in_gens gens) dest_gens
     ;;
 
     let is_base_lit (gen_elt: typ_gen): bool =
@@ -382,6 +378,51 @@ module TypGen = struct
     ;;
 end
 
+module Blacklist = struct
+    type err =
+        | Invalid
+        | Occurs
+    
+    type t = (Typ.t * err) list
+
+    let rec add_elt (blist: t) (typ_reason: Typ.t * err): t =
+        match blist with
+        | [] -> [typ_reason]
+        | hd::tl -> (
+            if (hd = typ_reason) then (
+                blist
+            ) else (
+                hd::(add_elt tl typ_reason)
+            )
+        )
+    ;;
+
+    let merge_blists (bset: t list): t =
+        match bset with
+        | [] -> []
+        | hd::[] -> hd
+        | hd::tl -> (
+            let acc_cat (acc: t) (elt: t): t =
+                List.fold_left add_elt acc elt
+            in
+            List.fold_left acc_cat hd tl
+        )
+    ;;
+
+    let has_blacklisted_elt (gens: TypGen.typ_gens) (blist: t): bool =
+        let get_key (acc: Typ.t list) (elt: Typ.t * err): Typ.t list =
+            let (key, _) = elt in
+            key::acc
+        in
+        let destinations = List.fold_left get_key [] blist in
+        let dest_check (dest: Typ.t): bool =
+            let dest_gen = TypGen.typ_to_typ_gen dest in
+            TypGen.dest_gen_in_gens gens dest_gen
+        in
+        List.exists dest_check destinations
+    ;;
+end
+
 module Status = struct
     (*can be solved of a type or unsolved with a generator containing possible types *)
     type t =
@@ -391,34 +432,34 @@ module Status = struct
     type solution = Typ.t * t
 
     (*this function should only be called during completion *)
-    let condense (gen: TypGen.typ_gens) (occ_pass: bool): t =
-        if (occ_pass) then (
-            let filtered_gen = TypGen.filter_unneeded_holes TypGen.is_base_lit_or_comp gen in
-            let solved_op = TypGen.filtered_solved_val filtered_gen in
+    let condense (gens: TypGen.typ_gens) (blist: Blacklist.t): t =
+        if (Blacklist.has_blacklisted_elt gens blist) then (
+            let filtered_gens = TypGen.filter_unneeded_holes TypGen.is_base_lit gens in
+            UnSolved filtered_gens
+        ) else (
+            let filtered_gens = TypGen.filter_unneeded_holes TypGen.is_base_lit_or_comp gens in
+            let solved_op = TypGen.filtered_solved_val filtered_gens in
             match solved_op with
             | Some typ -> Solved typ
-            | None -> UnSolved filtered_gen
-        ) else (
-            let filtered_gen = TypGen.filter_unneeded_holes TypGen.is_base_lit gen in
-            UnSolved filtered_gen
+            | None -> UnSolved filtered_gens
         )
     ;;
 end
 
 module TypGenRes = struct
     (*bool represents occurs check status; if false, condensation will make it unsolved *)
-    type t = Typ.t * bool * TypGen.typ_gens
+    type t = Typ.t * TypGen.typ_gens
 
     type results = t list
 
     let retrieve_gens_for_typ (typ: Typ.t) (gen_results: results): TypGen.typ_gens option =
         let matches (elt: t): bool = 
-            let (key, _, _) = elt in
+            let (key, _) = elt in
             key = typ
         in
         let key_value = List.find_opt matches gen_results in
         match key_value with
-        | Some (_, _, value) -> Some value
+        | Some (_, value) -> Some value
         | None -> None
     ;;
 
@@ -431,7 +472,7 @@ module TypGenRes = struct
             | UnSolved tys -> tys
         in
         let gen_of_key = List.fold_left TypGen.extend_with_typ [] typ_ls in
-        (key, true, gen_of_key)
+        (key, gen_of_key)
     ;;
 
     let unif_results_to_gen_results (u_results: Typ.unify_results) (r_results: Typ.rec_unify_results): results =
@@ -447,40 +488,15 @@ module TypGenRes = struct
         List.fold_left r_convert_acc acc r_results
     ;;
 
-    let gen_results_to_unif_results (gen_results: results): (TypeInferenceVar.t * Status.t) list * (Typ.t * Status.t) list =
-        let acc_results (acc: (TypeInferenceVar.t * Status.t) list * (Typ.t * Status.t) list) (gen_res: t)
-            : (TypeInferenceVar.t * Status.t) list * (Typ.t * Status.t) list =
-            let (acc_u, acc_r) = acc in
-            match gen_res with
-            | ((Typ.THole key_var), occ, gens) -> ((key_var, (Status.condense gens occ))::acc_u, acc_r)
-            | (key, occ, gens) -> (acc_u, ((key, Status.condense gens occ)::acc_r))
-        in
-        List.fold_left acc_results ([], []) gen_results
-    ;;
-
     let rec replace_gens_of_typ (typ: Typ.t) (replacement: TypGen.typ_gens) (gen_results: results): results =
         match gen_results with
         | [] -> []
         | hd::tl -> (
-            let (key, occ, _) = hd in
+            let (key, _) = hd in
             if (typ = key) then (
-                (key, occ, replacement)::tl
+                (key, replacement)::tl
             ) else (
                 hd::(replace_gens_of_typ typ replacement tl)
-            )
-        )
-    ;;
-
-    let rec replace_gens_and_update_occ_of_typ (typ: Typ.t) (replacement: TypGen.typ_gens) (replace_occ: bool) (gen_results: results)
-        : results =
-        match gen_results with
-        | [] -> []
-        | hd::tl -> (
-            let (key, key_occ, _) = hd in
-            if (typ = key) then (
-                (key, key_occ && replace_occ, replacement)::tl
-            ) else (
-                hd::(replace_gens_and_update_occ_of_typ typ replacement replace_occ tl)
             )
         )
     ;;
@@ -494,23 +510,13 @@ module TypGenRes = struct
         in order to generate a proper dfs, be sure to also dfs the most informative types currently seen*)
     let explorable_list (gens: TypGen.typ_gens) (gen_results: results): Typ.t list =
         let get_key (acc: Typ.t list) (elt: t): Typ.t list =
-            let (ty, _, _) = elt in
+            let (ty, _) = elt in
             ty::acc
         in
         let destinations = List.fold_left get_key [] gen_results in
-        let rec typ_to_typ_ls (typ: Typ.t): Typ.t list = 
-            match typ with 
-            | TNum
-            | TBool
-            | THole _ -> [typ]
-            | TArrow (ty1, ty2) 
-            | TProd (ty1, ty2)
-            | TSum (ty1, ty2) -> (typ_to_typ_ls ty1) @ (typ_to_typ_ls ty2)
-        in
         let dest_check_and_acc (acc: Typ.t list) (dest: Typ.t): Typ.t list =
-            let dest_parts = typ_to_typ_ls dest in
-            let dest_sig = TypGen.get_sig_of_typ_gen (TypGen.typ_to_typ_gen dest) in
-            if (TypGen.dest_in_gens dest_parts dest_sig gens) then (
+            let dest_gen = TypGen.typ_to_typ_gen dest in
+            if (TypGen.dest_gen_in_gens gens dest_gen) then (
                 dest::acc
             ) else (
                 acc
@@ -553,7 +559,7 @@ module TypGenRes = struct
                 if (Typ.is_fully_literal typ) then (
                     gen_results
                 ) else (
-                    (typ, true, gens)::gen_results
+                    (typ, gens)::gen_results
                 )
             )
         in
@@ -568,7 +574,7 @@ module TypGenRes = struct
                 if (Typ.is_fully_literal typ) then (
                     acc
                 ) else (
-                    (key, true, [(TypGen.typ_to_typ_gen addition)])::acc
+                    (key, [(TypGen.typ_to_typ_gen addition)])::acc
                 )
             )
         in
