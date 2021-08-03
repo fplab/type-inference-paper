@@ -125,11 +125,11 @@ and string_of_typ_gen (gen_elt: TypGen.typ_gen) =
     let str2 = string_of_typ_gens gens2 in
     let ctr_str = 
       match ctr with
-      | Arrow -> "->"
-      | Prod -> "*"
-      | Sum -> "+"
+      | Arrow -> "Arrow"
+      | Prod -> "Prod"
+      | Sum -> "Sum"
     in
-    ("({" ^ str1 ^ "}" ^ ctr_str ^ "{" ^ str2 ^ "})");
+    ("(" ^ ctr_str ^ " ({" ^ str1 ^ "}, " ^ "{" ^ str2 ^ "}))");
   )
 ;;
 
@@ -182,63 +182,77 @@ let add_all_refs_as_results (u_results: Typ.unify_results) (r_results: Typ.rec_u
 (*a method that dfs's on a type to accumulate all known types it is cyclic with. returns a boolean denoting
 if an occurs check was failed due to the results and a list of all types or if invalid split occurred *)
 let rec dfs_typs (root: Typ.t) (gen_results: TypGenRes.results) (tracked: CycleTrack.t) (unseen_results: ResTrack.t) (ctr_exp: bool)
-    : bool * (TypGen.typ_gens) * CycleTrack.t * ResTrack.t =
+    : bool * (TypGen.typ_gens) * CycleTrack.t * ResTrack.t * TypGenRes.results =
     let tracked = CycleTrack.track_typ root tracked in
+    (*
+    Printf.printf "Beginning %s" (string_of_typ root);
+    Printf.printf " with ctr_exp as %s\n" (if (ctr_exp) then "true" else "false");
+    *)
     let unseen_results = ResTrack.remove_typ root unseen_results in
     let by_ctr_exp (ctr_exp: bool) (ctr: Signature.ctr) (ty1: Typ.t) (ty2: Typ.t)
-        : bool * (TypGen.typ_gens) * CycleTrack.t * ResTrack.t =
+        : bool * (TypGen.typ_gens) * CycleTrack.t * ResTrack.t * TypGenRes.results  =
         if (ctr_exp) then (
             dfs_typs_of_ctr ctr ty1 ty2 gen_results tracked unseen_results
         ) else (
             match (TypGenRes.retrieve_gens_for_typ root gen_results) with
             | Some gens -> dfs_typs_gen gens gen_results tracked unseen_results false
-            | None -> (true, [], tracked, unseen_results)
+            | None -> (true, [], tracked, unseen_results, gen_results)
         )
     in
-    let (occ, dfs_all, tracked, unseen_results) = 
+    let (occ, dfs_all, tracked, unseen_results, gen_results) = 
         match root with
-        | TNum -> (true, [], tracked, unseen_results)
-        | TBool -> (true, [], tracked, unseen_results)
+        | TNum
+        | TBool -> (true, [], tracked, unseen_results, gen_results)
         | TArrow (ty1, ty2) -> (by_ctr_exp ctr_exp Signature.Arrow ty1 ty2)
         | TProd (ty1, ty2) -> (by_ctr_exp ctr_exp Signature.Prod ty1 ty2)
         | TSum (ty1, ty2) -> (by_ctr_exp ctr_exp Signature.Sum ty1 ty2)
         | THole _ -> (
             match (TypGenRes.retrieve_gens_for_typ root gen_results) with
             | Some gens -> (dfs_typs_gen gens gen_results tracked unseen_results ctr_exp)
-            | None -> (true, [], tracked, unseen_results)
+            | None -> (true, [], tracked, unseen_results, gen_results)
         )
     in
-    (*Printf.printf "DEBUG:\n";
-    Printf.printf "%s\n" ((string_of_typ root) ^ " {:} " ^ (string_of_typ_ls dfs_all));*)
-    (occ, (TypGen.extend_with_typ dfs_all root), tracked, unseen_results)
+    (*Printf.printf "Finishing %s\n" ((string_of_typ root) ^ " {:} " ^ (string_of_typ_gens dfs_all));*)
+    (occ, (TypGen.extend_with_typ dfs_all root), tracked, unseen_results, gen_results)
 and dfs_typs_of_ctr (ctr: Signature.ctr) (ty1: Typ.t) (ty2: Typ.t) (gen_results: TypGenRes.results) (tracked: CycleTrack.t) (unseen_results: ResTrack.t)
-    : bool * (TypGen.typ_gens) * CycleTrack.t * ResTrack.t =
+    : bool * (TypGen.typ_gens) * CycleTrack.t * ResTrack.t * TypGenRes.results =
     let rec_ty = ((Signature.get_mk_of_ctr ctr) ty1 ty2) in
-    let (_, tys_u, _, _) =
+    let (_, tys_u, _, _, gen_results) =
         match (TypGenRes.retrieve_gens_for_typ rec_ty gen_results) with
         | Some gens -> dfs_typs_gen gens gen_results tracked unseen_results false
-        | None -> (true, [], [], [])
+        | None -> (true, [], [], [], gen_results)
     in
     let (valid, lhs_tys, rhs_tys) = TypGen.split ctr tys_u in
+    (*
+    Printf.printf "validity of (%s) " (string_of_typ ((Signature.get_mk_of_ctr ctr) ty1 ty2));
+    Printf.printf "is %s\n" (if (valid) then "VALID" else "INVALID");
+    *)
     let gen_results = TypGenRes.link_typ_to_gen ty1 lhs_tys gen_results in
     let gen_results = TypGenRes.link_typ_to_gen ty2 rhs_tys gen_results in
-    let (occ1, ty1_gens, _, unseen_results) = 
+    Printf.printf "new tree: %s\n" (string_of_gen_res gen_results);
+    let (occ1, ty1_gens, _, unseen_results, gen_results) = 
         dfs_typs ty1 gen_results CycleTrack.empty unseen_results true
     in
-    let (occ2, ty2_gens, _, unseen_results) = 
+    let (occ2, ty2_gens, _, unseen_results, gen_results) = 
         dfs_typs ty2 gen_results CycleTrack.empty unseen_results true
     in
-    let rec_tys_gens = TypGen.fuse ctr ty1_gens ty2_gens in
-    let (dfs_occ, dfs_tys, tracked, unseen_results) = 
+    let rec_tys_gen = TypGen.fuse ctr ty1_gens ty2_gens in
+    let (dfs_occ, dfs_tys, tracked, unseen_results, gen_results) = 
         match (TypGenRes.retrieve_gens_for_typ rec_ty gen_results) with
         | Some gens -> dfs_typs_gen gens gen_results tracked unseen_results true
-        | None -> (true, [], tracked, unseen_results)
+        | None -> (true, [], tracked, unseen_results, gen_results)
     in
     (*Printf.printf "DEBUG:\n";
     Printf.printf "%s\n" ((string_of_typ (ctr ty1 ty2)) ^ " {:} "^ (string_of_typ_ls final_tys));*)
-    (occ1 && occ2 && dfs_occ && valid, (TypGen.extend_with_gen dfs_tys rec_tys_gens), tracked, unseen_results)
+    let new_gens = TypGen.extend_with_gen dfs_tys rec_tys_gen in
+    (*
+    Printf.printf "fusion had:\n%s\n" (string_of_typ_gen rec_tys_gen);
+    Printf.printf "DFS had: \n %s\n" (string_of_typ_gens dfs_tys);
+    Printf.printf "Merge of the two had:\n %s\n\n" (string_of_typ_gens new_gens);
+    *)
+    (occ1 && occ2 && dfs_occ && valid, new_gens, tracked, unseen_results, gen_results)
 and dfs_typs_gen (gens: TypGen.typ_gens) (gen_results: TypGenRes.results) (tracked: CycleTrack.t) (unseen_results: ResTrack.t) (ctr_exp: bool)
-    : bool * (TypGen.typ_gens) * CycleTrack.t * ResTrack.t =
+    : bool * (TypGen.typ_gens) * CycleTrack.t * ResTrack.t * TypGenRes.results =
     let destinations = TypGenRes.explorable_list gens gen_results in
     (*
     Printf.printf "To where?\n";
@@ -248,18 +262,18 @@ and dfs_typs_gen (gens: TypGen.typ_gens) (gen_results: TypGenRes.results) (track
     let in_domain_and_unequal (list_elt: Typ.t) (tracked_elt: Typ.t): bool =
         (tracked_elt <> list_elt) && (Typ.contains_typ tracked_elt list_elt)
     in
-    let traverse_if_valid (acc: bool * (TypGen.typ_gens) * CycleTrack.t * ResTrack.t) (list_elt: Typ.t)
-        : bool * (TypGen.typ_gens) * CycleTrack.t * ResTrack.t =
-        let (acc_b, acc_typs, tracked, unseen_results) = acc in
+    let traverse_if_valid (acc: bool * (TypGen.typ_gens) * CycleTrack.t * ResTrack.t * TypGenRes.results) (list_elt: Typ.t)
+        : bool * (TypGen.typ_gens) * CycleTrack.t * ResTrack.t * TypGenRes.results =
+        let (acc_b, acc_typs, tracked, unseen_results, gen_results) = acc in
         (*if invalid *)
         if (List.exists (in_domain_and_unequal list_elt) tracked) then (
-            (false, acc_typs, tracked, unseen_results)
+            (false, acc_typs, tracked, unseen_results, gen_results)
         ) else (
             (*if already traversed *)
             if (CycleTrack.is_tracked list_elt tracked) then (
-                (acc_b, acc_typs, tracked, unseen_results)
+                (acc_b, acc_typs, tracked, unseen_results, gen_results)
             ) else (
-                let (occ_all, dfs_all, tracked, unseen_results) = 
+                let (occ_all, dfs_all, tracked, unseen_results, gen_results) = 
                     dfs_typs list_elt gen_results tracked unseen_results ctr_exp
                 in
                 (*
@@ -270,69 +284,97 @@ and dfs_typs_gen (gens: TypGen.typ_gens) (gen_results: TypGenRes.results) (track
                 (acc_b && occ_all, 
                 (TypGen.extend_with_gens acc_typs dfs_all),
                 tracked,
-                unseen_results)
+                unseen_results,
+                gen_results)
             )
         )
     in
-    let (occ, typs, tracked, unseen_results) =
-        List.fold_left traverse_if_valid (true, [], tracked, unseen_results) destinations
+    let (occ, typs, tracked, unseen_results, gen_results) =
+        List.fold_left traverse_if_valid (true, [], tracked, unseen_results, gen_results) destinations
     in
     (*combine explored results with those already known that weren't giving more info than present. *)
     let original_with_dfs_typs = 
         TypGen.extend_with_gens gens typs
     in
-    (occ, original_with_dfs_typs, tracked, unseen_results)
+    (occ, original_with_dfs_typs, tracked, unseen_results, gen_results)
 ;;
 
 (*since the final solution contains all references, there is technically no need to dfs; you could just 
 replace the solution for all members of the list and call recursive protocol for any recursive types in it
 wouldn't be a hard change. just remove calls to resolve_res and wrap calls to the other two in a standard
 recursive matching on a list generated from the solution *)
+(*
+    the sol occ associated with the top would theoretically apply to all values in the loop; if ever a child were to have been involved
+    in some occurs check issue, its implicit evaluation upon dfsing the parent should imbue the top sol_occ as false as well.
+    thus, it cannot be that case that a child the parent depends on be sol_occ false without the parent being so too. 
+    however, can a child be non sol_occ when its parent is so?
+ *)
 let rec resolve (root: Typ.t) (solution: TypGen.typ_gens) (sol_occ: bool) (gen_results: TypGenRes.results) (tracked: CycleTrack.t)
-    : TypGenRes.results * CycleTrack.t =
+    : TypGenRes.results * CycleTrack.t * bool =
     let tracked = CycleTrack.track_typ root tracked in
+    (*
+    Printf.printf "resolve target: %s\n" (string_of_typ root);
+    *)
     match root with
     | TNum
-    | TBool -> (gen_results, tracked)
+    | TBool -> (gen_results, tracked, true)
     | TArrow (ty1, ty2) -> resolve_of_ctr Signature.Arrow ty1 ty2 solution sol_occ gen_results tracked
     | TProd (ty1, ty2) -> resolve_of_ctr Signature.Prod ty1 ty2 solution sol_occ gen_results tracked
     | TSum (ty1, ty2) -> resolve_of_ctr Signature.Sum ty1 ty2 solution sol_occ gen_results tracked
     | THole _ -> (
-        let gen_results = TypGenRes.replace_gens_and_occ_of_typ root solution sol_occ gen_results in
-        resolve_typ_gens solution sol_occ gen_results tracked
+        (*what if i reframed it to return a sol occ and only replace after getting that update! *)
+        let (gen_results, tracked, sol_occ) = resolve_typ_gens solution sol_occ gen_results tracked in
+        (*
+        Printf.printf "resolving target (%s) complete" (string_of_typ root);
+        Printf.printf " which has sol_occ status %s\n" (if (sol_occ) then "VALID" else "INVALID");
+        *)
+        let gen_results = TypGenRes.replace_gens_and_update_occ_of_typ root solution sol_occ gen_results in
+        (*
+        if (root = (Typ.THole 6)) then (
+            Printf.printf "%s\n" (string_of_gen_res gen_results)
+        ) else (
+            ()
+        );*)
+        (gen_results, tracked, sol_occ)
     )
 and resolve_of_ctr (ctr: Signature.ctr) (ty1: Typ.t) (ty2: Typ.t) (solution: TypGen.typ_gens) (sol_occ: bool) (gen_results: TypGenRes.results) 
-    (tracked: CycleTrack.t): TypGenRes.results * CycleTrack.t =
+    (tracked: CycleTrack.t): TypGenRes.results * CycleTrack.t * bool =
     let (valid, lhs_tys, rhs_tys) = TypGen.split ctr solution in
     let sol_occ = valid && sol_occ in
     (*no need to generate new type results since dfs should already have traversed this and constructed the necessary ones *)
     (*update results with information for children *)
-    let gen_results = TypGenRes.replace_gens_and_occ_of_typ ty1 lhs_tys sol_occ gen_results in
-    let (gen_results, tracked) = resolve_typ_gens lhs_tys sol_occ gen_results tracked in
-    let gen_results = TypGenRes.replace_gens_and_occ_of_typ ty2 rhs_tys sol_occ gen_results in
-    let (gen_results, tracked) = resolve_typ_gens rhs_tys sol_occ gen_results tracked in
+    let (gen_results, tracked, lhs_occ) = resolve_typ_gens lhs_tys sol_occ gen_results tracked in
+    let gen_results = TypGenRes.replace_gens_and_update_occ_of_typ ty1 lhs_tys lhs_occ gen_results in
+    let (gen_results, tracked, rhs_occ) = resolve_typ_gens rhs_tys sol_occ gen_results tracked in
+    let gen_results = TypGenRes.replace_gens_and_update_occ_of_typ ty2 rhs_tys rhs_occ gen_results in
     match (TypGenRes.retrieve_gens_for_typ ((Signature.get_mk_of_ctr ctr) ty1 ty2) gen_results) with
     | Some _ -> (
+        let (gen_results, tracked, sol_occ) = resolve_typ_gens solution sol_occ gen_results tracked in
         let gen_results  = 
-            TypGenRes.replace_gens_and_occ_of_typ ((Signature.get_mk_of_ctr ctr) ty1 ty2) solution sol_occ gen_results
+            TypGenRes.replace_gens_and_update_occ_of_typ ((Signature.get_mk_of_ctr ctr) ty1 ty2) solution sol_occ gen_results
         in
-        resolve_typ_gens solution sol_occ gen_results tracked
+        (*
+        Printf.printf "(res) validity of (%s) " (string_of_typ ((Signature.get_mk_of_ctr ctr) ty1 ty2));
+        Printf.printf "is split %s " (if (valid) then "VALID" else "INVALID");
+        Printf.printf "with found sol_occ status %s\n" (if (sol_occ) then "pass" else "fail");
+        *)
+        (gen_results, tracked, sol_occ)
     )
-    | None -> (gen_results, tracked)
+    | None -> (gen_results, tracked, sol_occ)
 (*already following a replaced value; just dfs so other funcs can replace *)
 and resolve_typ_gens (solution: TypGen.typ_gens) (sol_occ: bool) (gen_results: TypGenRes.results) (tracked: CycleTrack.t)
-    : TypGenRes.results * CycleTrack.t =
+    : TypGenRes.results * CycleTrack.t * bool =
     let ty_ls = TypGenRes.explorable_list solution gen_results in
-    let traverse_if_valid (acc: TypGenRes.results * CycleTrack.t) (list_elt: Typ.t)
-        : TypGenRes.results * CycleTrack.t =
-        let (acc_res, tracked) = acc in
+    let traverse_if_valid (acc: TypGenRes.results * CycleTrack.t * bool) (list_elt: Typ.t)
+        : TypGenRes.results * CycleTrack.t * bool =
+        let (acc_res, tracked, acc_occ) = acc in
         if (CycleTrack.is_tracked list_elt tracked) then (
-            (acc_res, tracked)
+            (acc_res, tracked, acc_occ)
         ) else (
-            resolve list_elt solution sol_occ acc_res tracked
+            resolve list_elt solution acc_occ acc_res tracked
         )
     in
-    List.fold_left traverse_if_valid (gen_results, tracked) ty_ls
+    List.fold_left traverse_if_valid (gen_results, tracked, sol_occ) ty_ls
 ;;
 
 let rec gen_to_status (gen_results: TypGenRes.results): Status.solution list =
@@ -349,17 +391,21 @@ let rec fix_tracked_results (results_to_fix: ResTrack.t) (gen_results: TypGenRes
     match results_to_fix with
     | [] -> results_to_fix, gen_results
     | hd::_ -> (
-        let (occ, dfs_tys, _, results_to_fix) = dfs_typs hd gen_results CycleTrack.empty results_to_fix true in
-        (*
-        Printf.printf "DEBUG DFS:\n";
-        Printf.printf "%s\n" (string_of_typ_gens dfs_tys);
-        *)
+        let (occ, dfs_tys, _, results_to_fix, gen_results) = dfs_typs hd gen_results CycleTrack.empty results_to_fix true in
         
+        Printf.printf "DEBUG DFS:\n";
+        Printf.printf "currently running: %s\n " (string_of_typ hd);
+        Printf.printf "with occ pass status: %s\n" (if (occ) then "pass" else "fail");
+        Printf.printf "%s\n\n" (string_of_typ_gens dfs_tys);
+        
+        (*
         Printf.printf "currently running: %s " (string_of_typ hd);
         Printf.printf "with occ pass status: %s\n" (if (occ) then "pass" else "fail");
-        let (gen_results, _) = resolve hd dfs_tys occ gen_results CycleTrack.empty in
+        *)
+        let (gen_results, _, _) = resolve hd dfs_tys occ gen_results CycleTrack.empty in
         (*
-        Printf.printf "%s\n" (string_of_gen_res gen_results);
+        Printf.printf "After fixing %s, the results were: \n" (string_of_typ hd); 
+        Printf.printf "%s\n\n" (string_of_gen_res gen_results);
         *)
         fix_tracked_results results_to_fix gen_results
     )

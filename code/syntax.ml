@@ -269,8 +269,8 @@ module TypGen = struct
                 ((extend_with_gens acc_first first), (extend_with_gens acc_second second))
             )
         in
-        let (lhs_gen, rhs_gen) = List.fold_left accumulate_splits ([], []) gens in
-        ((List.for_all of_ctr gens), lhs_gen, rhs_gen)
+        let (lhs_gens, rhs_gens) = List.fold_left accumulate_splits ([], []) gens in
+        ((List.for_all of_ctr gens), lhs_gens, rhs_gens)
     ;;
 
     let fuse (ctr_used: Signature.ctr) (gens1: typ_gens) (gens2: typ_gens): typ_gen =
@@ -392,15 +392,15 @@ module Status = struct
 
     (*this function should only be called during completion *)
     let condense (gen: TypGen.typ_gens) (occ_pass: bool): t =
-        if (Bool.not occ_pass) then (
-            let filtered_gen = TypGen.filter_unneeded_holes TypGen.is_base_lit gen in
-            UnSolved filtered_gen
-        ) else (
+        if (occ_pass) then (
             let filtered_gen = TypGen.filter_unneeded_holes TypGen.is_base_lit_or_comp gen in
             let solved_op = TypGen.filtered_solved_val filtered_gen in
             match solved_op with
             | Some typ -> Solved typ
             | None -> UnSolved filtered_gen
+        ) else (
+            let filtered_gen = TypGen.filter_unneeded_holes TypGen.is_base_lit gen in
+            UnSolved filtered_gen
         )
     ;;
 end
@@ -471,16 +471,16 @@ module TypGenRes = struct
         )
     ;;
 
-    let rec replace_gens_and_occ_of_typ (typ: Typ.t) (replacement: TypGen.typ_gens) (replace_occ: bool) (gen_results: results)
+    let rec replace_gens_and_update_occ_of_typ (typ: Typ.t) (replacement: TypGen.typ_gens) (replace_occ: bool) (gen_results: results)
         : results =
         match gen_results with
         | [] -> []
         | hd::tl -> (
-            let (key, _, _) = hd in
+            let (key, key_occ, _) = hd in
             if (typ = key) then (
-                (key, replace_occ, replacement)::tl
+                (key, key_occ && replace_occ, replacement)::tl
             ) else (
-                hd::(replace_gens_and_occ_of_typ typ replacement replace_occ tl)
+                hd::(replace_gens_and_update_occ_of_typ typ replacement replace_occ tl)
             )
         )
     ;;
