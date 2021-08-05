@@ -327,6 +327,31 @@ module TypGen = struct
         List.for_all (dest_gen_in_gens gens) dest_gens
     ;;
 
+    let rec dest_gen_used_in_gens (gens: typ_gens) (dest_gen: typ_gen): bool =
+        match gens with
+        | [] -> false
+        | hd::tl -> ((dest_gen_used_in_gen hd dest_gen) || (dest_gen_used_in_gens tl dest_gen))
+    and dest_gen_used_in_gen (gen: typ_gen) (dest_gen: typ_gen): bool =
+        match gen with
+        | Base _ -> (dest_gen = gen)
+        | Compound (ctr, gens1, gens2) -> (
+            let in_either_side = (dest_gen_used_in_gens gens1 dest_gen) || (dest_gen_used_in_gens gens2 dest_gen) in
+            match dest_gen with
+            | Base _ -> in_either_side
+            | Compound (dest_ctr, dest_gens1, dest_gens2) -> (
+                if (dest_ctr = ctr) then (
+                    (*either the dest is used in either side or it is exactly representable using both sides *)
+                    in_either_side || ((dest_gens_in_gens gens1 dest_gens1) && (dest_gens_in_gens gens2 dest_gens2))
+                ) else (
+                    in_either_side
+                )
+            )
+        )
+    and dest_gens_used_in_gens (gens: typ_gens) (dest_gens: typ_gens): bool =
+        (*need all the dest_gen in dest_gens to be in gens  *)
+        List.for_all (dest_gen_used_in_gens gens) dest_gens
+    ;;
+
     let is_base_lit (gen_elt: typ_gen): bool =
         match gen_elt with
         | Base Num
@@ -433,12 +458,12 @@ module Blacklist = struct
             let (key, _) = elt in
             key::acc
         in
-        let destinations = List.fold_left get_key [] blist in
-        let dest_check (dest: Typ.t): bool =
-            let dest_gen = TypGen.typ_to_typ_gen dest in
-            TypGen.dest_gen_in_gens gens dest_gen
+        let blist_keys = List.fold_left get_key [] blist in
+        let blist_inside (key: Typ.t): bool =
+            let key_gen = TypGen.typ_to_typ_gen key in
+            TypGen.dest_gen_used_in_gens gens key_gen
         in
-        List.exists dest_check destinations
+        List.exists blist_inside blist_keys
     ;;
 end
 

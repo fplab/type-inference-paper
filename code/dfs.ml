@@ -145,6 +145,50 @@ let rec string_of_gen_res (gen_results: TypGenRes.results) =
   )
 ;;
 
+let comp_gen_elt (gen1: TypGen.typ_gen) (gen2: TypGen.typ_gen): int =
+  let gen_to_int (gen: TypGen.typ_gen): int =
+    match gen with
+    | Base _ -> 0
+    | Compound _ -> 1
+  in
+  Stdlib.compare (gen_to_int gen1) (gen_to_int gen2)
+;;
+
+let rec gen_sort_layer (gen: TypGen.typ_gens): TypGen.typ_gens =
+  let gen = List.fast_sort comp_gen_elt gen in
+  gen_sort_explore gen
+and gen_sort_explore (gen: TypGen.typ_gens): TypGen.typ_gens =
+  match gen with
+  | [] -> []
+  | hd::tl -> (
+    match hd with
+    | Base _ -> hd::(gen_sort_explore tl)
+    | Compound (ctr, gens1, gens2) -> (
+      let sorted1 = gen_sort_layer gens1 in
+      let sorted2 = gen_sort_layer gens2 in
+      (Compound (ctr, sorted1, sorted2))::(gen_sort_explore tl)
+    )
+  )
+;;
+
+let rec string_of_solutions (sol: Status.solution list) =
+  match sol with
+  | [] -> "\n";
+  | hd::tl -> (
+    let (key, res) = hd in
+    let hd_str =
+      match res with
+      | Solved typ -> ("solved: (" ^ string_of_typ(key) ^ ") - " ^ string_of_typ(typ) ^ "\n");
+      | UnSolved gen -> (
+        let sorted_gen = gen_sort_layer gen in
+        ("unsolved: (" ^ string_of_typ(key) ^ ") - " ^ string_of_typ_gens(sorted_gen) ^ "\n");
+      )
+    in
+    hd_str ^ (string_of_solutions tl)
+  )
+;;
+
+
 let rec string_of_blist (blist: Blacklist.t) = 
     match blist with
     | [] -> "\n";
@@ -444,7 +488,18 @@ let rec gen_to_status (gen_results: TypGenRes.results) (blist: Blacklist.t): Sta
     | [] -> []
     | hd::tl -> (
         let (hd_key, hd_val) = hd in
-        (hd_key, (Status.condense hd_val blist))::(gen_to_status tl blist)
+        let stat_of_key = Status.condense hd_val blist in
+        
+        if (hd_key = Typ.TArrow(Typ.THole 15, Typ.THole 16)) then (
+            if (Blacklist.has_blacklisted_elt hd_val blist) then (
+                Printf.printf "\n\nhad\n\n"
+            )
+            else (
+                Printf.printf "%s\n" (string_of_typ_gens hd_val);
+                Printf.printf "\n\ndidnt\n\n"
+            )
+        ) else (());
+        (hd_key, stat_of_key)::(gen_to_status tl blist)
     )
 ;;
 
@@ -453,7 +508,7 @@ let rec fix_tracked_results (results_to_fix: ResTrack.t) (gen_results: TypGenRes
     match results_to_fix with
     | [] -> results_to_fix, gen_results, blist
     | hd::_ -> (
-        let (dfs_tys, _, results_to_fix, blist') = dfs_typs hd gen_results CycleTrack.empty results_to_fix true in
+        let (dfs_tys, _, results_to_fix, blist_occ) = dfs_typs hd gen_results CycleTrack.empty results_to_fix true in
         (*Printf.printf "fix blacklist': \n%s\n" (string_of_blist blist');*)
         (*
         Printf.printf "DEBUG DFS:\n";
@@ -465,12 +520,12 @@ let rec fix_tracked_results (results_to_fix: ResTrack.t) (gen_results: TypGenRes
         Printf.printf "currently running: %s " (string_of_typ hd);
         Printf.printf "with occ pass status: %s\n" (if (occ) then "pass" else "fail");
         *)
-        let (gen_results, _, blist'') = resolve hd dfs_tys gen_results CycleTrack.empty in
+        let (gen_results, _, blist_shape) = resolve hd dfs_tys gen_results CycleTrack.empty in
         (*
         Printf.printf "After fixing %s, the results were: \n" (string_of_typ hd); 
         Printf.printf "%s\n\n" (string_of_gen_res gen_results);
         *)
-        let merged_blist = (Blacklist.merge_blists [blist; blist'; blist'';]) in
+        let merged_blist = (Blacklist.merge_blists [blist; blist_occ; blist_shape;]) in
         (*Printf.printf "merge fix blacklist': \n%s\n" (string_of_blist merged_blist);*)
         fix_tracked_results results_to_fix gen_results merged_blist
     )
