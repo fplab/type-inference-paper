@@ -229,6 +229,7 @@ let rec dfs_typs (root: Typ.t) (gen_results: TypGenRes.results) (tracked: CycleT
             | None -> ([], tracked, unseen_results, [])
         )
     in
+    (*Printf.printf "dfs blacklist: \n%s\n" (string_of_blist blist);*)
     (*Printf.printf "Finishing %s\n" ((string_of_typ root) ^ " {:} " ^ (string_of_typ_gens dfs_all));*)
     ((TypGen.extend_with_typ dfs_all root), tracked, unseen_results, blist)
 and dfs_typs_of_ctr (ctr: Signature.ctr) (ty1: Typ.t) (ty2: Typ.t) (gen_results: TypGenRes.results) (tracked: CycleTrack.t) (unseen_results: ResTrack.t)
@@ -239,14 +240,7 @@ and dfs_typs_of_ctr (ctr: Signature.ctr) (ty1: Typ.t) (ty2: Typ.t) (gen_results:
         | Some gens -> dfs_typs_gen gens gen_results tracked unseen_results false
         | None -> ([], [], [], [])
     in
-    let (valid, lhs_tys, rhs_tys) = TypGen.split ctr tys_u in
-    let new_blist: Blacklist.t =
-        if (Bool.not valid) then (
-            [(ty1, Invalid); (ty2, Invalid); (rec_ty, Invalid);]
-        ) else (
-            []
-        )
-    in
+    let (_, lhs_tys, rhs_tys) = TypGen.split ctr tys_u in
     (*
     Printf.printf "validity of (%s) " (string_of_typ ((Signature.get_mk_of_ctr ctr) ty1 ty2));
     Printf.printf "is %s\n" (if (valid) then "VALID" else "INVALID");
@@ -274,7 +268,15 @@ and dfs_typs_of_ctr (ctr: Signature.ctr) (ty1: Typ.t) (ty2: Typ.t) (gen_results:
     Printf.printf "DFS had: \n %s\n" (string_of_typ_gens dfs_tys);
     Printf.printf "Merge of the two had:\n %s\n\n" (string_of_typ_gens new_gens);
     *)
-    let final_blist = Blacklist.merge_blists [blist1; blist2; blist3; new_blist;] in
+    (*
+    Printf.printf "new blacklist: \n%s\n" (string_of_blist new_blist);
+    Printf.printf "b1 blacklist: \n%s\n" (string_of_blist blist1);
+    Printf.printf "b2 blacklist: \n%s\n" (string_of_blist blist2);
+    Printf.printf "b3 blacklist: \n%s\n" (string_of_blist blist3);
+    *)
+    let final_blist = Blacklist.merge_blists [blist1; blist2; blist3;] in
+    (*
+    Printf.printf "final blacklist: \n%s\n" (string_of_blist final_blist);*)
     (new_gens, tracked, unseen_results, final_blist)
 and dfs_typs_gen (gens: TypGen.typ_gens) (gen_results: TypGenRes.results) (tracked: CycleTrack.t) (unseen_results: ResTrack.t) (ctr_exp: bool)
     : TypGen.typ_gens * CycleTrack.t * ResTrack.t * Blacklist.t =
@@ -291,10 +293,14 @@ and dfs_typs_gen (gens: TypGen.typ_gens) (gen_results: TypGenRes.results) (track
         : TypGen.typ_gens * CycleTrack.t * ResTrack.t * Blacklist.t =
         let (acc_typs, tracked, unseen_results, acc_blist) = acc in
         (*if invalid *)
-        if (List.exists (in_domain_and_unequal list_elt) tracked) then (
+        let occ_fail_opt = List.find_opt (in_domain_and_unequal list_elt) tracked in
+        match occ_fail_opt with
+        | Some occ_fail_elt -> (
+            let acc_blist = Blacklist.add_elt acc_blist (occ_fail_elt, Occurs) in
             let acc_blist = Blacklist.add_elt acc_blist (list_elt, Occurs) in
             (acc_typs, tracked, unseen_results, acc_blist)
-        ) else (
+        )
+        | None -> (
             (*if already traversed *)
             if (CycleTrack.is_tracked list_elt tracked) then (
                 (acc_typs, tracked, unseen_results, acc_blist)
@@ -302,7 +308,14 @@ and dfs_typs_gen (gens: TypGen.typ_gens) (gen_results: TypGenRes.results) (track
                 let (dfs_all, tracked, unseen_results, new_blist) = 
                     dfs_typs list_elt gen_results tracked unseen_results ctr_exp
                 in
+                (*
+                Printf.printf "acc blacklist: \n%s\n" (string_of_blist acc_blist);
+                Printf.printf "new blacklist: \n%s\n" (string_of_blist new_blist);
+                *)
                 let acc_blist = Blacklist.merge_blists [acc_blist; new_blist] in
+                (*
+                Printf.printf "merge blacklist: \n%s\n" (string_of_blist acc_blist);
+                *)
                 (*
                 Printf.printf "Debug pre extend in dfs gen\n";
                 Printf.printf "acc: %s\n" (string_of_typ_gens acc_typs);
@@ -318,6 +331,7 @@ and dfs_typs_gen (gens: TypGen.typ_gens) (gen_results: TypGenRes.results) (track
     let (typs, tracked, unseen_results, blist) =
         List.fold_left traverse_if_valid ([], tracked, unseen_results, []) destinations
     in
+    (*Printf.printf "blacklist: \n%s\n" (string_of_blist blist);*)
     (*combine explored results with those already known that weren't giving more info than present. *)
     let original_with_dfs_typs = 
         TypGen.extend_with_gens gens typs
@@ -336,20 +350,20 @@ recursive matching on a list generated from the solution *)
     however, can a child be non sol_occ when its parent is so?
  *)
 let rec resolve (root: Typ.t) (solution: TypGen.typ_gens) (gen_results: TypGenRes.results) (tracked: CycleTrack.t)
-    : TypGenRes.results * CycleTrack.t =
+    : TypGenRes.results * CycleTrack.t * Blacklist.t =
     let tracked = CycleTrack.track_typ root tracked in
     (*
     Printf.printf "resolve target: %s\n" (string_of_typ root);
     *)
     match root with
     | TNum
-    | TBool -> (gen_results, tracked)
+    | TBool -> (gen_results, tracked, [])
     | TArrow (ty1, ty2) -> resolve_of_ctr Signature.Arrow ty1 ty2 solution gen_results tracked
     | TProd (ty1, ty2) -> resolve_of_ctr Signature.Prod ty1 ty2 solution gen_results tracked
     | TSum (ty1, ty2) -> resolve_of_ctr Signature.Sum ty1 ty2 solution gen_results tracked
     | THole _ -> (
         (*what if i reframed it to return a sol occ and only replace after getting that update! *)
-        let (gen_results, tracked) = resolve_typ_gens solution gen_results tracked in
+        let (gen_results, tracked, blist) = resolve_typ_gens solution gen_results tracked in
         (*
         Printf.printf "resolving target (%s) complete" (string_of_typ root);
         Printf.printf " which has sol_occ status %s\n" (if (sol_occ) then "VALID" else "INVALID");
@@ -361,20 +375,42 @@ let rec resolve (root: Typ.t) (solution: TypGen.typ_gens) (gen_results: TypGenRe
         ) else (
             ()
         );*)
-        (gen_results, tracked)
+        (gen_results, tracked, blist)
     )
 and resolve_of_ctr (ctr: Signature.ctr) (ty1: Typ.t) (ty2: Typ.t) (solution: TypGen.typ_gens) (gen_results: TypGenRes.results) 
-    (tracked: CycleTrack.t): TypGenRes.results * CycleTrack.t =
-    let (_, lhs_tys, rhs_tys) = TypGen.split ctr solution in
+    (tracked: CycleTrack.t): TypGenRes.results * CycleTrack.t * Blacklist.t =
+    let (split_res, lhs_tys, rhs_tys) = TypGen.split ctr solution in
+    let rec_ty = ((Signature.get_mk_of_ctr ctr) ty1 ty2) in
+    let new_blist: Blacklist.t =
+        match split_res with
+        | Success -> []
+        | Fail f_stat -> (
+            (*if simply an inconsistency in ctrs, only the rec typ eq class is invalid; 
+            if a use of a rec as a base type, then all elts of the rec are invalid *)
+            match f_stat with
+            | Ctr_fail -> [(rec_ty, Invalid);]
+            | _ -> (
+                let rec typ_to_typ_ls (typ: Typ.t): Typ.t list =
+                    match typ with
+                    | TArrow (ty1, ty2)
+                    | TProd (ty1, ty2)
+                    | TSum (ty1, ty2) -> (typ_to_typ_ls ty1) @ (typ_to_typ_ls ty2)
+                    | _ -> [typ]
+                in
+                let ty_ls = typ_to_typ_ls rec_ty in
+                List.rev_map (fun (x: Typ.t): (Typ.t * Blacklist.err)  -> (x, Invalid)) ty_ls
+            )
+        )
+    in
     (*no need to generate new type results since dfs should already have traversed this and constructed the necessary ones *)
     (*update results with information for children *)
-    let (gen_results, tracked) = resolve_typ_gens lhs_tys gen_results tracked in
+    let (gen_results, tracked, blist1) = resolve_typ_gens lhs_tys gen_results tracked in
     let gen_results = TypGenRes.replace_gens_of_typ ty1 lhs_tys gen_results in
-    let (gen_results, tracked) = resolve_typ_gens rhs_tys gen_results tracked in
+    let (gen_results, tracked, blist2) = resolve_typ_gens rhs_tys gen_results tracked in
     let gen_results = TypGenRes.replace_gens_of_typ ty2 rhs_tys gen_results in
     match (TypGenRes.retrieve_gens_for_typ ((Signature.get_mk_of_ctr ctr) ty1 ty2) gen_results) with
     | Some _ -> (
-        let (gen_results, tracked) = resolve_typ_gens solution gen_results tracked in
+        let (gen_results, tracked, blist3) = resolve_typ_gens solution gen_results tracked in
         let gen_results  = 
             TypGenRes.replace_gens_of_typ ((Signature.get_mk_of_ctr ctr) ty1 ty2) solution gen_results
         in
@@ -383,23 +419,24 @@ and resolve_of_ctr (ctr: Signature.ctr) (ty1: Typ.t) (ty2: Typ.t) (solution: Typ
         Printf.printf "is split %s " (if (valid) then "VALID" else "INVALID");
         Printf.printf "with found sol_occ status %s\n" (if (sol_occ) then "pass" else "fail");
         *)
-        (gen_results, tracked)
+        let final_blist = Blacklist.merge_blists [blist1; blist2; blist3; new_blist;] in
+        (gen_results, tracked, final_blist)
     )
-    | None -> (gen_results, tracked)
+    | None -> (gen_results, tracked, (Blacklist.merge_blists [blist1; blist2; new_blist;]))
 (*already following a replaced value; just dfs so other funcs can replace *)
 and resolve_typ_gens (solution: TypGen.typ_gens) (gen_results: TypGenRes.results) (tracked: CycleTrack.t)
-    : TypGenRes.results * CycleTrack.t =
+    : TypGenRes.results * CycleTrack.t * Blacklist.t =
     let ty_ls = TypGenRes.explorable_list solution gen_results in
-    let traverse_if_valid (acc: TypGenRes.results * CycleTrack.t) (list_elt: Typ.t)
-        : TypGenRes.results * CycleTrack.t =
-        let (acc_res, tracked) = acc in
+    let traverse_if_valid (acc: TypGenRes.results * CycleTrack.t * Blacklist.t) (list_elt: Typ.t)
+        : TypGenRes.results * CycleTrack.t * Blacklist.t =
+        let (acc_res, tracked, acc_blist) = acc in
         if (CycleTrack.is_tracked list_elt tracked) then (
-            (acc_res, tracked)
+            (acc_res, tracked, acc_blist)
         ) else (
             resolve list_elt solution acc_res tracked
         )
     in
-    List.fold_left traverse_if_valid (gen_results, tracked) ty_ls
+    List.fold_left traverse_if_valid (gen_results, tracked, []) ty_ls
 ;;
 
 let rec gen_to_status (gen_results: TypGenRes.results) (blist: Blacklist.t): Status.solution list =
@@ -414,10 +451,10 @@ let rec gen_to_status (gen_results: TypGenRes.results) (blist: Blacklist.t): Sta
 let rec fix_tracked_results (results_to_fix: ResTrack.t) (gen_results: TypGenRes.results) (blist: Blacklist.t)
     : ResTrack.t * TypGenRes.results * Blacklist.t =
     match results_to_fix with
-    | [] -> results_to_fix, gen_results, []
+    | [] -> results_to_fix, gen_results, blist
     | hd::_ -> (
         let (dfs_tys, _, results_to_fix, blist') = dfs_typs hd gen_results CycleTrack.empty results_to_fix true in
-        
+        (*Printf.printf "fix blacklist': \n%s\n" (string_of_blist blist');*)
         (*
         Printf.printf "DEBUG DFS:\n";
         Printf.printf "currently running: %s\n " (string_of_typ hd);
@@ -428,12 +465,14 @@ let rec fix_tracked_results (results_to_fix: ResTrack.t) (gen_results: TypGenRes
         Printf.printf "currently running: %s " (string_of_typ hd);
         Printf.printf "with occ pass status: %s\n" (if (occ) then "pass" else "fail");
         *)
-        let (gen_results, _) = resolve hd dfs_tys gen_results CycleTrack.empty in
+        let (gen_results, _, blist'') = resolve hd dfs_tys gen_results CycleTrack.empty in
         (*
         Printf.printf "After fixing %s, the results were: \n" (string_of_typ hd); 
         Printf.printf "%s\n\n" (string_of_gen_res gen_results);
         *)
-        fix_tracked_results results_to_fix gen_results (Blacklist.merge_blists [blist; blist';])
+        let merged_blist = (Blacklist.merge_blists [blist; blist'; blist'';]) in
+        (*Printf.printf "merge fix blacklist': \n%s\n" (string_of_blist merged_blist);*)
+        fix_tracked_results results_to_fix gen_results merged_blist
     )
 ;;
 

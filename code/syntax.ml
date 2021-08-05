@@ -248,18 +248,27 @@ module TypGen = struct
         extend_with_gen gens gen_rep_typ
     ;;
 
-    (*maintains invariant of all combinations present; bool returned
-    dictates whether the split was valid for all values split *)
-    let split (ctr_used: Signature.ctr) (gens: typ_gens): bool * typ_gens * typ_gens =
-        let of_ctr (gen: typ_gen): bool = 
+    (*maintains invariant of all combinations present; status returned
+    dictates whether the split was valid for all values split
+    and if it failed, what kind of failure occurred *)
+    type split_fail =
+        | Lit_fail
+        | Ctr_fail
+    
+    type split_status =
+        | Success
+        | Fail of split_fail
+
+    let split (ctr_used: Signature.ctr) (gens: typ_gens): split_status * typ_gens * typ_gens =
+        let of_ctr (gen: typ_gen): split_status = 
             match gen with
             | Base ty -> (
                 match ty with
                 | Num
-                | Bool -> false
-                | _ -> true
+                | Bool -> Fail Lit_fail
+                | _ -> Success
             )
-            | Compound (ctr', _, _) -> (ctr' = ctr_used)
+            | Compound (ctr', _, _) -> if (ctr' = ctr_used) then (Success) else (Fail Ctr_fail)
         in
         let accumulate_splits (acc: typ_gens * typ_gens) (gen: typ_gen)
             : typ_gens * typ_gens =
@@ -271,7 +280,17 @@ module TypGen = struct
             )
         in
         let (lhs_gens, rhs_gens) = List.fold_left accumulate_splits ([], []) gens in
-        ((List.for_all of_ctr gens), lhs_gens, rhs_gens)
+        let rec check_ctr (gens: typ_gens): split_status =
+            match gens with
+            | [] -> Success
+            | hd::tl -> (
+                let hd_check = of_ctr hd in
+                match (hd_check) with
+                | Fail _ -> hd_check
+                | _ -> check_ctr tl 
+            )
+        in
+        ((check_ctr gens), lhs_gens, rhs_gens)
     ;;
 
     let fuse (ctr_used: Signature.ctr) (gens1: typ_gens) (gens2: typ_gens): typ_gen =
