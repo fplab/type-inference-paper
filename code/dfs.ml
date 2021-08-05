@@ -243,7 +243,7 @@ let add_all_refs_as_results (u_results: Typ.unify_results) (r_results: Typ.rec_u
 (*a method that dfs's on a type to accumulate all known types it is cyclic with. returns a boolean denoting
 if an occurs check was failed due to the results and a list of all types or if invalid split occurred *)
 let rec dfs_typs (root: Typ.t) (gen_results: TypGenRes.results) (tracked: CycleTrack.t) (unseen_results: ResTrack.t) (ctr_exp: bool)
-    : TypGen.typ_gens * CycleTrack.t * ResTrack.t * Blacklist.t =
+    : TypGen.typ_gens * CycleTrack.t * ResTrack.t * Blacklist.t * TypGenRes.results =
     let tracked = CycleTrack.track_typ root tracked in
     (*
     Printf.printf "Beginning %s" (string_of_typ root);
@@ -277,7 +277,7 @@ let rec dfs_typs (root: Typ.t) (gen_results: TypGenRes.results) (tracked: CycleT
     (*Printf.printf "Finishing %s\n" ((string_of_typ root) ^ " {:} " ^ (string_of_typ_gens dfs_all));*)
     ((TypGen.extend_with_typ dfs_all root), tracked, unseen_results, blist)
 and dfs_typs_of_ctr (ctr: Signature.ctr) (ty1: Typ.t) (ty2: Typ.t) (gen_results: TypGenRes.results) (tracked: CycleTrack.t) (unseen_results: ResTrack.t)
-    : TypGen.typ_gens * CycleTrack.t * ResTrack.t * Blacklist.t =
+    : TypGen.typ_gens * CycleTrack.t * ResTrack.t * Blacklist.t * TypGenRes.results =
     let rec_ty = ((Signature.get_mk_of_ctr ctr) ty1 ty2) in
     let (tys_u, _, _, _) =
         match (TypGenRes.retrieve_gens_for_typ rec_ty gen_results) with
@@ -291,7 +291,7 @@ and dfs_typs_of_ctr (ctr: Signature.ctr) (ty1: Typ.t) (ty2: Typ.t) (gen_results:
     *)
     let gen_results = TypGenRes.link_typ_to_gen ty1 lhs_tys gen_results in
     let gen_results = TypGenRes.link_typ_to_gen ty2 rhs_tys gen_results in
-    (*Printf.printf "new tree: %s\n" (string_of_gen_res gen_results);*)
+    Printf.printf "new tree: %s\n" (string_of_gen_res gen_results);
     let (ty1_gens, _, unseen_results, blist1) = 
         dfs_typs ty1 gen_results CycleTrack.empty unseen_results true
     in
@@ -323,7 +323,7 @@ and dfs_typs_of_ctr (ctr: Signature.ctr) (ty1: Typ.t) (ty2: Typ.t) (gen_results:
     Printf.printf "final blacklist: \n%s\n" (string_of_blist final_blist);*)
     (new_gens, tracked, unseen_results, final_blist)
 and dfs_typs_gen (gens: TypGen.typ_gens) (gen_results: TypGenRes.results) (tracked: CycleTrack.t) (unseen_results: ResTrack.t) (ctr_exp: bool)
-    : TypGen.typ_gens * CycleTrack.t * ResTrack.t * Blacklist.t =
+    : TypGen.typ_gens * CycleTrack.t * ResTrack.t * Blacklist.t * TypGenRes.results =
     let destinations = TypGenRes.explorable_list gens gen_results in
     (*
     Printf.printf "To where?\n";
@@ -508,14 +508,15 @@ let rec fix_tracked_results (results_to_fix: ResTrack.t) (gen_results: TypGenRes
     match results_to_fix with
     | [] -> results_to_fix, gen_results, blist
     | hd::_ -> (
-        let (dfs_tys, _, results_to_fix, blist_occ) = dfs_typs hd gen_results CycleTrack.empty results_to_fix true in
-        (*Printf.printf "fix blacklist': \n%s\n" (string_of_blist blist');*)
-        (*
         Printf.printf "DEBUG DFS:\n";
         Printf.printf "currently running: %s\n " (string_of_typ hd);
-        Printf.printf "with occ pass status: %s\n" (if (occ) then "pass" else "fail");
+
+        let (dfs_tys, _, results_to_fix, blist_occ) = dfs_typs hd gen_results CycleTrack.empty results_to_fix true in
+        (*Printf.printf "fix blacklist': \n%s\n" (string_of_blist blist');*)
+        
+        (*Printf.printf "with occ pass status: %s\n" (if (occ) then "pass" else "fail");*)
         Printf.printf "%s\n\n" (string_of_typ_gens dfs_tys);
-        *)
+        
         (*
         Printf.printf "currently running: %s " (string_of_typ hd);
         Printf.printf "with occ pass status: %s\n" (if (occ) then "pass" else "fail");
