@@ -1,14 +1,33 @@
 open Syntax
 
+let format_ty (typ: Typ.t) (typ_str: string): string =
+  match typ with
+  | THole _ 
+  | TNum
+  | TBool -> typ_str
+  | _ -> "(" ^ typ_str ^ ")"
+;;
+
 let rec string_of_typ (typ:Typ.t) =
   match typ with
   | THole var ->  "THole["^string_of_int(var)^"]"
   | TNum -> "TNum"
   | TBool -> "TBool"
-  | TArrow (t1,t2) -> string_of_typ(t1) ^ "->"^ string_of_typ(t2)
-  | TSum (t1,t2) -> string_of_typ(t1) ^ "+"^ string_of_typ(t2)
-  | TProd (t1,t2) -> string_of_typ(t1) ^ "*"^ string_of_typ(t2)
+  | TArrow (t1,t2) -> (format_ty t1 (string_of_typ t1)) ^ "->" ^ (format_ty t2 (string_of_typ t2))
+  | TSum (t1,t2) -> (format_ty t1 (string_of_typ t1)) ^ "+" ^ (format_ty t2 (string_of_typ t2))
+  | TProd (t1,t2) -> (format_ty t1 (string_of_typ t1)) ^ "*" ^ (format_ty t2 (string_of_typ t2))
 ;;
+(*
+let rec string_of_typ (typ:Typ.t) =
+  match typ with
+  | THole var ->  "THole["^string_of_int(var)^"]"
+  | TNum -> "TNum"
+  | TBool -> "TBool"
+  | TArrow (t1,t2) -> "(" ^ string_of_typ(t1) ^ ")->(" ^ string_of_typ(t2) ^ ")"
+  | TSum (t1,t2) -> "(" ^ string_of_typ(t1) ^ ")+(" ^ string_of_typ(t2) ^ ")"
+  | TProd (t1,t2) -> "(" ^ string_of_typ(t1) ^ ")*(" ^ string_of_typ(t2) ^ ")"
+;;
+*)
 
 let rec string_of_typ_ls (typ_ls:Typ.t list) =
   match typ_ls with

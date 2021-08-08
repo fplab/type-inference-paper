@@ -154,9 +154,10 @@ let testcases: (Ctx.t * Exp.t) list = [
   
   ([],
   parse "let f:Hole[0] be fun (x:Hole[1]) -> (fun (y:Hole[2]) -> x y 2) in (f (|7|) (fun z -> z + 2))");
-  (*
+  
   ([("g", (TArrow(TNum, TNum)));],
   parse "let f:Hole[0] be fun (x:Hole[1]) -> (fun (y:Hole[2]) -> x y 2) in (f (fun z -> z z) (g))");
+  
   ([],
   parse "let f:Hole[0] be fun (x:Hole[1]) -> (fun (y:Hole[2]) -> x y 2) in (f (fun z -> z z) (fun i -> (i+2)))");
   (*didn't realize it at the time of writing it but this case technically should become
@@ -169,7 +170,7 @@ let testcases: (Ctx.t * Exp.t) list = [
    *)
   ([],
   parse "let f:Hole[0] be fun (x:Hole[1]) -> (fun (y:Hole[2]) -> x y 2) in (f (fun z -> z) (fun z -> z + 2))");
-  *)
+  
 ]
 ;;
 
