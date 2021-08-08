@@ -251,38 +251,41 @@ let rec dfs_typs (root: Typ.t) (gen_results: TypGenRes.results) (tracked: CycleT
     *)
     let unseen_results = ResTrack.remove_typ root unseen_results in
     let by_ctr_exp (ctr_exp: bool) (ctr: Signature.ctr) (ty1: Typ.t) (ty2: Typ.t)
-        : (TypGen.typ_gens) * CycleTrack.t * ResTrack.t * Blacklist.t =
+        : (TypGen.typ_gens) * CycleTrack.t * ResTrack.t * Blacklist.t * TypGenRes.results =
         if (ctr_exp) then (
             dfs_typs_of_ctr ctr ty1 ty2 gen_results tracked unseen_results
         ) else (
+            dfs_typs_of_ctr ctr ty1 ty2 gen_results tracked unseen_results
+            (*
             match (TypGenRes.retrieve_gens_for_typ root gen_results) with
             | Some gens -> dfs_typs_gen gens gen_results tracked unseen_results false
-            | None -> ([], tracked, unseen_results, [])
+            | None -> ([], tracked, unseen_results, [], gen_results)
+            *)
         )
     in
-    let (dfs_all, tracked, unseen_results, blist) = 
+    let (dfs_all, tracked, unseen_results, blist, gen_results) = 
         match root with
-        | TNum -> ([], tracked, unseen_results, [])
-        | TBool -> ([], tracked, unseen_results, [])
+        | TNum -> ([], tracked, unseen_results, [], gen_results)
+        | TBool -> ([], tracked, unseen_results, [], gen_results)
         | TArrow (ty1, ty2) -> (by_ctr_exp ctr_exp Signature.Arrow ty1 ty2)
         | TProd (ty1, ty2) -> (by_ctr_exp ctr_exp Signature.Prod ty1 ty2)
         | TSum (ty1, ty2) -> (by_ctr_exp ctr_exp Signature.Sum ty1 ty2)
         | THole _ -> (
             match (TypGenRes.retrieve_gens_for_typ root gen_results) with
             | Some gens -> (dfs_typs_gen gens gen_results tracked unseen_results ctr_exp)
-            | None -> ([], tracked, unseen_results, [])
+            | None -> ([], tracked, unseen_results, [], gen_results)
         )
     in
     (*Printf.printf "dfs blacklist: \n%s\n" (string_of_blist blist);*)
     (*Printf.printf "Finishing %s\n" ((string_of_typ root) ^ " {:} " ^ (string_of_typ_gens dfs_all));*)
-    ((TypGen.extend_with_typ dfs_all root), tracked, unseen_results, blist)
+    ((TypGen.extend_with_typ dfs_all root), tracked, unseen_results, blist, gen_results)
 and dfs_typs_of_ctr (ctr: Signature.ctr) (ty1: Typ.t) (ty2: Typ.t) (gen_results: TypGenRes.results) (tracked: CycleTrack.t) (unseen_results: ResTrack.t)
     : TypGen.typ_gens * CycleTrack.t * ResTrack.t * Blacklist.t * TypGenRes.results =
     let rec_ty = ((Signature.get_mk_of_ctr ctr) ty1 ty2) in
-    let (tys_u, _, _, _) =
+    let (tys_u, _, _, _, gen_results) =
         match (TypGenRes.retrieve_gens_for_typ rec_ty gen_results) with
         | Some gens -> dfs_typs_gen gens gen_results tracked unseen_results false
-        | None -> ([], [], [], [])
+        | None -> ([], [], [], [], gen_results)
     in
     let (_, lhs_tys, rhs_tys) = TypGen.split ctr tys_u in
     (*
@@ -291,18 +294,23 @@ and dfs_typs_of_ctr (ctr: Signature.ctr) (ty1: Typ.t) (ty2: Typ.t) (gen_results:
     *)
     let gen_results = TypGenRes.link_typ_to_gen ty1 lhs_tys gen_results in
     let gen_results = TypGenRes.link_typ_to_gen ty2 rhs_tys gen_results in
+    Printf.printf "ty1: %s\n" (string_of_typ ty1);
+    Printf.printf "ty2: %s\n" (string_of_typ ty2);
     Printf.printf "new tree: %s\n" (string_of_gen_res gen_results);
-    let (ty1_gens, _, unseen_results, blist1) = 
+    let (_, _, unseen_results, _, gen_results) = 
         dfs_typs ty1 gen_results CycleTrack.empty unseen_results true
     in
-    let (ty2_gens, _, unseen_results, blist2) = 
+    let (ty2_gens, _, unseen_results, blist2, gen_results) = 
         dfs_typs ty2 gen_results CycleTrack.empty unseen_results true
     in
+    let (ty1_gens, _, unseen_results, blist1, gen_results) = 
+        dfs_typs ty1 gen_results CycleTrack.empty unseen_results true
+    in
     let rec_tys_gen = TypGen.fuse ctr ty1_gens ty2_gens in
-    let (dfs_tys, tracked, unseen_results, blist3) = 
+    let (dfs_tys, tracked, unseen_results, blist3, gen_results) = 
         match (TypGenRes.retrieve_gens_for_typ rec_ty gen_results) with
         | Some gens -> dfs_typs_gen gens gen_results tracked unseen_results true
-        | None -> ([], tracked, unseen_results, [])
+        | None -> ([], tracked, unseen_results, [], gen_results)
     in
     (*Printf.printf "DEBUG:\n";
     Printf.printf "%s\n" ((string_of_typ (ctr ty1 ty2)) ^ " {:} "^ (string_of_typ_ls final_tys));*)
@@ -321,7 +329,7 @@ and dfs_typs_of_ctr (ctr: Signature.ctr) (ty1: Typ.t) (ty2: Typ.t) (gen_results:
     let final_blist = Blacklist.merge_blists [blist1; blist2; blist3;] in
     (*
     Printf.printf "final blacklist: \n%s\n" (string_of_blist final_blist);*)
-    (new_gens, tracked, unseen_results, final_blist)
+    (new_gens, tracked, unseen_results, final_blist, gen_results)
 and dfs_typs_gen (gens: TypGen.typ_gens) (gen_results: TypGenRes.results) (tracked: CycleTrack.t) (unseen_results: ResTrack.t) (ctr_exp: bool)
     : TypGen.typ_gens * CycleTrack.t * ResTrack.t * Blacklist.t * TypGenRes.results =
     let destinations = TypGenRes.explorable_list gens gen_results in
@@ -333,24 +341,24 @@ and dfs_typs_gen (gens: TypGen.typ_gens) (gen_results: TypGenRes.results) (track
     let in_domain_and_unequal (list_elt: Typ.t) (tracked_elt: Typ.t): bool =
         (tracked_elt <> list_elt) && (Typ.contains_typ tracked_elt list_elt)
     in
-    let traverse_if_valid (acc: TypGen.typ_gens * CycleTrack.t * ResTrack.t * Blacklist.t) (list_elt: Typ.t)
-        : TypGen.typ_gens * CycleTrack.t * ResTrack.t * Blacklist.t =
-        let (acc_typs, tracked, unseen_results, acc_blist) = acc in
+    let traverse_if_valid (acc: TypGen.typ_gens * CycleTrack.t * ResTrack.t * Blacklist.t * TypGenRes.results) (list_elt: Typ.t)
+        : TypGen.typ_gens * CycleTrack.t * ResTrack.t * Blacklist.t * TypGenRes.results =
+        let (acc_typs, tracked, unseen_results, acc_blist, acc_res) = acc in
         (*if invalid *)
         let occ_fail_opt = List.find_opt (in_domain_and_unequal list_elt) tracked in
         match occ_fail_opt with
         | Some occ_fail_elt -> (
             let acc_blist = Blacklist.add_elt acc_blist (occ_fail_elt, Occurs) in
             let acc_blist = Blacklist.add_elt acc_blist (list_elt, Occurs) in
-            (acc_typs, tracked, unseen_results, acc_blist)
+            (acc_typs, tracked, unseen_results, acc_blist, acc_res)
         )
         | None -> (
             (*if already traversed *)
             if (CycleTrack.is_tracked list_elt tracked) then (
-                (acc_typs, tracked, unseen_results, acc_blist)
+                (acc_typs, tracked, unseen_results, acc_blist, acc_res)
             ) else (
-                let (dfs_all, tracked, unseen_results, new_blist) = 
-                    dfs_typs list_elt gen_results tracked unseen_results ctr_exp
+                let (dfs_all, tracked, unseen_results, new_blist, acc_res) = 
+                    dfs_typs list_elt acc_res tracked unseen_results ctr_exp
                 in
                 (*
                 Printf.printf "acc blacklist: \n%s\n" (string_of_blist acc_blist);
@@ -368,19 +376,20 @@ and dfs_typs_gen (gens: TypGen.typ_gens) (gen_results: TypGenRes.results) (track
                 ((TypGen.extend_with_gens acc_typs dfs_all),
                 tracked,
                 unseen_results,
-                acc_blist)
+                acc_blist,
+                acc_res)
             )
         )
     in
-    let (typs, tracked, unseen_results, blist) =
-        List.fold_left traverse_if_valid ([], tracked, unseen_results, []) destinations
+    let (typs, tracked, unseen_results, blist, gen_results) =
+        List.fold_left traverse_if_valid ([], tracked, unseen_results, [], gen_results) destinations
     in
     (*Printf.printf "blacklist: \n%s\n" (string_of_blist blist);*)
     (*combine explored results with those already known that weren't giving more info than present. *)
     let original_with_dfs_typs = 
         TypGen.extend_with_gens gens typs
     in
-    (original_with_dfs_typs, tracked, unseen_results, blist)
+    (original_with_dfs_typs, tracked, unseen_results, blist, gen_results)
 ;;
 
 (*since the final solution contains all references, there is technically no need to dfs; you could just 
@@ -511,7 +520,7 @@ let rec fix_tracked_results (results_to_fix: ResTrack.t) (gen_results: TypGenRes
         Printf.printf "DEBUG DFS:\n";
         Printf.printf "currently running: %s\n " (string_of_typ hd);
 
-        let (dfs_tys, _, results_to_fix, blist_occ) = dfs_typs hd gen_results CycleTrack.empty results_to_fix true in
+        let (dfs_tys, _, results_to_fix, blist_occ, gen_results) = dfs_typs hd gen_results CycleTrack.empty results_to_fix true in
         (*Printf.printf "fix blacklist': \n%s\n" (string_of_blist blist');*)
         
         (*Printf.printf "with occ pass status: %s\n" (if (occ) then "pass" else "fail");*)
