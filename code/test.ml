@@ -34,6 +34,7 @@ let testcases: (Ctx.t * Exp.t) list = [
   (Ctx.empty, parse "fun (x:Hole[2]) -> x x");
   ([("x",THole 1);], parse "x x");
 
+  
   ([("x",THole 1);], parse "x 1 1");
   ([("x",THole 1); ("y",THole 2);], parse "x 1 1 y");
   ([("f",TArrow(TNum,THole 1));("g",TArrow(TArrow(TNum, TNum),THole 2))], parse "fun (x:Hole[3]) -> f (g x)");

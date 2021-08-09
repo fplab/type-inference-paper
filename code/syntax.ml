@@ -478,7 +478,7 @@ module Status = struct
     (*this function should only be called during completion *)
     let condense (gens: TypGen.typ_gens) (blist: Blacklist.t): t =
         if (Blacklist.has_blacklisted_elt gens blist) then (
-            let filtered_gens = TypGen.filter_unneeded_holes TypGen.is_base_lit gens in
+            let filtered_gens = TypGen.filter_unneeded_holes TypGen.is_base_lit_or_comp gens in
             UnSolved filtered_gens
         ) else (
             let filtered_gens = TypGen.filter_unneeded_holes TypGen.is_base_lit_or_comp gens in

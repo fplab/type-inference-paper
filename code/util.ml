@@ -10,7 +10,7 @@ let format_ty (typ: Typ.t) (typ_str: string): string =
 
 let rec string_of_typ (typ:Typ.t) =
   match typ with
-  | THole var ->  "THole["^string_of_int(var)^"]"
+  | THole var ->  "T?["^string_of_int(var)^"]"
   | TNum -> "TNum"
   | TBool -> "TBool"
   | TArrow (t1,t2) -> (format_ty t1 (string_of_typ t1)) ^ "->" ^ (format_ty t2 (string_of_typ t2))
