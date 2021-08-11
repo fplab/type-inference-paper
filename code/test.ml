@@ -172,6 +172,15 @@ let testcases: (Ctx.t * Exp.t) list = [
   ([],
   parse "let f:Hole[0] be fun (x:Hole[1]) -> (fun (y:Hole[2]) -> x y 2) in (f (fun z -> z) (fun z -> z + 2))");
   
+  ([("f", THole 0); ("g", THole 1); ("x", THole 2); ("y", THole 3); ("a", THole 4); ("b", THole 5);],
+    (EPair (
+      (EIf ((EBoolLiteral true), (EBinOp((EVar "f"), OpAp, (EVar "x"))), (EBinOp((EVar "g"), OpAp, (EVar "y"))))),
+      (EPair (
+        (EIf ((EBoolLiteral true), (EBinOp((EVar "f"), OpAp, (EVar "a"))), (ENumLiteral 2))),
+        (EIf ((EBoolLiteral true), (EBinOp((EVar "g"), OpAp, (EVar "b"))), (EBoolLiteral false)))
+      ))
+    ))
+  )
 ]
 ;;
 

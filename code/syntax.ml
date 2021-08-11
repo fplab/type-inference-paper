@@ -420,6 +420,35 @@ module TypGen = struct
         )
         | _ -> None
     ;;
+
+    let comp_gen_elt (gen1: typ_gen) (gen2: typ_gen): int =
+        let gen_to_float (gen: typ_gen): float =
+            match gen with
+            | Base Num
+            | Base Bool -> 1.0
+            (*the larger the var number, the smaller the  *)
+            | Base (Hole var) -> if (var = 0) then 0.0 else (Float.sub 0.0  (Float.div 1.0 (float_of_int var)))
+            | Compound _ -> 2.0
+        in
+        Stdlib.compare (gen_to_float gen1) (gen_to_float gen2)
+    ;;
+
+    let rec gens_sort_layer (gens: typ_gens): typ_gens =
+        let gens = List.fast_sort comp_gen_elt gens in
+        gens_sort_explore gens
+    and gens_sort_explore (gens: typ_gens): typ_gens =
+        match gens with
+        | [] -> []
+        | hd::tl -> (
+            match hd with
+            | Base _ -> hd::(gens_sort_explore tl)
+            | Compound (ctr, gens1, gens2) -> (
+            let sorted1 = gens_sort_layer gens1 in
+            let sorted2 = gens_sort_layer gens2 in
+            (Compound (ctr, sorted1, sorted2))::(gens_sort_explore tl)
+            )
+        )
+    ;;
 end
 
 module Blacklist = struct
@@ -477,6 +506,7 @@ module Status = struct
 
     (*this function should only be called during completion *)
     let condense (gens: TypGen.typ_gens) (blist: Blacklist.t): t =
+        let gens = TypGen.gens_sort_layer gens in
         if (Blacklist.has_blacklisted_elt gens blist) then (
             let filtered_gens = TypGen.filter_unneeded_holes TypGen.is_base_lit_or_comp gens in
             UnSolved filtered_gens

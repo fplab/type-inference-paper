@@ -1,5 +1,6 @@
 open Syntax
 
+(* Restrack serves as a means to track which types have been dfsed and resolved.  *)
 module ResTrack = struct
     type t = Typ.t list
 
@@ -11,7 +12,7 @@ module ResTrack = struct
         List.filter pred ls
     ;;
 
-    (*generates a list of the types involved in (r) unify results. recursive results first *)
+    (*generates a list of the types involved in unify results. recursive results first *)
     let results_to_t (u_results: Typ.unify_results) (r_results: Typ.rec_unify_results): t =
         let u_results_to_t (u_results: Typ.unify_results): t =
             let extend_by_u_res (acc: t) (u_res: TypeInferenceVar.t * Typ.unify_result): t =
@@ -33,6 +34,9 @@ module ResTrack = struct
     ;;
 end
 
+(*  In general, cycletrack serves as a basic tracker for things found while dfsing; this can be to prevent loops,
+as in the case of 'tracked' in dfs, or to keep a list of the current equivalence class in the cycle, in eq_class of dfs.
+Notably, the two uses mentioned above are different due to recursive type handling. *)
 module CycleTrack = struct
     type t = Typ.t list
 
@@ -49,6 +53,10 @@ module CycleTrack = struct
         List.exists is_typ typs
     ;;
 end
+
+(******************************************************)
+(*  UTILITIES FOR DEBUGGING COPIED FROM UTIL.ML START *)
+(******************************************************)
 
 let rec string_of_typ (typ:Typ.t) =
     match typ with
@@ -110,82 +118,55 @@ let rec string_of_r_results (results: Typ.rec_unify_results) =
 ;;
 
 let rec string_of_typ_gens (gen: TypGen.typ_gens) =
-  match gen with
-  | [] -> "\n"
-  | hd::[] -> (string_of_typ_gen hd);
-  | hd::tl -> (
-    let hd_str = string_of_typ_gen hd in
-    (hd_str ^ "//" ^ (string_of_typ_gens tl));
-  )
+    match gen with
+    | [] -> "\n"
+    | hd::[] -> (string_of_typ_gen hd);
+    | hd::tl -> (
+        let hd_str = string_of_typ_gen hd in
+        (hd_str ^ "//" ^ (string_of_typ_gens tl));
+    )
 and string_of_typ_gen (gen_elt: TypGen.typ_gen) =
-  match gen_elt with
-  | Base btyp -> (string_of_typ (TypGen.base_typ_to_typ btyp));
-  | Compound (ctr, gens1, gens2) -> (
-    let str1 = string_of_typ_gens gens1 in
-    let str2 = string_of_typ_gens gens2 in
-    let ctr_str = 
-      match ctr with
-      | Arrow -> "Arrow"
-      | Prod -> "Prod"
-      | Sum -> "Sum"
-    in
-    ("(" ^ ctr_str ^ " ({" ^ str1 ^ "}, " ^ "{" ^ str2 ^ "}))");
-  )
+    match gen_elt with
+    | Base btyp -> (string_of_typ (TypGen.base_typ_to_typ btyp));
+    | Compound (ctr, gens1, gens2) -> (
+        let str1 = string_of_typ_gens gens1 in
+        let str2 = string_of_typ_gens gens2 in
+        let ctr_str = 
+            match ctr with
+            | Arrow -> "Arrow"
+            | Prod -> "Prod"
+            | Sum -> "Sum"
+        in
+        ("(" ^ ctr_str ^ " ({" ^ str1 ^ "}, " ^ "{" ^ str2 ^ "}))");
+    )
 ;;
 
 let rec string_of_gen_res (gen_results: TypGenRes.results) =
-  match gen_results with
-  | [] -> "\n";
-  | hd::tl -> (
-    let (key, res) = hd in
-    let hd_str = 
-      (string_of_typ key) ^ " ls: " ^ (string_of_typ_gens res) ^ "\n"
-    in
-    hd_str ^ (string_of_gen_res tl)
-  )
-;;
-
-let comp_gen_elt (gen1: TypGen.typ_gen) (gen2: TypGen.typ_gen): int =
-  let gen_to_int (gen: TypGen.typ_gen): int =
-    match gen with
-    | Base _ -> 0
-    | Compound _ -> 1
-  in
-  Stdlib.compare (gen_to_int gen1) (gen_to_int gen2)
-;;
-
-let rec gen_sort_layer (gen: TypGen.typ_gens): TypGen.typ_gens =
-  let gen = List.fast_sort comp_gen_elt gen in
-  gen_sort_explore gen
-and gen_sort_explore (gen: TypGen.typ_gens): TypGen.typ_gens =
-  match gen with
-  | [] -> []
-  | hd::tl -> (
-    match hd with
-    | Base _ -> hd::(gen_sort_explore tl)
-    | Compound (ctr, gens1, gens2) -> (
-      let sorted1 = gen_sort_layer gens1 in
-      let sorted2 = gen_sort_layer gens2 in
-      (Compound (ctr, sorted1, sorted2))::(gen_sort_explore tl)
+    match gen_results with
+    | [] -> "\n";
+    | hd::tl -> (
+        let (key, res) = hd in
+        let hd_str = 
+            (string_of_typ key) ^ " ls: " ^ (string_of_typ_gens res) ^ "\n"
+        in
+        hd_str ^ (string_of_gen_res tl)
     )
-  )
 ;;
 
 let rec string_of_solutions (sol: Status.solution list) =
-  match sol with
-  | [] -> "\n";
-  | hd::tl -> (
-    let (key, res) = hd in
-    let hd_str =
-      match res with
-      | Solved typ -> ("solved: (" ^ string_of_typ(key) ^ ") - " ^ string_of_typ(typ) ^ "\n");
-      | UnSolved gen -> (
-        let sorted_gen = gen_sort_layer gen in
-        ("unsolved: (" ^ string_of_typ(key) ^ ") - " ^ string_of_typ_gens(sorted_gen) ^ "\n");
-      )
-    in
-    hd_str ^ (string_of_solutions tl)
-  )
+    match sol with
+    | [] -> "\n";
+    | hd::tl -> (
+        let (key, res) = hd in
+        let hd_str =
+            match res with
+            | Solved typ -> ("solved: (" ^ string_of_typ(key) ^ ") - " ^ string_of_typ(typ) ^ "\n");
+            | UnSolved gens -> (
+            ("unsolved: (" ^ string_of_typ(key) ^ ") - " ^ string_of_typ_gens(gens) ^ "\n");
+            )
+        in
+        hd_str ^ (string_of_solutions tl)
+    )
 ;;
 
 
@@ -206,14 +187,16 @@ let rec string_of_blist (blist: Blacklist.t) =
     )
 ;;
 
+(******************************************************)
+(*  UTILITIES FOR DEBUGGING COPIED FROM UTIL.ML END *)
+(******************************************************)
+
+(*extends u results to include all holes contained within r results
+    logic: if in an r result, it technically is truly used as a hole with some potential result
+            and needs to be able to be referenced in later values and be made 'explorable'.
+            see "TypGenRes.explorable_list" in syntax.ml*)
 let add_all_refs_as_results (u_results: Typ.unify_results) (r_results: Typ.rec_unify_results)
     : Typ.unify_results * Typ.rec_unify_results =
-    (*extends u results to include all holes contained within r results
-    logic: if in an r result, it technically is truly used as a hole with some potential result
-            and needs to be able to be referenced.
-    why all r_results in u_results need not have results: they already will; r results are only added
-            in concert with a link to a u_result. but an equivalence to an r result can be generated
-            without adding the types contained in the r result*)
     (*accumulates all referenced holes in the recursive types *)
     let rec acc_rec_holes (acc: TypeInferenceVar.t list) (typ: Typ.t): TypeInferenceVar.t list =
         match typ with
@@ -240,20 +223,32 @@ let add_all_refs_as_results (u_results: Typ.unify_results) (r_results: Typ.rec_u
     (List.fold_left extend_u_results u_results var_ls), r_results
 ;;
 
-(*a method that dfs's on a type to accumulate all known types it is cyclic with. returns a boolean denoting
-if an occurs check was failed due to the results and a list of all types or if invalid split occurred *)
-(*eq class is for occurs checking; tracked is for preventing reexploration *)
+(* DOCUMENTATION *)
+(* PURPOSE: a method that dfs's on a type to accumulate all known types it is cyclic with in gen_results*)
+(* DETAILS:
+    - root is the node from which dfsing will start
+    - gen_results represents the tree to dfs
+    - tracked acts as a means to track which branches have been explored. 
+    - eq_class acts to track all values in equivalence class with the current dfs
+    - unseen_results acts to track the currently uncompleted types
+*)
+(* RETURNS:
+    - a typ_gens representing the dfs types
+    - the currently tracked values passed in dfs
+    - the currently known equivalence class of the root; technically redundany given the typ_gens
+    - the values remaining in the supplied restrack that remain undfsed (thus being an ancestor or disjoint)
+    - an updated gen_results tree, relinked as dfs_typs saw fit
+among these, the only ones useful for programmers is the typ_gens return value; the rest are for recursive bookkeeping
+*)
 let rec dfs_typs (root: Typ.t) (gen_results: TypGenRes.results) (tracked: CycleTrack.t) (eq_class: CycleTrack.t) 
     (unseen_results: ResTrack.t)
     : TypGen.typ_gens * CycleTrack.t * CycleTrack.t * ResTrack.t * Blacklist.t * TypGenRes.results =
+    (*update the tracking mechanisms *)
     let tracked = CycleTrack.track_typ root tracked in
     let eq_class = CycleTrack.track_typ root eq_class in
-    (*
-    Printf.printf "Beginning %s\n" (string_of_typ root);*)
-    (*
-    Printf.printf " with ctr_exp as %s\n" (if (ctr_exp) then "true" else "false");
-    *)
     let unseen_results = ResTrack.remove_typ root unseen_results in
+
+    (*perform a dfs as necessitated by the shape of the root and store the updated parameters *)
     let (dfs_all, tracked, eq_class, unseen_results, blist, gen_results) = 
         match root with
         | TNum -> ([], tracked, eq_class, unseen_results, [], gen_results)
@@ -267,30 +262,26 @@ let rec dfs_typs (root: Typ.t) (gen_results: TypGenRes.results) (tracked: CycleT
             | None -> ([], tracked, eq_class, unseen_results, [], gen_results)
         )
     in
-    (*Printf.printf "dfs blacklist: \n%s\n" (string_of_blist blist);*)
-    (*Printf.printf "Finishing %s\n" ((string_of_typ root) ^ " {:} " ^ (string_of_typ_gens dfs_all));*)
+
+    (*return the previous parameters after updating the dfs types to inclue to root *)
     ((TypGen.extend_with_typ dfs_all root), tracked, eq_class, unseen_results, blist, gen_results)
-and dfs_typs_of_ctr (ctr: Signature.ctr) (ty1: Typ.t) (ty2: Typ.t) (gen_results: TypGenRes.results) (tracked: CycleTrack.t) 
-    (eq_class: CycleTrack.t) (unseen_results: ResTrack.t)
+
+(* PURPOSE: Given a recursive type constructed via 'ctr' with lhs 'ty1' and rhs 'ty2', performs a dfs *)
+and dfs_typs_of_ctr (ctr: Signature.ctr) (ty1: Typ.t) (ty2: Typ.t) (gen_results: TypGenRes.results) 
+    (tracked: CycleTrack.t) (eq_class: CycleTrack.t) (unseen_results: ResTrack.t)
     : TypGen.typ_gens * CycleTrack.t * CycleTrack.t * ResTrack.t * Blacklist.t * TypGenRes.results =
+    (* create the type represented by the arguments *)
     let rec_ty = ((Signature.get_mk_of_ctr ctr) ty1 ty2) in
+    (*perform an incorrect dfs of the recursive type's equivalence class to generate a list of info to
+    impart to children so that their dfs's will be as correct as possible *)
     let (tys_u, uptrack, _, _, _, gen_results) =
         match (TypGenRes.retrieve_gens_for_typ rec_ty gen_results) with
         | Some gens -> dfs_typs_gen gens gen_results tracked eq_class unseen_results
         | None -> ([], [], [], [], [], gen_results)
     in
     let (_, lhs_tys, rhs_tys) = TypGen.split ctr tys_u in
-    (*
-    Printf.printf "validity of (%s) " (string_of_typ ((Signature.get_mk_of_ctr ctr) ty1 ty2));
-    Printf.printf "is %s\n" (if (valid) then "VALID" else "INVALID");
-    *)
     let gen_results = TypGenRes.link_typ_to_gen ty1 lhs_tys gen_results in
     let gen_results = TypGenRes.link_typ_to_gen ty2 rhs_tys gen_results in
-    (*
-    Printf.printf "ty1: %s\n" (string_of_typ ty1);
-    Printf.printf "ty2: %s\n" (string_of_typ ty2);
-    Printf.printf "new tree: %s\n" (string_of_gen_res gen_results);
-    *)
     let (_, _, _, unseen_results, _, gen_results) = 
         dfs_typs ty1 gen_results uptrack [] unseen_results
     in
@@ -306,33 +297,13 @@ and dfs_typs_of_ctr (ctr: Signature.ctr) (ty1: Typ.t) (ty2: Typ.t) (gen_results:
         | Some gens -> dfs_typs_gen gens gen_results tracked eq_class unseen_results
         | None -> ([], tracked, eq_class, unseen_results, [], gen_results)
     in
-    (*Printf.printf "DEBUG:\n";
-    Printf.printf "%s\n" ((string_of_typ (ctr ty1 ty2)) ^ " {:} "^ (string_of_typ_ls final_tys));*)
     let new_gens = TypGen.extend_with_gen dfs_tys rec_tys_gen in
-    (*
-    Printf.printf "fusion had:\n%s\n" (string_of_typ_gen rec_tys_gen);
-    Printf.printf "DFS had: \n %s\n" (string_of_typ_gens dfs_tys);
-    Printf.printf "Merge of the two had:\n %s\n\n" (string_of_typ_gens new_gens);
-    *)
-    (*
-    Printf.printf "new blacklist: \n%s\n" (string_of_blist new_blist);
-    Printf.printf "b1 blacklist: \n%s\n" (string_of_blist blist1);
-    Printf.printf "b2 blacklist: \n%s\n" (string_of_blist blist2);
-    Printf.printf "b3 blacklist: \n%s\n" (string_of_blist blist3);
-    *)
     let final_blist = Blacklist.merge_blists [blist1; blist2; blist3;] in
-    (*
-    Printf.printf "final blacklist: \n%s\n" (string_of_blist final_blist);*)
     (new_gens, tracked, eq_class, unseen_results, final_blist, gen_results)
 and dfs_typs_gen (gens: TypGen.typ_gens) (gen_results: TypGenRes.results) (tracked: CycleTrack.t) (eq_class: CycleTrack.t)
     (unseen_results: ResTrack.t)
     : TypGen.typ_gens * CycleTrack.t * CycleTrack.t * ResTrack.t * Blacklist.t * TypGenRes.results =
     let destinations = TypGenRes.explorable_list gens gen_results in
-    (*
-    Printf.printf "To where?\n";
-    Printf.printf "%s\n" (string_of_typ_gens gens);
-    Printf.printf "%s\n" (string_of_typ_ls destinations);
-    *)
     let in_domain_and_unequal (list_elt: Typ.t) (eq_elt: Typ.t): bool =
         (eq_elt <> list_elt) && ((Typ.contains_typ eq_elt list_elt) || (Typ.contains_typ list_elt eq_elt))
     in
@@ -355,19 +326,7 @@ and dfs_typs_gen (gens: TypGen.typ_gens) (gen_results: TypGenRes.results) (track
                 let (dfs_all, tracked, eq_class, unseen_results, new_blist, acc_res) = 
                     dfs_typs list_elt acc_res tracked eq_class unseen_results
                 in
-                (*
-                Printf.printf "acc blacklist: \n%s\n" (string_of_blist acc_blist);
-                Printf.printf "new blacklist: \n%s\n" (string_of_blist new_blist);
-                *)
                 let acc_blist = Blacklist.merge_blists [acc_blist; new_blist] in
-                
-                (*Printf.printf "tracked: \n%s\n" (string_of_typ_ls tracked);*)
-                
-                (*
-                Printf.printf "Debug pre extend in dfs gen\n";
-                Printf.printf "acc: %s\n" (string_of_typ_gens acc_typs);
-                Printf.printf "dfs: %s\n" (string_of_typ_gens dfs_all);
-                *)
                 ((TypGen.extend_with_gens acc_typs dfs_all),
                 tracked,
                 eq_class,
@@ -380,7 +339,6 @@ and dfs_typs_gen (gens: TypGen.typ_gens) (gen_results: TypGenRes.results) (track
     let (typs, tracked, eq_class, unseen_results, blist, gen_results) =
         List.fold_left traverse_if_valid ([], tracked, eq_class, unseen_results, [], gen_results) destinations
     in
-    (*Printf.printf "blacklist: \n%s\n" (string_of_blist blist);*)
     (*combine explored results with those already known that weren't giving more info than present. *)
     let original_with_dfs_typs = 
         TypGen.extend_with_gens gens typs
@@ -401,9 +359,6 @@ recursive matching on a list generated from the solution *)
 let rec resolve (root: Typ.t) (solution: TypGen.typ_gens) (gen_results: TypGenRes.results) (tracked: CycleTrack.t)
     : TypGenRes.results * CycleTrack.t * Blacklist.t =
     let tracked = CycleTrack.track_typ root tracked in
-    (*
-    Printf.printf "resolve target: %s\n" (string_of_typ root);
-    *)
     match root with
     | TNum
     | TBool -> (gen_results, tracked, [])
@@ -411,19 +366,8 @@ let rec resolve (root: Typ.t) (solution: TypGen.typ_gens) (gen_results: TypGenRe
     | TProd (ty1, ty2) -> resolve_of_ctr Signature.Prod ty1 ty2 solution gen_results tracked
     | TSum (ty1, ty2) -> resolve_of_ctr Signature.Sum ty1 ty2 solution gen_results tracked
     | THole _ -> (
-        (*what if i reframed it to return a sol occ and only replace after getting that update! *)
         let (gen_results, tracked, blist) = resolve_typ_gens solution gen_results tracked in
-        (*
-        Printf.printf "resolving target (%s) complete" (string_of_typ root);
-        Printf.printf " which has sol_occ status %s\n" (if (sol_occ) then "VALID" else "INVALID");
-        *)
         let gen_results = TypGenRes.replace_gens_of_typ root solution gen_results in
-        (*
-        if (root = (Typ.THole 6)) then (
-            Printf.printf "%s\n" (string_of_gen_res gen_results)
-        ) else (
-            ()
-        );*)
         (gen_results, tracked, blist)
     )
 and resolve_of_ctr (ctr: Signature.ctr) (ty1: Typ.t) (ty2: Typ.t) (solution: TypGen.typ_gens) (gen_results: TypGenRes.results) 
@@ -463,11 +407,6 @@ and resolve_of_ctr (ctr: Signature.ctr) (ty1: Typ.t) (ty2: Typ.t) (solution: Typ
         let gen_results  = 
             TypGenRes.replace_gens_of_typ ((Signature.get_mk_of_ctr ctr) ty1 ty2) solution gen_results
         in
-        (*
-        Printf.printf "(res) validity of (%s) " (string_of_typ ((Signature.get_mk_of_ctr ctr) ty1 ty2));
-        Printf.printf "is split %s " (if (valid) then "VALID" else "INVALID");
-        Printf.printf "with found sol_occ status %s\n" (if (sol_occ) then "pass" else "fail");
-        *)
         let final_blist = Blacklist.merge_blists [blist1; blist2; blist3; new_blist;] in
         (gen_results, tracked, final_blist)
     )
@@ -503,30 +442,11 @@ let rec fix_tracked_results (results_to_fix: ResTrack.t) (gen_results: TypGenRes
     match results_to_fix with
     | [] -> results_to_fix, gen_results, blist
     | hd::_ -> (
-        (*
-        Printf.printf "DEBUG DFS:\n";
-        Printf.printf "currently running: %s\n " (string_of_typ hd);
-        *)
-
         let (dfs_tys, _, _, results_to_fix, blist_occ, gen_results) = 
             dfs_typs hd gen_results CycleTrack.empty CycleTrack.empty results_to_fix 
         in
-        (*Printf.printf "fix blacklist': \n%s\n" (string_of_blist blist');*)
-        
-        (*Printf.printf "with occ pass status: %s\n" (if (occ) then "pass" else "fail");*)
-        Printf.printf "%s\n\n" (string_of_typ_gens dfs_tys);
-        
-        (*
-        Printf.printf "currently running: %s " (string_of_typ hd);
-        Printf.printf "with occ pass status: %s\n" (if (occ) then "pass" else "fail");
-        *)
         let (gen_results, _, blist_shape) = resolve hd dfs_tys gen_results CycleTrack.empty in
-        (*
-        Printf.printf "After fixing %s, the results were: \n" (string_of_typ hd); 
-        Printf.printf "%s\n\n" (string_of_gen_res gen_results);
-        *)
         let merged_blist = (Blacklist.merge_blists [blist; blist_occ; blist_shape;]) in
-        (*Printf.printf "merge fix blacklist': \n%s\n" (string_of_blist merged_blist);*)
         fix_tracked_results results_to_fix gen_results merged_blist
     )
 ;;
@@ -537,12 +457,7 @@ let finalize_results (u_results: Typ.unify_results) (r_results: Typ.rec_unify_re
         add_all_refs_as_results u_results r_results
     in
     let gen_results = TypGenRes.unif_results_to_gen_results u_results r_results in
-    (*
-    Printf.printf "Initial gen results:\n";
-    Printf.printf "%s\n" (string_of_gen_res gen_results);
-    *)
     let results_to_fix = ResTrack.results_to_t u_results r_results in
-    Printf.printf "initial results: \n%s\n" (string_of_gen_res gen_results);
     let (_, gen_results, blacklist) = 
         fix_tracked_results results_to_fix gen_results []
     in
@@ -571,10 +486,5 @@ let finalize_results (u_results: Typ.unify_results) (r_results: Typ.rec_unify_re
         Stdlib.compare id1 id2
     in
     let solutions = gen_to_status gen_results blacklist in
-    
-    Printf.printf "final results: \n%s\n" (string_of_gen_res gen_results);
-    
-    Printf.printf "blacklist: \n%s\n" (string_of_blist blacklist);
-    
     List.fast_sort comp_status solutions
 ;; 

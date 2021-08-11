@@ -78,32 +78,6 @@ let rec string_of_r_results (results: Typ.rec_unify_results) =
   )
 ;;
 
-let comp_gen_elt (gen1: TypGen.typ_gen) (gen2: TypGen.typ_gen): int =
-  let gen_to_int (gen: TypGen.typ_gen): int =
-    match gen with
-    | Base _ -> 0
-    | Compound _ -> 1
-  in
-  Stdlib.compare (gen_to_int gen1) (gen_to_int gen2)
-;;
-
-let rec gen_sort_layer (gen: TypGen.typ_gens): TypGen.typ_gens =
-  let gen = List.fast_sort comp_gen_elt gen in
-  gen_sort_explore gen
-and gen_sort_explore (gen: TypGen.typ_gens): TypGen.typ_gens =
-  match gen with
-  | [] -> []
-  | hd::tl -> (
-    match hd with
-    | Base _ -> hd::(gen_sort_explore tl)
-    | Compound (ctr, gens1, gens2) -> (
-      let sorted1 = gen_sort_layer gens1 in
-      let sorted2 = gen_sort_layer gens2 in
-      (Compound (ctr, sorted1, sorted2))::(gen_sort_explore tl)
-    )
-  )
-;;
-
 let rec string_of_typ_gens (gen: TypGen.typ_gens) =
   match gen with
   | [] -> "\n"
@@ -137,7 +111,7 @@ let rec string_of_solutions (sol: Status.solution list) =
       match res with
       | Solved typ -> ("solved: (" ^ string_of_typ(key) ^ ") - " ^ string_of_typ(typ) ^ "\n");
       | UnSolved gen -> (
-        let sorted_gen = gen_sort_layer gen in
+        let sorted_gen = TypGen.gens_sort_layer gen in
         ("unsolved: (" ^ string_of_typ(key) ^ ") - " ^ string_of_typ_gens(sorted_gen) ^ "\n");
       )
     in
