@@ -17,12 +17,14 @@ module ResTrack = struct
         | (hd, c)::tl -> if (hd = typ) then (tl) else ((hd, c)::(remove_typ typ tl))
     ;;
 
+    (*helper function to add a typ if not already present *)
     let rec add_dep (deps: Typ.t list) (dep: Typ.t): Typ.t list =
         match deps with
         | [] -> [dep]
         | hd::tl -> if (hd = dep) then deps else (hd::(add_dep tl dep))
     ;;
 
+    (*adds typ with dependencies deps to the supplied dep_list *)
     let add_typ_with_deps (typ: Typ.t) (deps: Typ.t list) (ls: dep_list): dep_list =
         let rec update_or_insert (ls: dep_list): dep_list =
             match ls with
@@ -59,6 +61,7 @@ module ResTrack = struct
         List.rev_append ls_r ls_u
     ;;
 
+    (*generates a list of dependencies given rec unify results *)
     let r_results_to_dep_list (r_results: Typ.rec_unify_results): dep_list =
         let r_results_to_t (r_results: Typ.rec_unify_results): Typ.t list =
             let extend_by_r_res (acc: Typ.t list) (r_res: Typ.t * Typ.unify_result): Typ.t list =
@@ -84,6 +87,8 @@ module ResTrack = struct
         List.fold_left acc_deps [] ls_r
     ;;
 
+    (* removes the first element that satifies pred from the list and returns it along with the adjusted list
+        if no such element exists, None is returned with the list *)
     let rec remove_and_inform (pred: 'a -> bool) (ls: 'a list): ('a option) * 'a list =
         match ls with
         | [] -> (None, [])
@@ -96,28 +101,8 @@ module ResTrack = struct
         ) 
     ;;
 
-            let rec string_of_typ (typ:Typ.t) =
-                match typ with
-                | THole var ->  "THole["^string_of_int(var)^"]"
-                | TNum -> "TNum"
-                | TBool -> "TBool"
-                | TArrow (t1,t2) -> string_of_typ(t1) ^ "->"^ string_of_typ(t2)
-                | TSum (t1,t2) -> string_of_typ(t1) ^ "+"^ string_of_typ(t2)
-                | TProd (t1,t2) -> string_of_typ(t1) ^ "*"^ string_of_typ(t2)
-            ;;
-
-
-            let rec string_of_typ_ls (typ_ls:Typ.t list) =
-                match typ_ls with
-                | [] -> " "
-                | hd::tl -> 
-                    (string_of_typ hd)^ ", " ^ (string_of_typ_ls tl);
-            ;;
-
     (*a method to find the most dependent nodes associated with a key in a list of dependencies
         uses path compression- returned dep_list has been compressed
-            technically, path compression is mostly unnecessary since the list should really only
-            be used once; but since it doesn't add any overhead, compression was maintained
         the type list returned is the type list that must be reseen *)
     let rec find_uppermost_dep (key: Typ.t) (deps: dep_list): dep_list * (Typ.t list) =
         let (removed, deps) = remove_and_inform (fun (x,_, _) -> (x = key)) deps in
@@ -155,6 +140,7 @@ module ResTrack = struct
         )
     ;;
 
+    (*based on the 'reseen' status of the result, updates unseen_results and updates reseen status *)
     let rec extend_unseen_with_rep (rep: Typ.t) (unseen_results: t) (deps: dep_list): dep_list * t =
         match deps with
         | [] -> [], unseen_results
@@ -175,23 +161,15 @@ module ResTrack = struct
 
     let update_unseens_after_typ (typ: Typ.t) (deps: dep_list) (unseen_results: t)
         : dep_list * t =
-        (*Procedure
-        get representatives (compression alg that also gets the 'seen' statuses of the final rep)
-        for each representative
-            see if already present
-            if so, don't add or count as a sighting
-            if not,
-                try to add rep
-                    if already seen
-                        ignore
-                    if not
-                        mark the path to it as seen and return the updated list with it appended
-        *)
+        (*get representatives *)
         let (new_deps, representatives) = find_uppermost_dep typ deps in
         let assess_rep (acc_dep, acc_res: dep_list * t) (rep: Typ.t): dep_list * t =
+            (*if it already exists as an unseen, there is no need to add it; status quo *)
             if (List.exists (fun (x, _) -> x = rep) unseen_results) then (
                 (acc_dep, acc_res)
             ) else (
+                (* if it doesn't exist already, extend unseen as appropriate given this representative's
+                 previous 'reseen' history *)
                 extend_unseen_with_rep rep acc_res acc_dep
             )
         in
@@ -207,10 +185,12 @@ module CycleTrack = struct
 
     let empty : t = [];;
 
+    (*adds a type to the tracker *)
     let track_typ (typ: Typ.t) (typs: t): t =
         typ::typs
     ;;
 
+    (*checks if a type is tracked within the tracker *)
     let is_tracked (typ: Typ.t) (typs: t): bool =
         let is_typ (scrut: Typ.t): bool =
             typ = scrut
@@ -396,20 +376,21 @@ let add_all_refs_as_results (u_results: Typ.unify_results) (r_results: Typ.rec_u
             acc_rec_holes acc ty2
         )
     in
-    (*converts the list of unify results to recursive types*)
+    (*converts the list of rec unify results to recursive types*)
     let r_res_to_typ (acc: Typ.t list) (res: Typ.t * Typ.unify_result): Typ.t list =
         let (r_typ, _) = res in
         r_typ::acc
     in
     let r_typs = List.fold_left r_res_to_typ [] r_results in
     let var_ls = List.fold_left acc_rec_holes [] r_typs in
+    (*extends unify results with the accumulated types to be solved as self for referencing *)
     let extend_u_results (acc: Typ.unify_results) (var: TypeInferenceVar.t): Typ.unify_results =
         Impl.add_unify_result (var, (Typ.Ambiguous (None, [(Typ.THole var)]))) acc
     in
     (List.fold_left extend_u_results u_results var_ls), r_results
 ;;
 
-(* DOCUMENTATION *)
+(* DFS DOCUMENTATION *)
 (* PURPOSE: a method that dfs's on a type to accumulate all known types it is cyclic with in gen_results*)
 (* DETAILS:
     - root is the node from which dfsing will start
@@ -417,6 +398,8 @@ let add_all_refs_as_results (u_results: Typ.unify_results) (r_results: Typ.rec_u
     - tracked acts as a means to track which branches have been explored. 
     - eq_class acts to track all values in equivalence class with the current dfs
     - unseen_results acts to track the currently uncompleted types
+    - deps carries any dependencies between types necessary for some recomputation processes
+    - updateable indicates if the unseen results should be extended by the current assessment
 *)
 (* RETURNS:
     - a typ_gens representing the dfs types
@@ -424,12 +407,15 @@ let add_all_refs_as_results (u_results: Typ.unify_results) (r_results: Typ.rec_u
     - the currently known equivalence class of the root; technically redundany given the typ_gens
     - the values remaining in the supplied restrack that remain undfsed (thus being an ancestor or disjoint)
     - an updated gen_results tree, relinked as dfs_typs saw fit
+    - and updated potentially "path compressed/reseen status updated" dep_list
 among these, the only ones useful for programmers is the typ_gens return value; the rest are for recursive bookkeeping
+the returned type generator has the following guarantee: all possible representable types implied by the constraint set
+for the root are represented in the type generator
 *)
 let rec dfs_typs (root: Typ.t) (gen_results: TypGenRes.results) (tracked: CycleTrack.t) (eq_class: CycleTrack.t) 
     (unseen_results: ResTrack.t) (deps: ResTrack.dep_list) (updateable: bool)
     : TypGen.typ_gens * CycleTrack.t * CycleTrack.t * ResTrack.t * Blacklist.t * TypGenRes.results *  ResTrack.dep_list =
-    Printf.printf "root begin: %s\n" (string_of_typ root);
+    (*Printf.printf "root begin: %s\n" (string_of_typ root);*)
     (*update the tracking mechanisms *)
     let tracked = CycleTrack.track_typ root tracked in
     let eq_class = CycleTrack.track_typ root eq_class in
@@ -449,17 +435,17 @@ let rec dfs_typs (root: Typ.t) (gen_results: TypGenRes.results) (tracked: CycleT
         )
     in
     
-    (*return the previous parameters after updating the dfs types to inclue to root *)
+    (* based on updatable status, extend the unseen results as needed *)
     let (deps, unseen_results) = 
         if (updateable) then (
             ResTrack.update_unseens_after_typ root deps unseen_results
-        ) else (
-            deps, unseen_results
-        )
-     in
-    Printf.printf "root end: %s\n" (string_of_typ root);
-    Printf.printf "%s\n" (string_of_restrack unseen_results);
+        ) else (deps, unseen_results)
+    in
+    (*Printf.printf "root end: %s\n" (string_of_typ root);
+    Printf.printf "%s\n" (string_of_restrack unseen_results);*)
+    (*updated root tracking *)
     let unseen_results = ResTrack.remove_typ root unseen_results in
+    (*return the previous parameters after updating the dfs types to inclue to root *)
     ((TypGen.extend_with_typ dfs_all root), tracked, eq_class, unseen_results, blist, gen_results, deps)
 
 (* PURPOSE: Given a recursive type constructed via 'ctr' with lhs 'ty1' and rhs 'ty2', performs a dfs *)
@@ -469,60 +455,73 @@ and dfs_typs_of_ctr (ctr: Signature.ctr) (ty1: Typ.t) (ty2: Typ.t) (gen_results:
     (* create the type represented by the arguments *)
     let rec_ty = ((Signature.get_mk_of_ctr ctr) ty1 ty2) in
     (*perform an incorrect dfs of the recursive type's equivalence class to generate a list of info to
-    impart to children so that their dfs's will be as correct as possible *)
+    impart to children so that their dfs's will be as correct as possible from this vantage*)
     let (tys_u, uptrack, _, unseen_results, _, gen_results, deps) =
         match (TypGenRes.retrieve_gens_for_typ rec_ty gen_results) with
         | Some gens -> dfs_typs_gen gens gen_results tracked eq_class unseen_results deps updateable
         | None -> ([], [], [], [], [], gen_results, deps)
     in
+    (*split the information (ignoring the validity of said split; such checks can be better done in resolve) *)
     let (_, lhs_tys, rhs_tys) = TypGen.split ctr tys_u in
+    (*relink the tree so that the children and the splitted types are bidirectionally linked *)
     let gen_results = TypGenRes.link_typ_to_gen ty1 lhs_tys gen_results in
     let gen_results = TypGenRes.link_typ_to_gen ty2 rhs_tys gen_results in
+    (*perform a dfs of the lhs side (this is technically not a valid dfs- the rhs may relink more, invalidating this;
+    this dfs is only done to ensure the rhs is fully informed) *)
     let (_, _, _, unseen_results, _, gen_results, deps) = 
         dfs_typs ty1 gen_results uptrack [] unseen_results deps updateable
     in
+    (*complete rhs dfs *)
     let (ty2_gens, _, _, unseen_results, blist2, gen_results, deps) = 
         dfs_typs ty2 gen_results uptrack [] unseen_results deps updateable
     in
+    (*complete a true lhs dfs *)
     let (ty1_gens, _, _, unseen_results, blist1, gen_results, deps) = 
         dfs_typs ty1 gen_results uptrack [] unseen_results deps updateable
     in
+    (*fuse the types gleaned from lhs and rhs as needed *)
     let rec_tys_gen = TypGen.fuse ctr ty1_gens ty2_gens in
+    (*do a final dfs of the recursive type's cycle now that children have been fully relinked and completed *)
     let (dfs_tys, tracked, eq_class, unseen_results, blist3, gen_results, deps) = 
         match (TypGenRes.retrieve_gens_for_typ rec_ty gen_results) with
         | Some gens -> dfs_typs_gen gens gen_results tracked eq_class unseen_results deps updateable
         | None -> ([], tracked, eq_class, unseen_results, [], gen_results, deps)
     in
+    (*fuse the results from children and the recursive cycle *)
     let new_gens = TypGen.extend_with_gen dfs_tys rec_tys_gen in
+    (*merge the blacklists accumulated across calls *)
     let final_blist = Blacklist.merge_blists [blist1; blist2; blist3;] in
     (new_gens, tracked, eq_class, unseen_results, final_blist, gen_results, deps)
+
+(* explores all types with results contained in gens and returns the result *)
 and dfs_typs_gen (gens: TypGen.typ_gens) (gen_results: TypGenRes.results) (tracked: CycleTrack.t) (eq_class: CycleTrack.t)
     (unseen_results: ResTrack.t) (deps: ResTrack.dep_list) (updateable: bool)
     : TypGen.typ_gens * CycleTrack.t * CycleTrack.t * ResTrack.t * Blacklist.t * TypGenRes.results * ResTrack.dep_list =
+    (* generate a list of explorable destinations from the generator *)
     let destinations = TypGenRes.explorable_list gens gen_results in
+    (* to be in domain and unequal denotes failure of the occurs check; this function thus acts as an occurs checker *)
     let in_domain_and_unequal (list_elt: Typ.t) (eq_elt: Typ.t): bool =
         (eq_elt <> list_elt) && ((Typ.contains_typ eq_elt list_elt) || (Typ.contains_typ list_elt eq_elt))
     in
+    (*traverse all 'valid' (not occurs or already seen) elements *)
     let traverse_if_valid (acc: TypGen.typ_gens * CycleTrack.t * CycleTrack.t * ResTrack.t * Blacklist.t * TypGenRes.results * ResTrack.dep_list) 
         (list_elt: Typ.t)
         : TypGen.typ_gens * CycleTrack.t * CycleTrack.t * ResTrack.t * Blacklist.t * TypGenRes.results * ResTrack.dep_list =
         let (acc_typs, tracked, eq_class, unseen_results, acc_blist, acc_res, deps) = acc in
-        (*if invalid *)
-        let occ_fail_opt = List.find_opt (in_domain_and_unequal list_elt) eq_class in
-        match occ_fail_opt with
-        | Some occ_fail_elt -> (
-            let acc_blist = Blacklist.add_elt acc_blist (occ_fail_elt, Occurs) in
-            let acc_blist = Blacklist.add_elt acc_blist (list_elt, Occurs) in
-            (acc_typs, tracked, eq_class, unseen_results, acc_blist, acc_res, deps)
-        )
-        | None -> (
-            (*if already traversed *)
+        (* search for anything that fails the occurs check with this element *)
+        let occ_fails = List.filter (in_domain_and_unequal list_elt) eq_class in
+        match occ_fails with
+        | [] -> (
+            (*if nothing failed
+            if already traversed, skip *)
             if (CycleTrack.is_tracked list_elt tracked) then (
                 (acc_typs, tracked, eq_class, unseen_results, acc_blist, acc_res, deps)
             ) else (
+                (*otherwise, dfs the elt *)
                 let (dfs_all, tracked, eq_class, unseen_results, new_blist, acc_res, deps) = 
                     dfs_typs list_elt acc_res tracked eq_class unseen_results deps updateable
                 in
+                (*merge the blacklist *)
                 let acc_blist = Blacklist.merge_blists [acc_blist; new_blist] in
                 ((TypGen.extend_with_gens acc_typs dfs_all),
                 tracked,
@@ -533,11 +532,22 @@ and dfs_typs_gen (gens: TypGen.typ_gens) (gen_results: TypGenRes.results) (track
                 deps)
             )
         )
+        | _ -> (
+            (*if something(s) failed:
+            for every element that fails, add it to the blacklist *)
+            let blist_elt (acc: Blacklist.t) (occ_fail_elt: Typ.t): Blacklist.t =
+                Blacklist.add_elt acc (occ_fail_elt, Occurs)
+            in
+            let acc_blist = Blacklist.add_elt acc_blist (list_elt, Occurs) in
+            let acc_blist = List.fold_left blist_elt acc_blist occ_fails in
+            (acc_typs, tracked, eq_class, unseen_results, acc_blist, acc_res, deps)
+        )
     in
+    (*attempt to traverse and update for all explorable destinations *)
     let (typs, tracked, eq_class, unseen_results, blist, gen_results, deps) =
         List.fold_left traverse_if_valid ([], tracked, eq_class, unseen_results, [], gen_results, deps) destinations
     in
-    (*combine explored results with those already known that weren't giving more info than present. *)
+    (*combine explored results with those already known for a final generator *)
     let original_with_dfs_typs = 
         TypGen.extend_with_gens gens typs
     in
@@ -548,12 +558,7 @@ and dfs_typs_gen (gens: TypGen.typ_gens) (gen_results: TypGenRes.results) (track
 replace the solution for all members of the list and call recursive protocol for any recursive types in it
 wouldn't be a hard change. just remove calls to resolve_res and wrap calls to the other two in a standard
 recursive matching on a list generated from the solution *)
-(*
-    the sol occ associated with the top would theoretically apply to all values in the loop; if ever a child were to have been involved
-    in some occurs check issue, its implicit evaluation upon dfsing the parent should imbue the top sol_occ as false as well.
-    thus, it cannot be that case that a child the parent depends on be sol_occ false without the parent being so too. 
-    however, can a child be non sol_occ when its parent is so?
- *)
+
 let rec resolve (root: Typ.t) (solution: TypGen.typ_gens) (gen_results: TypGenRes.results) (tracked: CycleTrack.t)
     : TypGenRes.results * CycleTrack.t * Blacklist.t =
     let tracked = CycleTrack.track_typ root tracked in
@@ -641,8 +646,8 @@ let rec fix_tracked_results (results_to_fix: ResTrack.t) (gen_results: TypGenRes
     | [] -> results_to_fix, gen_results, blist, deps
     | hd::_ -> (
         let (hd_typ, updateable) = hd in
-        Printf.printf "\n\n%s\n" (string_of_restrack results_to_fix);
-        Printf.printf "%s\n" (string_of_dep_list deps);
+        (*Printf.printf "\n\n%s\n" (string_of_restrack results_to_fix);
+        Printf.printf "%s\n" (string_of_dep_list deps);*)
         
         let (dfs_tys, _, _, results_to_fix, blist_occ, gen_results, deps) = 
             dfs_typs hd_typ gen_results CycleTrack.empty CycleTrack.empty results_to_fix deps updateable
