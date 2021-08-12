@@ -419,7 +419,6 @@ let rec dfs_typs (root: Typ.t) (gen_results: TypGenRes.results) (tracked: CycleT
     (*update the tracking mechanisms *)
     let tracked = CycleTrack.track_typ root tracked in
     let eq_class = CycleTrack.track_typ root eq_class in
-
     (*perform a dfs as necessitated by the shape of the root and store the updated parameters *)
     let (dfs_all, tracked, eq_class, unseen_results, blist, gen_results, deps) = 
         match root with
@@ -434,7 +433,6 @@ let rec dfs_typs (root: Typ.t) (gen_results: TypGenRes.results) (tracked: CycleT
             | None -> ([], tracked, eq_class, unseen_results, [], gen_results, deps)
         )
     in
-    
     (* based on updatable status, extend the unseen results as needed *)
     let (deps, unseen_results) = 
         if (updateable) then (
@@ -554,14 +552,32 @@ and dfs_typs_gen (gens: TypGen.typ_gens) (gen_results: TypGenRes.results) (track
     (original_with_dfs_typs, tracked, eq_class, unseen_results, blist, gen_results, deps)
 ;;
 
-(*since the final solution contains all references, there is technically no need to dfs; you could just 
+(*a quick note:
+since the final solution contains all references, there is technically no need to dfs; you could just 
 replace the solution for all members of the list and call recursive protocol for any recursive types in it
 wouldn't be a hard change. just remove calls to resolve_res and wrap calls to the other two in a standard
 recursive matching on a list generated from the solution *)
 
+(* RESOLVE DOCUMENTATION *)
+(* PURPOSE: given a root and its associated dfsed solution, updates results so that the root and related types
+            (being in cycle or accessible as a child from some in cycle node) by using said solution*)
+(* DETAILS:
+    - root is the node from which resolution will start
+    - solution represents the dfs result representing the tree beginning at root
+    - gen_results represents the tree to resolve
+    - tracked acts as a means to track which branches have been explored.
+*)
+(* RETURNS:
+    - an updated result list gen_results
+    - the currently tracked values passed in dfs
+    - a blacklist (assuming dfs has been called, which it better have been) now including invalid shape offenders
+among these, the only ones useful for programmers is the gen_results (and technically the blacklist, but thats more for handoff)
+*)
 let rec resolve (root: Typ.t) (solution: TypGen.typ_gens) (gen_results: TypGenRes.results) (tracked: CycleTrack.t)
     : TypGenRes.results * CycleTrack.t * Blacklist.t =
+    (*track current node *)
     let tracked = CycleTrack.track_typ root tracked in
+    (*based on shape of root, resole as is appropriate *)
     match root with
     | TNum
     | TBool -> (gen_results, tracked, [])
@@ -573,19 +589,25 @@ let rec resolve (root: Typ.t) (solution: TypGen.typ_gens) (gen_results: TypGenRe
         let gen_results = TypGenRes.replace_gens_of_typ root solution gen_results in
         (gen_results, tracked, blist)
     )
+
+(* PURPOSE: Given a recursive type constructed via 'ctr' with lhs 'ty1' and rhs 'ty2', applies the solution give, splitting across children *)
 and resolve_of_ctr (ctr: Signature.ctr) (ty1: Typ.t) (ty2: Typ.t) (solution: TypGen.typ_gens) (gen_results: TypGenRes.results) 
     (tracked: CycleTrack.t): TypGenRes.results * CycleTrack.t * Blacklist.t =
+    (*split the solution, saving the validity status *)
     let (split_res, lhs_tys, rhs_tys) = TypGen.split ctr solution in
+    (*save the represented recursive type *)
     let rec_ty = ((Signature.get_mk_of_ctr ctr) ty1 ty2) in
+    (*update the blacklist based on the split's success *)
     let new_blist: Blacklist.t =
         match split_res with
         | Success -> []
         | Fail f_stat -> (
-            (*if simply an inconsistency in ctrs, only the rec typ eq class is invalid; 
-            if a use of a rec as a base type, then all elts of the rec are invalid *)
+            (*if simply an inconsistency in ctrs, only the rec typ's equivalence class is invalid; 
+            if a use of a rec typ as a base type, then all elts of the rec are invalid *)
             match f_stat with
             | Ctr_fail -> [(rec_ty, Invalid);]
             | _ -> (
+                (*generates a list of 'literal' types from a single recursive type *)
                 let rec typ_to_typ_ls (typ: Typ.t): Typ.t list =
                     match typ with
                     | TArrow (ty1, ty2)
@@ -594,30 +616,37 @@ and resolve_of_ctr (ctr: Signature.ctr) (ty1: Typ.t) (ty2: Typ.t) (solution: Typ
                     | _ -> [typ]
                 in
                 let ty_ls = typ_to_typ_ls rec_ty in
+                (*add all contained recursive types to the blacklist as invalid *)
                 List.rev_map (fun (x: Typ.t): (Typ.t * Blacklist.err)  -> (x, Invalid)) ty_ls
             )
         )
     in
-    (*no need to generate new type results since dfs should already have traversed this and constructed the necessary ones *)
-    (*update results with information for children *)
+    (*update results with information for children (resolve then replace)*)
     let (gen_results, tracked, blist1) = resolve_typ_gens lhs_tys gen_results tracked in
     let gen_results = TypGenRes.replace_gens_of_typ ty1 lhs_tys gen_results in
     let (gen_results, tracked, blist2) = resolve_typ_gens rhs_tys gen_results tracked in
     let gen_results = TypGenRes.replace_gens_of_typ ty2 rhs_tys gen_results in
+    (* resolve the remainder of the solution *)
+    let (gen_results, tracked, blist3) = resolve_typ_gens solution gen_results tracked in
+    (*replace own result *)
+    let gen_results  = 
+        TypGenRes.replace_gens_of_typ ((Signature.get_mk_of_ctr ctr) ty1 ty2) solution gen_results
+    in
+    (*merge all blacklists *)
+    let final_blist = Blacklist.merge_blists [blist1; blist2; blist3; new_blist;] in
+    (gen_results, tracked, final_blist)
+    (*
     match (TypGenRes.retrieve_gens_for_typ ((Signature.get_mk_of_ctr ctr) ty1 ty2) gen_results) with
     | Some _ -> (
-        let (gen_results, tracked, blist3) = resolve_typ_gens solution gen_results tracked in
-        let gen_results  = 
-            TypGenRes.replace_gens_of_typ ((Signature.get_mk_of_ctr ctr) ty1 ty2) solution gen_results
-        in
-        let final_blist = Blacklist.merge_blists [blist1; blist2; blist3; new_blist;] in
-        (gen_results, tracked, final_blist)
     )
-    | None -> (gen_results, tracked, (Blacklist.merge_blists [blist1; blist2; new_blist;]))
-(*already following a replaced value; just dfs so other funcs can replace *)
+    | None -> (gen_results, tracked, (Blacklist.merge_blists [blist1; blist2; new_blist;]))*)
+
+(* PURPOSE: to direct resolution along to recipients represented by it *)
 and resolve_typ_gens (solution: TypGen.typ_gens) (gen_results: TypGenRes.results) (tracked: CycleTrack.t)
     : TypGenRes.results * CycleTrack.t * Blacklist.t =
+    (*generate an explorable list from the solution *)
     let ty_ls = TypGenRes.explorable_list solution gen_results in
+    (*traverse all valid elts and resolve them *)
     let traverse_if_valid (acc: TypGenRes.results * CycleTrack.t * Blacklist.t) (list_elt: Typ.t)
         : TypGenRes.results * CycleTrack.t * Blacklist.t =
         let (acc_res, tracked, acc_blist) = acc in
@@ -630,6 +659,7 @@ and resolve_typ_gens (solution: TypGen.typ_gens) (gen_results: TypGenRes.results
     List.fold_left traverse_if_valid (gen_results, tracked, []) ty_ls
 ;;
 
+(*PURPOSE: converts results to a final solution status set *)
 let rec gen_to_status (gen_results: TypGenRes.results) (blist: Blacklist.t): Status.solution list =
     match gen_results with
     | [] -> []
@@ -640,35 +670,46 @@ let rec gen_to_status (gen_results: TypGenRes.results) (blist: Blacklist.t): Sta
     )
 ;;
 
+(*A wrapper for dfs and resolve; dfses types not seen or in need of revisiting as necessary and resolves them *)
 let rec fix_tracked_results (results_to_fix: ResTrack.t) (gen_results: TypGenRes.results) (blist: Blacklist.t) (deps: ResTrack.dep_list)
     : ResTrack.t * TypGenRes.results * Blacklist.t * ResTrack.dep_list =
+    (*cycle through the results in need of fixing *)
     match results_to_fix with
     | [] -> results_to_fix, gen_results, blist, deps
     | hd::_ -> (
+        (*extract the result and if it is one from which unseen can grow *)
         let (hd_typ, updateable) = hd in
         (*Printf.printf "\n\n%s\n" (string_of_restrack results_to_fix);
         Printf.printf "%s\n" (string_of_dep_list deps);*)
-        
+        (*dfs and resolve with the results *)
         let (dfs_tys, _, _, results_to_fix, blist_occ, gen_results, deps) = 
             dfs_typs hd_typ gen_results CycleTrack.empty CycleTrack.empty results_to_fix deps updateable
         in
         let (gen_results, _, blist_shape) = resolve hd_typ dfs_tys gen_results CycleTrack.empty in
+        (*accumulate blacklists *)
         let merged_blist = (Blacklist.merge_blists [blist; blist_occ; blist_shape;]) in
         fix_tracked_results results_to_fix gen_results merged_blist deps
     )
 ;;
 
+(*An all encompassing function that, given results from unification, performs all computation necessary to produce a final solution status set *)
 let finalize_results (u_results: Typ.unify_results) (r_results: Typ.rec_unify_results)
     : Status.solution list = 
+    (*add all referenced holes across recursive types as 'results' so that they are discoverable in dfs *)
     let (u_results, r_results) = 
         add_all_refs_as_results u_results r_results
     in
+    (*produce a set of typ gen results *)
     let gen_results = TypGenRes.unif_results_to_gen_results u_results r_results in
+    (*produce a set of types that must be dfsed for completion *)
     let results_to_fix = ResTrack.results_to_t u_results r_results in
+    (*produce a dependency list to inform potential recomputation *)
     let deps = ResTrack.r_results_to_dep_list r_results in
+    (*fix all needed results and update the gen_results as appropriate *)
     let (_, gen_results, blacklist, _) = 
         fix_tracked_results results_to_fix gen_results [] deps
     in
+    (*a helper to represent typs as ints for sorting *)
     let rec extract_leftmost (typ: Typ.t): int =
         match typ with
         | TNum
@@ -685,6 +726,7 @@ let finalize_results (u_results: Typ.unify_results) (r_results: Typ.rec_unify_re
             | _ -> lhs
         )
     in
+    (*a comparator for sort *)
     let comp_status (stat1: Status.solution) (stat2: Status.solution)
         : int =
         let (ty1, _) = stat1 in
@@ -693,6 +735,8 @@ let finalize_results (u_results: Typ.unify_results) (r_results: Typ.rec_unify_re
         let id2 = extract_leftmost ty2 in
         Stdlib.compare id1 id2
     in
+    (*condense all results into solutions *)
     let solutions = gen_to_status gen_results blacklist in
+    (*sort the solutions for readability *)
     List.fast_sort comp_status solutions
 ;; 
