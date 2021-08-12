@@ -1,15 +1,41 @@
 open Syntax
 
-(* Restrack serves as a means to track which types have been dfsed and resolved.  *)
+(* Restrack serves as a means to track which types have been dfsed and resolved.  
+    the dep_list feature acts to maintain a path compressed set of dependencies
+    so that if an update to some child, its uppermost dependency is flagged for reevaluation
+    by reinsertion to the restrack*)
 module ResTrack = struct
     type t = Typ.t list
 
+    (* types, their most known dependent, and whether they've already been re-added *)
+    type dep_list = (Typ.t * (Typ.t list) * bool) list
+
     (*gets rid of a typ from the list *)
-    let remove_typ (typ: Typ.t) (ls: t): t =
-        let pred (elt: Typ.t): bool =
-            elt <> typ
+    let rec remove_typ (typ: Typ.t) (ls: t): t =
+        match ls with
+        | [] -> []
+        | hd::tl -> if (hd = typ) then (tl) else (hd::(remove_typ typ tl))
+    ;;
+
+    let rec add_dep (deps: Typ.t list) (dep: Typ.t): Typ.t list =
+        match deps with
+        | [] -> [dep]
+        | hd::tl -> if (hd = dep) then deps else (hd::(add_dep tl dep))
+    ;;
+
+    let add_typ_with_deps (typ: Typ.t) (deps: Typ.t list) (ls: dep_list): dep_list =
+        let rec update_or_insert (ls: dep_list): dep_list =
+            match ls with
+            | [] -> [(typ, deps, false)]
+            | hd::tl -> (
+                let (key, ls, _) = hd in
+                if (key = typ) then 
+                    ((typ, (List.fold_left add_dep ls deps), false)::tl) 
+                else 
+                    (hd::(update_or_insert tl))
+            )
         in
-        List.filter pred ls
+        update_or_insert ls
     ;;
 
     (*generates a list of the types involved in unify results. recursive results first *)
@@ -31,6 +57,72 @@ module ResTrack = struct
         let ls_u = u_results_to_t u_results in
         let ls_r = r_results_to_t r_results in
         List.rev_append ls_r ls_u
+    ;;
+
+    let r_results_to_dep_list (r_results: Typ.rec_unify_results): dep_list =
+        let r_results_to_t (r_results: Typ.rec_unify_results): Typ.t list =
+            let extend_by_r_res (acc: t) (r_res: Typ.t * Typ.unify_result): Typ.t list =
+                let (r_typ, _) = r_res in
+                r_typ::acc
+            in
+            List.fold_left extend_by_r_res [] r_results
+        in
+        let ls_r = r_results_to_t r_results in
+        let rec acc_deps (acc: dep_list) (typ: Typ.t): dep_list =
+            match typ with
+            | TArrow (ty1, ty2)
+            | TProd (ty1, ty2)
+            | TSum (ty1, ty2) -> (
+                let acc = add_typ_with_deps ty1 [typ] acc in
+                let acc = add_typ_with_deps ty2 [typ] acc in
+                let acc = acc_deps acc ty1 in
+                acc_deps acc ty2
+            )
+            | _ -> acc
+        in
+        List.fold_left acc_deps [] ls_r
+    ;;
+
+    let rec remove_and_inform (pred: 'a -> bool) (ls: 'a list): ('a option) * 'a list =
+        match ls with
+        | [] -> (None, [])
+        | hd::tl -> (
+            if (pred hd) then ((Some hd), tl) 
+            else (
+                let (ext, tl) = remove_and_inform pred tl in
+                (ext, hd::tl)
+            )
+        ) 
+    ;;
+
+    let rec find_uppermost_dep (key: Typ.t) (deps: dep_list): dep_list * (Typ.t list) * bool =
+        let (removed, deps) = remove_and_inform (fun (x,_, _) -> (x = key)) deps in
+        (*if nothing was removed, return self *)
+        match removed with
+        | None -> (deps, [key], true)
+        | Some (_, rvalues, already_reseen) -> (
+            (*follow the types and accumulate the updates deps lists and returned types; *)
+            let follow (acc: dep_list * (Typ.t list) * bool) (ty: Typ.t): dep_list * (Typ.t list) * bool =
+                let (acc_deps, acc_tys, acc_bool) = acc in
+                let (new_deps, uppers, upper_already_reseen) =
+                    find_uppermost_dep ty acc_deps
+                in
+                (new_deps, (List.rev_append uppers acc_tys), already_reseen && acc_bool && upper_already_reseen)
+            in
+            let (new_deps, new_tys, reseen_done) =
+                List.fold_left follow (deps, [], true) rvalues
+            in
+            ((key, new_tys, true)::new_deps, new_tys, reseen_done)
+        )
+    ;;
+
+    let update_unseens_after_typ (typ: Typ.t) (deps: dep_list) (unseen_results: t)
+        : dep_list * t =
+        let (new_deps, to_be_reseen, already_reseen) = find_uppermost_dep typ deps in
+        let updated_unseens = 
+            if (already_reseen) then unseen_results else (unseen_results @ to_be_reseen)
+        in
+        (new_deps, updated_unseens)
     ;;
 end
 
@@ -187,6 +279,21 @@ let rec string_of_blist (blist: Blacklist.t) =
     )
 ;;
 
+let rec string_of_dep_list (deps: ResTrack.dep_list) = 
+    match deps with
+    | [] -> "\n";
+    | hd::tl -> (
+        let (key, ty_ls, seen) = hd in
+        let hd_str = 
+            (string_of_typ key) ^ " has deps: " ^ (string_of_typ_ls ty_ls) ^ 
+           (if (seen) then "and HAS been reseen" else "and HASN'T been reseen") ^
+            "\n"
+        in
+        hd_str ^ (string_of_dep_list tl)
+    )
+
+;;
+
 (******************************************************)
 (*  UTILITIES FOR DEBUGGING COPIED FROM UTIL.ML END *)
 (******************************************************)
@@ -241,90 +348,92 @@ let add_all_refs_as_results (u_results: Typ.unify_results) (r_results: Typ.rec_u
 among these, the only ones useful for programmers is the typ_gens return value; the rest are for recursive bookkeeping
 *)
 let rec dfs_typs (root: Typ.t) (gen_results: TypGenRes.results) (tracked: CycleTrack.t) (eq_class: CycleTrack.t) 
-    (unseen_results: ResTrack.t)
-    : TypGen.typ_gens * CycleTrack.t * CycleTrack.t * ResTrack.t * Blacklist.t * TypGenRes.results =
+    (unseen_results: ResTrack.t) (deps: ResTrack.dep_list)
+    : TypGen.typ_gens * CycleTrack.t * CycleTrack.t * ResTrack.t * Blacklist.t * TypGenRes.results *  ResTrack.dep_list =
     (*update the tracking mechanisms *)
     let tracked = CycleTrack.track_typ root tracked in
     let eq_class = CycleTrack.track_typ root eq_class in
-    let unseen_results = ResTrack.remove_typ root unseen_results in
 
     (*perform a dfs as necessitated by the shape of the root and store the updated parameters *)
-    let (dfs_all, tracked, eq_class, unseen_results, blist, gen_results) = 
+    let (dfs_all, tracked, eq_class, unseen_results, blist, gen_results, deps) = 
         match root with
-        | TNum -> ([], tracked, eq_class, unseen_results, [], gen_results)
-        | TBool -> ([], tracked, eq_class, unseen_results, [], gen_results)
-        | TArrow (ty1, ty2) -> dfs_typs_of_ctr Signature.Arrow ty1 ty2 gen_results tracked eq_class unseen_results
-        | TProd (ty1, ty2) -> dfs_typs_of_ctr Signature.Prod ty1 ty2 gen_results tracked eq_class unseen_results
-        | TSum (ty1, ty2) -> dfs_typs_of_ctr Signature.Sum ty1 ty2 gen_results tracked eq_class unseen_results
+        | TNum -> ([], tracked, eq_class, unseen_results, [], gen_results, deps)
+        | TBool -> ([], tracked, eq_class, unseen_results, [], gen_results, deps)
+        | TArrow (ty1, ty2) -> dfs_typs_of_ctr Signature.Arrow ty1 ty2 gen_results tracked eq_class unseen_results deps
+        | TProd (ty1, ty2) -> dfs_typs_of_ctr Signature.Prod ty1 ty2 gen_results tracked eq_class unseen_results deps
+        | TSum (ty1, ty2) -> dfs_typs_of_ctr Signature.Sum ty1 ty2 gen_results tracked eq_class unseen_results deps
         | THole _ -> (
             match (TypGenRes.retrieve_gens_for_typ root gen_results) with
-            | Some gens -> (dfs_typs_gen gens gen_results tracked eq_class unseen_results)
-            | None -> ([], tracked, eq_class, unseen_results, [], gen_results)
+            | Some gens -> (dfs_typs_gen gens gen_results tracked eq_class unseen_results deps)
+            | None -> ([], tracked, eq_class, unseen_results, [], gen_results, deps)
         )
     in
-
+    
     (*return the previous parameters after updating the dfs types to inclue to root *)
-    ((TypGen.extend_with_typ dfs_all root), tracked, eq_class, unseen_results, blist, gen_results)
+    let (deps, unseen_results) = ResTrack.update_unseens_after_typ root deps unseen_results in
+    let unseen_results = ResTrack.remove_typ root unseen_results in
+    ((TypGen.extend_with_typ dfs_all root), tracked, eq_class, unseen_results, blist, gen_results, deps)
 
 (* PURPOSE: Given a recursive type constructed via 'ctr' with lhs 'ty1' and rhs 'ty2', performs a dfs *)
 and dfs_typs_of_ctr (ctr: Signature.ctr) (ty1: Typ.t) (ty2: Typ.t) (gen_results: TypGenRes.results) 
-    (tracked: CycleTrack.t) (eq_class: CycleTrack.t) (unseen_results: ResTrack.t)
-    : TypGen.typ_gens * CycleTrack.t * CycleTrack.t * ResTrack.t * Blacklist.t * TypGenRes.results =
+    (tracked: CycleTrack.t) (eq_class: CycleTrack.t) (unseen_results: ResTrack.t) (deps: ResTrack.dep_list)
+    : TypGen.typ_gens * CycleTrack.t * CycleTrack.t * ResTrack.t * Blacklist.t * TypGenRes.results * ResTrack.dep_list =
     (* create the type represented by the arguments *)
     let rec_ty = ((Signature.get_mk_of_ctr ctr) ty1 ty2) in
     (*perform an incorrect dfs of the recursive type's equivalence class to generate a list of info to
     impart to children so that their dfs's will be as correct as possible *)
-    let (tys_u, uptrack, _, _, _, gen_results) =
+    let (tys_u, uptrack, _, _, _, gen_results, deps) =
         match (TypGenRes.retrieve_gens_for_typ rec_ty gen_results) with
-        | Some gens -> dfs_typs_gen gens gen_results tracked eq_class unseen_results
-        | None -> ([], [], [], [], [], gen_results)
+        | Some gens -> dfs_typs_gen gens gen_results tracked eq_class unseen_results deps
+        | None -> ([], [], [], [], [], gen_results, deps)
     in
     let (_, lhs_tys, rhs_tys) = TypGen.split ctr tys_u in
     let gen_results = TypGenRes.link_typ_to_gen ty1 lhs_tys gen_results in
     let gen_results = TypGenRes.link_typ_to_gen ty2 rhs_tys gen_results in
-    let (_, _, _, unseen_results, _, gen_results) = 
-        dfs_typs ty1 gen_results uptrack [] unseen_results
+    let (_, _, _, unseen_results, _, gen_results, deps) = 
+        dfs_typs ty1 gen_results uptrack [] unseen_results deps
     in
-    let (ty2_gens, _, _, unseen_results, blist2, gen_results) = 
-        dfs_typs ty2 gen_results uptrack [] unseen_results
+    let (ty2_gens, _, _, unseen_results, blist2, gen_results, deps) = 
+        dfs_typs ty2 gen_results uptrack [] unseen_results deps
     in
-    let (ty1_gens, _, _, unseen_results, blist1, gen_results) = 
-        dfs_typs ty1 gen_results uptrack [] unseen_results
+    let (ty1_gens, _, _, unseen_results, blist1, gen_results, deps) = 
+        dfs_typs ty1 gen_results uptrack [] unseen_results deps
     in
     let rec_tys_gen = TypGen.fuse ctr ty1_gens ty2_gens in
-    let (dfs_tys, tracked, eq_class, unseen_results, blist3, gen_results) = 
+    let (dfs_tys, tracked, eq_class, unseen_results, blist3, gen_results, deps) = 
         match (TypGenRes.retrieve_gens_for_typ rec_ty gen_results) with
-        | Some gens -> dfs_typs_gen gens gen_results tracked eq_class unseen_results
-        | None -> ([], tracked, eq_class, unseen_results, [], gen_results)
+        | Some gens -> dfs_typs_gen gens gen_results tracked eq_class unseen_results deps
+        | None -> ([], tracked, eq_class, unseen_results, [], gen_results, deps)
     in
     let new_gens = TypGen.extend_with_gen dfs_tys rec_tys_gen in
     let final_blist = Blacklist.merge_blists [blist1; blist2; blist3;] in
-    (new_gens, tracked, eq_class, unseen_results, final_blist, gen_results)
+    (new_gens, tracked, eq_class, unseen_results, final_blist, gen_results, deps)
 and dfs_typs_gen (gens: TypGen.typ_gens) (gen_results: TypGenRes.results) (tracked: CycleTrack.t) (eq_class: CycleTrack.t)
-    (unseen_results: ResTrack.t)
-    : TypGen.typ_gens * CycleTrack.t * CycleTrack.t * ResTrack.t * Blacklist.t * TypGenRes.results =
+    (unseen_results: ResTrack.t) (deps: ResTrack.dep_list)
+    : TypGen.typ_gens * CycleTrack.t * CycleTrack.t * ResTrack.t * Blacklist.t * TypGenRes.results * ResTrack.dep_list =
     let destinations = TypGenRes.explorable_list gens gen_results in
     let in_domain_and_unequal (list_elt: Typ.t) (eq_elt: Typ.t): bool =
         (eq_elt <> list_elt) && ((Typ.contains_typ eq_elt list_elt) || (Typ.contains_typ list_elt eq_elt))
     in
-    let traverse_if_valid (acc: TypGen.typ_gens * CycleTrack.t * CycleTrack.t * ResTrack.t * Blacklist.t * TypGenRes.results) (list_elt: Typ.t)
-        : TypGen.typ_gens * CycleTrack.t * CycleTrack.t * ResTrack.t * Blacklist.t * TypGenRes.results =
-        let (acc_typs, tracked, eq_class, unseen_results, acc_blist, acc_res) = acc in
+    let traverse_if_valid (acc: TypGen.typ_gens * CycleTrack.t * CycleTrack.t * ResTrack.t * Blacklist.t * TypGenRes.results * ResTrack.dep_list) 
+        (list_elt: Typ.t)
+        : TypGen.typ_gens * CycleTrack.t * CycleTrack.t * ResTrack.t * Blacklist.t * TypGenRes.results * ResTrack.dep_list =
+        let (acc_typs, tracked, eq_class, unseen_results, acc_blist, acc_res, deps) = acc in
         (*if invalid *)
         let occ_fail_opt = List.find_opt (in_domain_and_unequal list_elt) eq_class in
         match occ_fail_opt with
         | Some occ_fail_elt -> (
             let acc_blist = Blacklist.add_elt acc_blist (occ_fail_elt, Occurs) in
             let acc_blist = Blacklist.add_elt acc_blist (list_elt, Occurs) in
-            (acc_typs, tracked, eq_class, unseen_results, acc_blist, acc_res)
+            (acc_typs, tracked, eq_class, unseen_results, acc_blist, acc_res, deps)
         )
         | None -> (
             (*if already traversed *)
             if (CycleTrack.is_tracked list_elt tracked) then (
-                (acc_typs, tracked, eq_class, unseen_results, acc_blist, acc_res)
+                (acc_typs, tracked, eq_class, unseen_results, acc_blist, acc_res, deps)
             ) else (
-                let (dfs_all, tracked, eq_class, unseen_results, new_blist, acc_res) = 
-                    dfs_typs list_elt acc_res tracked eq_class unseen_results
+                let (dfs_all, tracked, eq_class, unseen_results, new_blist, acc_res, deps) = 
+                    dfs_typs list_elt acc_res tracked eq_class unseen_results deps
                 in
                 let acc_blist = Blacklist.merge_blists [acc_blist; new_blist] in
                 ((TypGen.extend_with_gens acc_typs dfs_all),
@@ -332,18 +441,19 @@ and dfs_typs_gen (gens: TypGen.typ_gens) (gen_results: TypGenRes.results) (track
                 eq_class,
                 unseen_results,
                 acc_blist,
-                acc_res)
+                acc_res,
+                deps)
             )
         )
     in
-    let (typs, tracked, eq_class, unseen_results, blist, gen_results) =
-        List.fold_left traverse_if_valid ([], tracked, eq_class, unseen_results, [], gen_results) destinations
+    let (typs, tracked, eq_class, unseen_results, blist, gen_results, deps) =
+        List.fold_left traverse_if_valid ([], tracked, eq_class, unseen_results, [], gen_results, deps) destinations
     in
     (*combine explored results with those already known that weren't giving more info than present. *)
     let original_with_dfs_typs = 
         TypGen.extend_with_gens gens typs
     in
-    (original_with_dfs_typs, tracked, eq_class, unseen_results, blist, gen_results)
+    (original_with_dfs_typs, tracked, eq_class, unseen_results, blist, gen_results, deps)
 ;;
 
 (*since the final solution contains all references, there is technically no need to dfs; you could just 
@@ -437,17 +547,19 @@ let rec gen_to_status (gen_results: TypGenRes.results) (blist: Blacklist.t): Sta
     )
 ;;
 
-let rec fix_tracked_results (results_to_fix: ResTrack.t) (gen_results: TypGenRes.results) (blist: Blacklist.t)
-    : ResTrack.t * TypGenRes.results * Blacklist.t =
+let rec fix_tracked_results (results_to_fix: ResTrack.t) (gen_results: TypGenRes.results) (blist: Blacklist.t) (deps: ResTrack.dep_list)
+    : ResTrack.t * TypGenRes.results * Blacklist.t * ResTrack.dep_list =
     match results_to_fix with
-    | [] -> results_to_fix, gen_results, blist
+    | [] -> results_to_fix, gen_results, blist, deps
     | hd::_ -> (
-        let (dfs_tys, _, _, results_to_fix, blist_occ, gen_results) = 
-            dfs_typs hd gen_results CycleTrack.empty CycleTrack.empty results_to_fix 
+        let (dfs_tys, _, _, results_to_fix, blist_occ, gen_results, deps) = 
+            dfs_typs hd gen_results CycleTrack.empty CycleTrack.empty results_to_fix deps
         in
+        Printf.printf "%s\n" (string_of_typ_ls results_to_fix);
+        Printf.printf "%s\n" (string_of_dep_list deps);
         let (gen_results, _, blist_shape) = resolve hd dfs_tys gen_results CycleTrack.empty in
         let merged_blist = (Blacklist.merge_blists [blist; blist_occ; blist_shape;]) in
-        fix_tracked_results results_to_fix gen_results merged_blist
+        fix_tracked_results results_to_fix gen_results merged_blist deps
     )
 ;;
 
@@ -458,8 +570,9 @@ let finalize_results (u_results: Typ.unify_results) (r_results: Typ.rec_unify_re
     in
     let gen_results = TypGenRes.unif_results_to_gen_results u_results r_results in
     let results_to_fix = ResTrack.results_to_t u_results r_results in
-    let (_, gen_results, blacklist) = 
-        fix_tracked_results results_to_fix gen_results []
+    let deps = ResTrack.r_results_to_dep_list r_results in
+    let (_, gen_results, blacklist, _) = 
+        fix_tracked_results results_to_fix gen_results [] deps
     in
     let rec extract_leftmost (typ: Typ.t): int =
         match typ with
