@@ -338,10 +338,14 @@ module TypGen = struct
 
     (*a version of the algorithm above with a slightly lighter constraint *)
     let rec dest_gen_used_in_gens (gens: typ_gens) (dest_gen: typ_gen): bool =
+        (*for dest to be used in gens, it should be used in the hd or tl *)
         match gens with
         | [] -> false
         | hd::tl -> ((dest_gen_used_in_gen hd dest_gen) || (dest_gen_used_in_gens tl dest_gen))
     and dest_gen_used_in_gen (gen: typ_gen) (dest_gen: typ_gen): bool =
+        (*assess then gen
+            if a base, they must exactly match (being only base literals)
+            if a compound, the gen can be in either side of the compound or be the same as the compound *)
         match gen with
         | Base _ -> (dest_gen = gen)
         | Compound (ctr, gens1, gens2) -> (
@@ -358,7 +362,7 @@ module TypGen = struct
             )
         )
     and dest_gens_used_in_gens (gens: typ_gens) (dest_gens: typ_gens): bool =
-        (*need all the dest_gen in dest_gens to be in gens  *)
+        (*need all the dest_gen in dest_gens to be used in gens  *)
         List.for_all (dest_gen_used_in_gens gens) dest_gens
     ;;
 
@@ -376,31 +380,42 @@ module TypGen = struct
     ;;
 
     (*helper; call fn below *)
+    (*filters unneeded holes from the gens with comp as a method to determine if all holes can be removed
+        comp effectively thus can be used to represent different levels of pruning *)
     let rec filter_unneeded_holes_gens (comp: typ_gen -> bool) (remove: bool) (gens: typ_gens): typ_gens =
         match gens with
         | [] -> []
         | hd::tl -> (
+            (*filter the hd; save if it had a hole and the new head option *)
             let had_hole, elt_op = filter_unneeded_holes_gen comp remove hd in
+            (*removal condition is if hole was already seen or if told to before *)
             let remove = had_hole || remove in
+            (*filter rest with the hd added as applicable *)
             match elt_op with
             | None -> filter_unneeded_holes_gens comp remove tl
             | Some hd' -> hd'::(filter_unneeded_holes_gens comp remove tl)
         )
+    (*bool in return type just denotes if a base hole was the gen *)
     and filter_unneeded_holes_gen (comp: typ_gen -> bool) (remove: bool) (gen: typ_gen): bool * typ_gen option =
         match gen with
         | Base btyp -> (
+            (*assess if it should/can be removed *)
             match btyp with
             | Hole _ -> (
+                (*if told to remove, do so *)
                 let op = if remove then None else Some gen in
                 (true, op)
             )
             | _ -> (false, Some gen)
         )
         | Compound (ctr, gens1, gens2) -> (
+            (*see if either branch matches the 'delete all holes' clause supplied *)
             let e_comp1 = List.exists comp gens1 in
             let e_comp2 = List.exists comp gens2 in
+            (*filter both sides with removal status as found above*)
             let gens1' = filter_unneeded_holes_gens comp e_comp1 gens1 in
             let gens2' = filter_unneeded_holes_gens comp e_comp2 gens2 in
+            (*recombine with updated values *)
             (false, (Some (Compound (ctr, gens1', gens2'))))
         )
     ;;
@@ -408,13 +423,16 @@ module TypGen = struct
     (*removes all base type holes in the generator that:
         - have a literal as an option in the same position
         - have a compound as an option in the same position
-        - are discovered after a needed hole in the same position *)
+        - are discovered after a needed hole in the same position 
+    at least, that is how it operates given the only comp supplied in this code is
+    is_base_lit_or_comp so far*)
     let filter_unneeded_holes (comp: typ_gen -> bool) (gens: typ_gens): typ_gens =
         let e_comp = List.exists comp gens in
         filter_unneeded_holes_gens comp e_comp gens
     ;;
 
-    (*returns the solved value associated with a filtered generator IF IT EXISTS; requires gen be nonempty *)
+    (*returns the solved value associated with a filtered generator IF IT EXISTS; requires gen be nonempty 
+    to have a solved value, you should only have a single generator path after the removal of all unnecessary holes*)
     let rec filtered_solved_val (gens: typ_gens): Typ.t option =
         match gens with
         | [] -> None
@@ -431,18 +449,21 @@ module TypGen = struct
         | _ -> None
     ;;
 
+    (*a comparator for gen elts in sorts
+    lists holes in increasing order of their ids *)
     let comp_gen_elt (gen1: typ_gen) (gen2: typ_gen): int =
         let gen_to_float (gen: typ_gen): float =
             match gen with
             | Base Num
             | Base Bool -> 1.0
-            (*the larger the var number, the smaller the  *)
-            | Base (Hole var) -> if (var = 0) then 0.0 else (Float.sub 0.0  (Float.div 1.0 (float_of_int var)))
+            (*the larger the var number, the smaller the  negative, and the closer it is to 0 and the later in an ascending sort it'd go*)
+            | Base (Hole var) -> if (var = 0) then (-2.0) else (Float.sub 0.0 (Float.div 1.0 (float_of_int var)))
             | Compound _ -> 2.0
         in
         Stdlib.compare (gen_to_float gen1) (gen_to_float gen2)
     ;;
 
+    (*fast sorts all layers of a typ_gens *)
     let rec gens_sort_layer (gens: typ_gens): typ_gens =
         let gens = List.fast_sort comp_gen_elt gens in
         gens_sort_explore gens
@@ -453,14 +474,15 @@ module TypGen = struct
             match hd with
             | Base _ -> hd::(gens_sort_explore tl)
             | Compound (ctr, gens1, gens2) -> (
-            let sorted1 = gens_sort_layer gens1 in
-            let sorted2 = gens_sort_layer gens2 in
-            (Compound (ctr, sorted1, sorted2))::(gens_sort_explore tl)
+                let sorted1 = gens_sort_layer gens1 in
+                let sorted2 = gens_sort_layer gens2 in
+                (Compound (ctr, sorted1, sorted2))::(gens_sort_explore tl)
             )
         )
     ;;
 end
 
+(*A module representing all types associated with some error leading to immediate unsolved with error statuses *)
 module Blacklist = struct
     type err =
         | Invalid
