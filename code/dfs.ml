@@ -1,10 +1,15 @@
 open Syntax
 
 (* Restrack serves as a means to track which types have been dfsed and resolved.  
-    the dep_list feature acts to maintain a path compressed set of dependencies
-    so that if an update to some child, its uppermost dependency is flagged for reevaluation
-    by reinsertion to the restrack*)
+    the dep_list feature acts to maintain a path-compressed set of dependencies
+    so that if an update to some child occurs, its uppermost dependency is flagged for reevaluation
+    by reinsertion to the restrack if not already in the list of types to be evaluated
+    
+    a type need only be reevaluated once if done after all types initially in unseen results are evaluated
+    if a type is already inside unseen results, it is pending computation or currently being computed and thus
+    need not be recomputed*)
 module ResTrack = struct
+    (*a type with a bool representing if it has been 'reseen' or not (which prevents excess recomputation) *)
     type t = (Typ.t * bool) list
 
     (* types, their most known dependent, and whether they've already been re-added *)
@@ -111,32 +116,29 @@ module ResTrack = struct
         | None -> (deps, [])
         | Some (_, rvalues, already_reseen) -> (
             (*first, check if this node has already been evaluated; if so, no need to re-add its dependents *)
-            let (deps, tys) = 
-                if (already_reseen) then (
-                    ((key, rvalues, already_reseen)::deps, [])
-                ) else (
-                    (*if not,  check if it has any known dependents to explore; if not, it is final and should be returned*)
-                    match rvalues with
-                    | [] -> ((key, [], already_reseen)::deps, [key])
-                    | _ -> (
-                        (*if dependencies exist,
-                        follow the types and accumulate the updates deps lists and returned types; *)
-                        let follow (acc: dep_list * (Typ.t list)) (ty: Typ.t): dep_list * (Typ.t list) =
-                            let (acc_deps, acc_tys) = acc in
-                            let (new_deps, uppers) =
-                                find_uppermost_dep ty acc_deps
-                            in
-                            (new_deps, (List.rev_append uppers acc_tys))
+            if (already_reseen) then (
+                ((key, rvalues, already_reseen)::deps, [])
+            ) else (
+                (*if not,  check if it has any known dependents to explore; if not, it is final and should be returned*)
+                match rvalues with
+                | [] -> ((key, [], already_reseen)::deps, [key])
+                | _ -> (
+                    (*if dependencies exist,
+                    follow the types and accumulate the updates deps lists and returned types; *)
+                    let follow (acc: dep_list * (Typ.t list)) (ty: Typ.t): dep_list * (Typ.t list) =
+                        let (acc_deps, acc_tys) = acc in
+                        let (new_deps, uppers) =
+                            find_uppermost_dep ty acc_deps
                         in
-                        let (new_deps, new_tys) =
-                            List.fold_left follow (deps, []) rvalues
-                        in
-                        (*compress the key's path and mark it as reseen; return associated types *)
-                        ((key, new_tys, already_reseen)::new_deps, new_tys)
-                    )
+                        (new_deps, (List.rev_append uppers acc_tys))
+                    in
+                    let (new_deps, new_tys) =
+                        List.fold_left follow (deps, []) rvalues
+                    in
+                    (*compress the key's path and mark it as reseen; return associated types *)
+                    ((key, new_tys, already_reseen)::new_deps, new_tys)
                 )
-            in
-            deps, tys
+            )
         )
     ;;
 
@@ -159,6 +161,7 @@ module ResTrack = struct
         )
     ;;
 
+    (*updates the unseen results after the given type has been evaluated given deps *)
     let update_unseens_after_typ (typ: Typ.t) (deps: dep_list) (unseen_results: t)
         : dep_list * t =
         (*get representatives *)
@@ -199,9 +202,9 @@ module CycleTrack = struct
     ;;
 end
 
-(******************************************************)
-(*  UTILITIES FOR DEBUGGING COPIED FROM UTIL.ML START *)
-(******************************************************)
+(***********************************)
+(*  UTILITIES FOR DEBUGGING START  *)
+(***********************************)
 
 let rec string_of_typ (typ:Typ.t) =
     match typ with
@@ -339,7 +342,7 @@ let rec string_of_dep_list (deps: ResTrack.dep_list) =
         let (key, ty_ls, seen) = hd in
         let hd_str = 
             (string_of_typ key) ^ " has deps: " ^ (string_of_typ_ls ty_ls) ^ 
-           (if (seen) then "and HAS been reseen" else "and HASN'T been reseen") ^
+            (if (seen) then "and HAS been reseen" else "and HASN'T been reseen") ^
             "\n"
         in
         hd_str ^ (string_of_dep_list tl)
@@ -353,9 +356,9 @@ let rec string_of_restrack (unseen: ResTrack.t) =
         (string_of_typ hd)^ ", " ^ (string_of_restrack tl);
 ;;
 
-(******************************************************)
-(*  UTILITIES FOR DEBUGGING COPIED FROM UTIL.ML END *)
-(******************************************************)
+(*********************************)
+(*  UTILITIES FOR DEBUGGING END  *)
+(*********************************)
 
 (*extends u results to include all holes contained within r results
     logic: if in an r result, it technically is truly used as a hole with some potential result
@@ -554,9 +557,7 @@ and dfs_typs_gen (gens: TypGen.typ_gens) (gen_results: TypGenRes.results) (track
 
 (*a quick note:
 since the final solution contains all references, there is technically no need to dfs; you could just 
-replace the solution for all members of the list and call recursive protocol for any recursive types in it
-wouldn't be a hard change. just remove calls to resolve_res and wrap calls to the other two in a standard
-recursive matching on a list generated from the solution *)
+replace the solution for all members of the list and call recursive protocol for any recursive types in it.*)
 
 (* RESOLVE DOCUMENTATION *)
 (* PURPOSE: given a root and its associated dfsed solution, updates results so that the root and related types
@@ -626,7 +627,7 @@ and resolve_of_ctr (ctr: Signature.ctr) (ty1: Typ.t) (ty2: Typ.t) (solution: Typ
     let gen_results = TypGenRes.replace_gens_of_typ ty1 lhs_tys gen_results in
     let (gen_results, tracked, blist2) = resolve_typ_gens rhs_tys gen_results tracked in
     let gen_results = TypGenRes.replace_gens_of_typ ty2 rhs_tys gen_results in
-    (* resolve the remainder of the solution *)
+    (* resolve the remainder of the solution (used to be only do so if the type has a result) *)
     let (gen_results, tracked, blist3) = resolve_typ_gens solution gen_results tracked in
     (*replace own result *)
     let gen_results  = 
@@ -635,13 +636,8 @@ and resolve_of_ctr (ctr: Signature.ctr) (ty1: Typ.t) (ty2: Typ.t) (solution: Typ
     (*merge all blacklists *)
     let final_blist = Blacklist.merge_blists [blist1; blist2; blist3; new_blist;] in
     (gen_results, tracked, final_blist)
-    (*
-    match (TypGenRes.retrieve_gens_for_typ ((Signature.get_mk_of_ctr ctr) ty1 ty2) gen_results) with
-    | Some _ -> (
-    )
-    | None -> (gen_results, tracked, (Blacklist.merge_blists [blist1; blist2; new_blist;]))*)
 
-(* PURPOSE: to direct resolution along to recipients represented by it *)
+(* PURPOSE: to direct resolution along to recipients represented by the solution *)
 and resolve_typ_gens (solution: TypGen.typ_gens) (gen_results: TypGenRes.results) (tracked: CycleTrack.t)
     : TypGenRes.results * CycleTrack.t * Blacklist.t =
     (*generate an explorable list from the solution *)

@@ -9,6 +9,7 @@ module TypeInferenceVar = struct
     let recent (var_1:t) (var_2:t) = max var_1 var_2;;
 end
 
+(*a lot of this module was coded before I got here; some of it may be redundant *)
 module Typ = struct
     type t =
         | THole of TypeInferenceVar.t
@@ -20,21 +21,13 @@ module Typ = struct
 
     (*
     The solved status is for:
-        if only unify has run:
-            type variables that have no other type variables found constraining them yet
-            and are constrained without inconsistency to a literal/structure of literals.
-        if top-sort has also run:
-            that have been assessed such that beyond a shadow of a doubt, they have the value of some hole/literal/literal structure through
-            topological sorting without any inconsistencies. Such a solution is different from an unreported
-            unify_result in that it must occur when a variable is constrained by some OTHER variable (also being potentially cyclic)
+    type variables that have no other type variables found constraining them yet
+    and are constrained without inconsistency to a literal/structure of literals.
 
     The ambiguous status is for: 
         type variables constrained to other type variables with at most one found base type
         and multiple types involving holes (where NONE of these are inconsistent with the found base type, 
         if present, and all are pairwise consistent)
-        These need to be topologically resolved so cycles can be detected and collapsed properly
-        After topological sorting, all ambiguous statuses should be resolved to Solved or UnSolved
-        Ambiguity is not the same as unconstrained solution to a single type variable
         
     The unsolved status is for:
         type variables that are guaranteed to be unsolved, whether or not the listed dependencies are fully simplified.
@@ -52,6 +45,7 @@ module Typ = struct
     ex: TArrow(THole4, THole5) = Solved (THole 0)*)
     type rec_unify_results = (t * unify_result) list
 
+    (*solutions for holes *)
     type unify_results  = (TypeInferenceVar.t * unify_result) list
 
     (*New helpers to construct recursive types *)
@@ -134,24 +128,10 @@ module Typ = struct
             | _ -> false
         )
     ;;
-
-    (*
-    let mk_ctr_types (ctr: t -> t -> t) (const: t) (const_is_left: bool) (acc: t list) (variant: t)
-        : Typ.t list =
-        if (const_is_left) then (ctr const variant)::acc else (ctr variant const)::acc
-    ;;
-
-    let fuse_lists (ctr: Typ.t -> Typ.t -> Typ.t) (ty1_ls: Typ.t list) (ty2_ls: Typ.t list)
-        : Typ.t list = 
-        let acc_mk_ctr_types (acc: Typ.t list) (const_of_left: Typ.t): Typ.t list = 
-            List.fold_left (mk_ctr_types ctr const_of_left true) acc (ty2_ls)
-        in
-        List.fold_left acc_mk_ctr_types [] ty1_ls
-    ;;
-    *)
 end
 
 (*can only represent types (not type generators) *)
+(*a module to represent constructors, series thereof, and the conversions from construct *)
 module Signature = struct
     type ctr =
         | Arrow
@@ -169,29 +149,22 @@ module Signature = struct
 end
 
 (*All type gen operations preserve all possible type combinations EXCEPT those that produce a unify result (ie condense) *)
+(*A module allowing the representation of type generators *)
 module TypGen = struct
+    (*in other words, a literal *)
     type base_typ = 
         | Num
         | Bool
         | Hole of TypeInferenceVar.t
 
+    (*a single typ_gen represents a single path of generation *)
     type typ_gen =
         | Base of base_typ
         | Compound of Signature.ctr * typ_gens * typ_gens
-    
+    (*a list of typ_gen represents a set of paths for generation *)
     and typ_gens = typ_gen list
-    
-    (*
-    let rec get_sig_of_typ_gens (gens: typ_gens): Signature.t =
-        match gens with
-        | [] -> []
-        | hd::tl -> (get_sig_of_typ_gen hd) @ (get_sig_of_typ_gens tl)
-    and get_sig_of_typ_gen (gen: typ_gen): Signature.t = 
-        match gen with
-        | Base _ -> []
-        | Compound (ctr, _, gens) -> ctr::(get_sig_of_typ_gens gens)
-    ;;*)
 
+    (* converts a typ to a typ gen*)
     let rec typ_to_typ_gen (typ: Typ.t): typ_gen =
         match typ with
         | TNum -> Base Num
@@ -202,12 +175,14 @@ module TypGen = struct
         | TSum (ty1, ty2) -> Compound (Sum, [(typ_to_typ_gen ty1)], [(typ_to_typ_gen ty2)])
     ;;
 
+    (*splits a typ gen into two separate gens if possible *)
     let split_typ_gen (gen: typ_gen): (typ_gens * typ_gens) option =
         match gen with
         | Base _ -> None
         | Compound (_, gens1, gens2) -> Some (gens1, gens2)
     ;; 
 
+    (*extend a typ_gens with another typ_gens; effectively a merge *)
     let rec extend_with_gens (gens: typ_gens) (gens': typ_gens): typ_gens =
         match gens' with
         | [] -> gens
@@ -215,27 +190,37 @@ module TypGen = struct
             let gens = extend_with_gen gens hd in
             extend_with_gens gens tl
         )
+    (*extend a typ_gens with a typ_gen *)
     and extend_with_gen (gens: typ_gens) (gen: typ_gen): typ_gens = 
+        (* assess the gens *)
         match gens with
         | [] -> [gen]
         | hd::tl -> (
+            (*if nonempty, assess the gen to see how to insert *)
             match gen with
             | Base _ -> (
+                (*if a base, then see if the gens's first path matches exactly *)
                 if (hd = gen) then (
+                    (*if so, finish *)
                     gens
                 ) else (
+                    (*else attempt to extend in the remainder *)
                     hd::(extend_with_gen tl gen)
                 )
             )
             | Compound (ctr, gens1, gens2) -> (
+                (*if compound, see if the hd can be used to insert *)
                 match hd with 
                 | Base _ -> hd::(extend_with_gen tl gen)
                 | Compound (ctr_hd, gens1_hd, gens2_hd) -> (
                     if (ctr_hd = ctr) then (
+                        (*the basic structure matches; extend each path of the compound with the parts we want to insert *)
                         let gens1_new = extend_with_gens gens1_hd gens1 in
                         let gens2_new = extend_with_gens gens2_hd gens2 in
+                        (*combine the two and replace the old hd *)
                         (Compound (ctr_hd, gens1_new, gens2_new))::tl
                     ) else (
+                        (*the basic structures don't match; try to extend in the rest *)
                         hd::(extend_with_gen tl gen)
                     )
                 )
@@ -243,23 +228,33 @@ module TypGen = struct
         )
     ;;
     
+    (*to extend with a type, make the type into a gen and then use the method above *)
     let extend_with_typ (gens: typ_gens) (typ: Typ.t): typ_gens =
         let gen_rep_typ = typ_to_typ_gen typ in
         extend_with_gen gens gen_rep_typ
     ;;
 
-    (*maintains invariant of all combinations present; status returned
-    dictates whether the split was valid for all values split
-    and if it failed, what kind of failure occurred *)
+    (*some niche types for use in split for error handling *)
+    
+    (*effectively a split error status
+    ways a split can fail: 
+        wasn't splittable (literal aka lit_fail); 
+        wasn't splittable as the specified ctr, but was a compound (ctr_fail) *)
     type split_fail =
         | Lit_fail
         | Ctr_fail
     
+    (*possible outcomes of a split
+        success or a failure with a split error status *)
     type split_status =
         | Success
         | Fail of split_fail
 
+    (*splits the gens in two, maintaining all combinations assuming the split was valid (if not, all valid combinations are passed)
+    status returned dictates whether the split was valid for all values split
+    and if it failed, what kind of failure occurred *)
     let split (ctr_used: Signature.ctr) (gens: typ_gens): split_status * typ_gens * typ_gens =
+        (*a method to check if a gen is of the ctr_used, and if not, with what status such failure occurred *)
         let of_ctr (gen: typ_gen): split_status = 
             match gen with
             | Base ty -> (
@@ -279,24 +274,32 @@ module TypGen = struct
                 ((extend_with_gens acc_first first), (extend_with_gens acc_second second))
             )
         in
+        (*round up all the splits of each gen in gens *)
         let (lhs_gens, rhs_gens) = List.fold_left accumulate_splits ([], []) gens in
-        let rec check_ctr (gens: typ_gens): split_status =
+        (*a method that uses of_ctr to evaluate the validity of splits across all gen in gens 
+        if a ctr fail is found, keeps checking to see if a lit fail can be found, as it results
+        in more severe error handling*)
+        let rec check_ctr (gens: typ_gens) (ctr_fail_found: bool): split_status =
             match gens with
-            | [] -> Success
+            | [] -> if ctr_fail_found then (Fail Ctr_fail) else Success
             | hd::tl -> (
                 let hd_check = of_ctr hd in
                 match (hd_check) with
-                | Fail _ -> hd_check
-                | _ -> check_ctr tl 
+                | Fail Lit_fail -> hd_check
+                | Fail Ctr_fail -> check_ctr tl true
+                | _ -> check_ctr tl ctr_fail_found
             )
         in
-        ((check_ctr gens), lhs_gens, rhs_gens)
+        (*return cumulative split error status *)
+        ((check_ctr gens false), lhs_gens, rhs_gens)
     ;;
 
+    (*fuses two gens's into a compound of the specified ctr *)
     let fuse (ctr_used: Signature.ctr) (gens1: typ_gens) (gens2: typ_gens): typ_gen =
         Compound (ctr_used, gens1, gens2)
     ;;
 
+    (* converts a base type to its typ representative *)
     let base_typ_to_typ (base: base_typ): Typ.t =
         match base with
         | Num -> TNum
@@ -304,11 +307,17 @@ module TypGen = struct
         | Hole var -> THole var 
     ;;
 
+    (*checks if dest_gen is present in gens *)
     let rec dest_gen_in_gens (gens: typ_gens) (dest_gen: typ_gen): bool =
+        (*is true if in hd or in tl *)
         match gens with
         | [] -> false
         | hd::tl -> ((dest_gen_in_gen hd dest_gen) || (dest_gen_in_gens tl dest_gen))
     and dest_gen_in_gen (gen: typ_gen) (dest_gen: typ_gen): bool =
+        (*check the container gen 
+        if a base, they should exactly match
+        if a compound with a compound dest, then given ctrs match, return true
+            only if the dest's gens's are in the containers subpath gens's*)
         match gen with
         | Base _ -> (dest_gen = gen)
         | Compound (ctr, gens1, gens2) -> (
@@ -323,10 +332,11 @@ module TypGen = struct
             )
         )
     and dest_gens_in_gens (gens: typ_gens) (dest_gens: typ_gens): bool =
-        (*need all the dest_gen in dest_gens to be in gens  *)
+        (*need all the dest_gen in dest_gens to be in gens*)
         List.for_all (dest_gen_in_gens gens) dest_gens
     ;;
 
+    (*a version of the algorithm above with a slightly lighter constraint *)
     let rec dest_gen_used_in_gens (gens: typ_gens) (dest_gen: typ_gen): bool =
         match gens with
         | [] -> false
@@ -598,24 +608,6 @@ module TypGenRes = struct
         in
         List.fold_left dest_check_and_acc [] destinations
     ;;
-
-    (*
-    let dfs_list (gens: TypGen.typ_gens) (gen_results: results): Typ.t list =
-        let filtered_gen = filter_unneeded_holes gens in
-        (*WARNING: This is potentially highly inefficient!  *)
-        let rec all_combinations_gens (gens: TypGen.typ_gens): Typ.t list =
-            match gens with
-            | [] -> []
-            | hd::tl -> List.rev_append (all_combinations_gen hd) (all_combinations_gens tl)
-        and all_combinations_gen (gen: TypGen.typ_gen): Typ.t list =
-            match gen with
-            | Base btyp -> [base_typ_to_typ btyp]
-            | Compound (ctr, gens1, gens2) -> (
-                let combs_left
-            )
-        ;;
-    ;;
-    *)
 
     (*may need to add results for more than just those that have a result-> could be anything with a hole
     however, it could also be that the preservation of all combinations makes it fine
