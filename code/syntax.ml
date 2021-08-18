@@ -463,7 +463,7 @@ module TypGen = struct
         Stdlib.compare (gen_to_float gen1) (gen_to_float gen2)
     ;;
 
-    (*fast sorts all layers of a typ_gens *)
+    (*fast sorts all layers of a typ_gens; call this and not explore *)
     let rec gens_sort_layer (gens: typ_gens): typ_gens =
         let gens = List.fast_sort comp_gen_elt gens in
         gens_sort_explore gens
@@ -484,12 +484,15 @@ end
 
 (*A module representing all types associated with some error leading to immediate unsolved with error statuses *)
 module Blacklist = struct
+    (* can either be blacklisted due to being equated to an inconsistent/impossible shape or failing an occurs check*)
     type err =
         | Invalid
         | Occurs
     
+    (* a blacklist is a series of types with associated error statuses *)
     type t = (Typ.t * err) list
 
+    (*adds a type with a given error status to the blacklist if it doesn't already exist *)
     let rec add_elt (blist: t) (typ_reason: Typ.t * err): t =
         match blist with
         | [] -> [typ_reason]
@@ -502,6 +505,7 @@ module Blacklist = struct
         )
     ;;
 
+    (*merges all blists in the list of blists provided *)
     let merge_blists (bset: t list): t =
         match bset with
         | [] -> []
@@ -514,6 +518,7 @@ module Blacklist = struct
         )
     ;;
 
+    (*a method that checks if the gens contains any elt that is in the blacklist provided *)
     let has_blacklisted_elt (gens: TypGen.typ_gens) (blist: t): bool =
         let get_key (acc: Typ.t list) (elt: Typ.t * err): Typ.t list =
             let (key, _) = elt in
@@ -528,6 +533,7 @@ module Blacklist = struct
     ;;
 end
 
+(* a representation of final solution statuses that arise from dfsed type generators; more condensed than unify_results *)
 module Status = struct
     (*can be solved of a type or unsolved with a generator containing possible types *)
     type t =
@@ -537,14 +543,21 @@ module Status = struct
     type solution = Typ.t * t
 
     (*this function should only be called during completion *)
+    (*converts a typgens to a solution status given a blacklist *)
     let condense (gens: TypGen.typ_gens) (blist: Blacklist.t): t =
+        (*sort the gens *)
         let gens = TypGen.gens_sort_layer gens in
+        (*if it has a blacklisted element *)
         if (Blacklist.has_blacklisted_elt gens blist) then (
+            (*filter it with some pruning criteria and return as unsolved *)
             let filtered_gens = TypGen.filter_unneeded_holes TypGen.is_base_lit_or_comp gens in
             UnSolved filtered_gens
         ) else (
+            (*filer it with some pruning criteria *)
             let filtered_gens = TypGen.filter_unneeded_holes TypGen.is_base_lit_or_comp gens in
+            (*attempt to convert to a solved solution status *)
             let solved_op = TypGen.filtered_solved_val filtered_gens in
+            (*if you succeeded, continue as is; else, return the original filter set as unsolved *)
             match solved_op with
             | Some typ -> Solved typ
             | None -> UnSolved filtered_gens
@@ -552,12 +565,13 @@ module Status = struct
     ;;
 end
 
+(*a set of results for types from unification that involved type gens *)
 module TypGenRes = struct
-    (*bool represents occurs check status; if false, condensation will make it unsolved *)
     type t = Typ.t * TypGen.typ_gens
 
     type results = t list
 
+    (*retrieves the gens accumulated for the provided type in gen_results *)
     let retrieve_gens_for_typ (typ: Typ.t) (gen_results: results): TypGen.typ_gens option =
         let matches (elt: t): bool = 
             let (key, _) = elt in
@@ -569,6 +583,7 @@ module TypGenRes = struct
         | None -> None
     ;;
 
+    (*converts a unify result to a typ with a typ_gens *)
     let unif_res_to_gen_res (key: Typ.t) (u_res: Typ.unify_result): t =
         let typ_ls = 
             match u_res with
@@ -581,6 +596,7 @@ module TypGenRes = struct
         (key, gen_of_key)
     ;;
 
+    (*converts a set of unify_results and rec_unify_results to results for TypGenRes *)
     let unif_results_to_gen_results (u_results: Typ.unify_results) (r_results: Typ.rec_unify_results): results =
         let u_convert_acc (acc: results) (elt: TypeInferenceVar.t * Typ.unify_result): results =
             let (key_var, u_res) = elt in
@@ -594,6 +610,7 @@ module TypGenRes = struct
         List.fold_left r_convert_acc acc r_results
     ;;
 
+    (*replaces the gens associated with typ with replacement in gen_results *)
     let rec replace_gens_of_typ (typ: Typ.t) (replacement: TypGen.typ_gens) (gen_results: results): results =
         match gen_results with
         | [] -> []
@@ -612,8 +629,8 @@ module TypGenRes = struct
     note:
         the explorable list is simply that: an explorable list detailing all the places that can spawn
         further information within this scope; this does not bar the possibility of explorable locations
-        being nested within the types implied by the supplied gens
-        in order to generate a proper dfs, be sure to also dfs the most informative types currently seen*)
+        being nested within the types implied by the supplied gens. hence why a typ_gens is used to
+        detail further dfsing for children of a recursive type and not a list*)
     let explorable_list (gens: TypGen.typ_gens) (gen_results: results): Typ.t list =
         let get_key (acc: Typ.t list) (elt: t): Typ.t list =
             let (ty, _) = elt in
@@ -631,19 +648,21 @@ module TypGenRes = struct
         List.fold_left dest_check_and_acc [] destinations
     ;;
 
-    (*may need to add results for more than just those that have a result-> could be anything with a hole
-    however, it could also be that the preservation of all combinations makes it fine
-    N->?1 ana against ?3 and ?3 is against B; ?3 is unsolved but ?1 should be too *)
+    (*bidirectionally links all explorable types in gens to typ in gen_results; effectively further links the tree *)
     let link_typ_to_gen (typ: Typ.t) (gens: TypGen.typ_gens) (gen_results: results): results =
         (*typ should be connected to gen in gens if typ has a result in gens
         all elements of gen that are explorable should be linked to typ *)
+        (*begin by updating gen_results by linking the type to the gens *)
         let gen_results = 
+            (*see if the typ already has results *)
             match (retrieve_gens_for_typ typ gen_results) with
             | Some gens' -> (
+                (*if so, construct a new gens by merging the old gens result with the new gens and replace the old gens *)
                 let updated_gens = TypGen.extend_with_gens gens gens' in
                 replace_gens_of_typ typ updated_gens gen_results
             )
             | None -> (
+                (*if not, add a new result (assuming the type isn't fully literal) *)
                 if (Typ.is_fully_literal typ) then (
                     gen_results
                 ) else (
@@ -652,14 +671,18 @@ module TypGenRes = struct
             )
         in
         let to_be_linked_to_typ = explorable_list gens gen_results in
+        (*the procedure by which to update elements of the gens for linkage to typ *)
         let update (addition: Typ.t) (acc: results) (key: Typ.t): results =
+            (*see if the given key has a result already *)
             match (retrieve_gens_for_typ key acc) with
             | Some gens' -> (
+                (*if so, merge with the addition and replace the old gens *)
                 let updated_gens = TypGen.extend_with_typ gens' addition in
                 replace_gens_of_typ key updated_gens acc
             )
             | None -> (
-                if (Typ.is_fully_literal typ) then (
+                (*if not, add the result if the key is not fully literal *)
+                if (Typ.is_fully_literal key) then (
                     acc
                 ) else (
                     (key, [(TypGen.typ_to_typ_gen addition)])::acc
