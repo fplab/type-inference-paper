@@ -40,6 +40,18 @@ let get_match_sum_typ (t: Typ.t): (Typ.t * Constraints.t) option =
   | _ -> None
 ;;
 
+(*greatest lower bound; requires both types be consistent *)
+let rec glb (t1: Typ.t) (t2: Typ.t): Typ.t =
+  match (t1, t2) with
+  | (THole _, THole _) -> t1
+  | (_, THole var)
+  | (THole var, _) -> THole var
+  | (TArrow(typ1, typ2), TArrow(typ1', typ2')) -> TArrow ((glb typ1 typ1'), (glb typ2 typ2'))
+  | (TProd(typ1, typ2), TProd(typ1', typ2')) -> TProd ((glb typ1 typ1'), (glb typ2 typ2'))
+  | (TSum(typ1, typ2), TSum(typ1', typ2')) -> TSum ((glb typ1 typ1'), (glb typ2 typ2'))
+  | _ -> t1
+;;
+
 (* Appends the item to the list only if the item is unequal with all items in the list *)
 let cat_if_unequal_for_all (target_list: Typ.t list) (item: Typ.t)
     : Typ.t list =
@@ -166,37 +178,52 @@ let rec syn (ctx: Ctx.t) (e: Exp.t): (Typ.t * Constraints.t) option =
   )
   | ELetPair (x, y, e1, e2) -> (
     match syn ctx e1 with
-    | Some(TProd(typ1, typ2), cons1) -> (
-      match syn (Ctx.extend (Ctx.extend ctx (x, typ1)) (y, typ2)) e2 with
+    | Some(typ_out, cons1) -> (
+      match (get_matched_prod_typ typ_out) with
+      | Some(TProd(typ1, typ2), cons2) -> (
+        match syn (Ctx.extend (Ctx.extend ctx (x, typ1)) (y, typ2)) e2 with
+        | None -> None
+        | Some (typ, cons3) -> Some (typ, cons1 @ cons2 @ cons3)
+      )
       | None -> None
-      | Some (typ, cons2) -> Some (typ, cons1 @ cons2)
     )
-    | _ -> None
+    | None -> None
   )
   | EPrjL e -> (
     match syn ctx e with
-    | Some(TProd(typ1, _), cons) ->  Some (typ1, cons)
+    | Some(typ_out, cons1) -> (
+      match (get_matched_prod typ_out) with
+      | Some(TProd(typ1, _), cons2) -> Some (typ1, cons1 @ cons2)
+      | _ -> None
+    )
     | _ -> None
   )
   | EPrjR e -> (
     match syn ctx e with
-    | Some(TProd(_, typ2), cons) ->  Some (typ2, cons)
+    | Some(typ_out, cons1) -> (
+      match (get_matched_prod typ_out) with
+      | Some(TProd(_, typ2), cons2) -> Some (typ2, cons1 @ cons2)
+      | _ -> None
+    )
     | _ -> None
   )
   | ECase (e, x, e1, y, e2) -> (
     match syn ctx e with
-    | Some(TSum(typ1, typ2), cons1) ->  (
-      match syn (Ctx.extend ctx (x, typ1)) e1 with
-      | None -> None
-      | Some (typ_x, cons2) -> (
-        match syn (Ctx.extend ctx (y, typ2)) e2 with
+    | Some(typ_out, cons1) -> (
+      match (get_matched_sum_typ typ_out) with
+      | Some(TSum(typ1, typ2), cons2) -> (
+        match syn (Ctx.extend ctx (x, typ1)) e1 with
         | None -> None
-        | Some (typ_y, cons3) -> (
-          (*will need to make helper to order literals after holes and use here *)
-          if Typ.consistent typ_x typ_y then Some(typ_x, cons1@cons2@cons3@[(typ_x, typ_y)])
-          else None
-          )
+        | Some (typ_x, cons3) -> (
+          match syn (Ctx.extend ctx (y, typ2)) e2 with
+          | None -> None
+          | Some (typ_y, cons4) -> (
+            if Typ.consistent typ_x typ_y then Some((glb typ_x typ_y), cons1@cons2@cons3@cons4@[(typ_x, typ_y)])
+            else None
+            )
+        )
       )
+      | _ -> None
     )
     | _ -> None
   )
@@ -259,51 +286,63 @@ and ana (ctx: Ctx.t) (e: Exp.t) (ty: Typ.t): Constraints.t option =
     )
   )
   | EPair (e1, e2) -> (
-    match ty with
-    | TProd(typ1, typ2) ->(
+    match (get_matched_prod_typ ty) with
+    | Some(TProd(typ1, typ2), cons1) ->(
       match ana ctx e1 typ1 with
       | None -> None
-      | Some cons1 -> (
+      | Some cons2 -> (
         match ana ctx e2 typ2 with
         | None -> None
-        | Some cons2 -> Some (cons1 @ cons2)
+        | Some cons3 -> Some (cons1 @ cons2 @ cons3)
       )
     )
     | _ -> None
   )
   | ELetPair (x, y, e1, e2) -> (
     match syn ctx e1 with
-    | Some(TProd(typ1, typ2), cons1) -> (
-      match ana (Ctx.extend (Ctx.extend ctx (x, typ1)) (y, typ2)) e2 ty with
-      | None -> None
-      | Some cons2 -> Some (cons1 @ cons2)
+    | Some(typ_out, cons1) -> (
+      match (get_matched_prod_typ typ_out) with
+      | Some(TProd(typ1, typ2), cons2) -> (
+        match ana (Ctx.extend (Ctx.extend ctx (x, typ1)) (y, typ2)) e2 ty with
+        | None -> None
+        | Some cons3 -> Some (cons1 @ cons2 @ cons3)
+      )
+      | _ -> None
     )
     | _ -> None
   )
   | EInjL e -> (
-    match ty with
-    | TSum (typ1, _) -> (
-      ana ctx e typ1
+    match (get_matched_sum_typ ty) with
+    | Some (TSum (typ1, _), cons1) -> (
+      match (ana ctx e typ1) with
+      | Some cons2 -> Some (cons1 @ cons2)
+      | _ -> None
     )
     | _ -> None
   )
   | EInjR e -> (
-    match ty with
-    | TSum (_, typ2) -> (
-      ana ctx e typ2
+    match (get_matched_sum_typ ty) with
+    | Some (TSum (_, typ2), cons1) -> (
+      match (ana ctx e typ2) with
+      | Some cons2 -> Some (cons1 @ cons2)
+      | _ -> None
     )
     | _ -> None
   )
   | ECase (e, x, e1, y, e2) -> (
     match syn ctx e with
-    | Some(TSum(typ1, typ2), cons1) ->  (
-      match ana (Ctx.extend ctx (x, typ1)) e1 ty with
-      | None -> None
-      | Some (cons2) -> (
-        match ana (Ctx.extend ctx (y, typ2)) e2 ty with
+    | Some(typ_out, cons1) -> (
+      match (get_matched_sum_typ typ_out) with
+      | Some(TSum(typ1, typ2), cons2) -> (
+        match ana (Ctx.extend ctx (x, typ1)) e1 ty with
         | None -> None
-        | Some (cons3) -> Some(cons1@cons2@cons3)
+        | Some (cons3) -> (
+          match ana (Ctx.extend ctx (y, typ2)) e2 ty with
+          | None -> None
+          | Some (cons4) -> Some(cons1@cons2@cons3@cons4)
+        )
       )
+      | _ -> None
     )
     | _ -> None
   )
@@ -487,6 +526,7 @@ let rec merge_rec_unify_results (new_results: Typ.rec_unify_results) (old_result
   | hd::tl -> merge_rec_unify_results tl (add_rec_unify_result hd old_results)
 ;;
 
+(*effectively generates a basic representation of a constraint tree from which dfs can kick off *)
 let rec unify (constraints: Constraints.t)
   :  bool*Typ.unify_results*Typ.rec_unify_results =
   match constraints with
@@ -516,7 +556,7 @@ and unify_one (t1: Typ.t) (t2: Typ.t)
       ) else (
         match t with
         | THole t_id -> (
-          (*to ensure dependencies are captures, add both as solved of each other *)
+          (*to ensure dependencies are captured, add both as solved of each other *)
           (true,
           [
             (v, Typ.Ambiguous (None, t::[])); 
