@@ -185,27 +185,26 @@ let testcases: (Ctx.t * Exp.t) list = [
   ([],
   parse "let g:Hole[0] be fun (x:Hole[1]) -> (fun (y:Hole[2]) -> x y (|3|)) in (g (|4|) (fun x -> 2))");
 
-  (*
-    (ELet 
-      ("y", None, EEmptyHole(0), 
+  ([],
+  (ELet 
+      ("y", None, (EEmptyHole 0), 
         (ELet ("x", None, (EPair ((EPair ((EInjL (EVar "y")), (EBoolLiteral true))), (EPair ((EBoolLiteral true), (EInjR (EVar "y")))))), 
           (ELet ("z", None, (EPair ((EBoolLiteral true), (ENumLiteral 2))), 
             (EIf ((EBoolLiteral true), (EVar "y"), (EVar "z")))
           ))
         ))
       )
-    )
-   *)
+  ));
 
   ([],
     (ELet 
-      ("y", None, EEmptyHole(0), 
-        (ELet ("z", None, (EPair ((EBoolLiteral true), (ENumLiteral 2))), 
+      ("y", (Some (THole 0)), (EEmptyHole 1), 
+        (ELet ("z", (Some (THole 2)), (EPair ((EBoolLiteral true), (ENumLiteral 2))), 
           (ECase ((EVar "y"), "a", (EVar "y"), "b", (EVar "z")))
         ))
       )
     )
-  )
+  );
 
   
 ]

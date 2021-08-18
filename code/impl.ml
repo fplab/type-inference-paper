@@ -179,20 +179,20 @@ let rec syn (ctx: Ctx.t) (e: Exp.t): (Typ.t * Constraints.t) option =
   | ELetPair (x, y, e1, e2) -> (
     match syn ctx e1 with
     | Some(typ_out, cons1) -> (
-      match (get_matched_prod_typ typ_out) with
+      match (get_match_prod_typ typ_out) with
       | Some(TProd(typ1, typ2), cons2) -> (
         match syn (Ctx.extend (Ctx.extend ctx (x, typ1)) (y, typ2)) e2 with
         | None -> None
         | Some (typ, cons3) -> Some (typ, cons1 @ cons2 @ cons3)
       )
-      | None -> None
+      | _ -> None
     )
-    | None -> None
+    | _ -> None
   )
   | EPrjL e -> (
     match syn ctx e with
     | Some(typ_out, cons1) -> (
-      match (get_matched_prod typ_out) with
+      match (get_match_prod_typ typ_out) with
       | Some(TProd(typ1, _), cons2) -> Some (typ1, cons1 @ cons2)
       | _ -> None
     )
@@ -201,7 +201,7 @@ let rec syn (ctx: Ctx.t) (e: Exp.t): (Typ.t * Constraints.t) option =
   | EPrjR e -> (
     match syn ctx e with
     | Some(typ_out, cons1) -> (
-      match (get_matched_prod typ_out) with
+      match (get_match_prod_typ typ_out) with
       | Some(TProd(_, typ2), cons2) -> Some (typ2, cons1 @ cons2)
       | _ -> None
     )
@@ -210,7 +210,7 @@ let rec syn (ctx: Ctx.t) (e: Exp.t): (Typ.t * Constraints.t) option =
   | ECase (e, x, e1, y, e2) -> (
     match syn ctx e with
     | Some(typ_out, cons1) -> (
-      match (get_matched_sum_typ typ_out) with
+      match (get_match_sum_typ typ_out) with
       | Some(TSum(typ1, typ2), cons2) -> (
         match syn (Ctx.extend ctx (x, typ1)) e1 with
         | None -> None
@@ -286,7 +286,7 @@ and ana (ctx: Ctx.t) (e: Exp.t) (ty: Typ.t): Constraints.t option =
     )
   )
   | EPair (e1, e2) -> (
-    match (get_matched_prod_typ ty) with
+    match (get_match_prod_typ ty) with
     | Some(TProd(typ1, typ2), cons1) ->(
       match ana ctx e1 typ1 with
       | None -> None
@@ -301,7 +301,7 @@ and ana (ctx: Ctx.t) (e: Exp.t) (ty: Typ.t): Constraints.t option =
   | ELetPair (x, y, e1, e2) -> (
     match syn ctx e1 with
     | Some(typ_out, cons1) -> (
-      match (get_matched_prod_typ typ_out) with
+      match (get_match_prod_typ typ_out) with
       | Some(TProd(typ1, typ2), cons2) -> (
         match ana (Ctx.extend (Ctx.extend ctx (x, typ1)) (y, typ2)) e2 ty with
         | None -> None
@@ -312,27 +312,27 @@ and ana (ctx: Ctx.t) (e: Exp.t) (ty: Typ.t): Constraints.t option =
     | _ -> None
   )
   | EInjL e -> (
-    match (get_matched_sum_typ ty) with
+    match (get_match_sum_typ ty) with
     | Some (TSum (typ1, _), cons1) -> (
       match (ana ctx e typ1) with
       | Some cons2 -> Some (cons1 @ cons2)
-      | _ -> None
+      | None -> None
     )
     | _ -> None
   )
   | EInjR e -> (
-    match (get_matched_sum_typ ty) with
+    match (get_match_sum_typ ty) with
     | Some (TSum (_, typ2), cons1) -> (
       match (ana ctx e typ2) with
       | Some cons2 -> Some (cons1 @ cons2)
-      | _ -> None
+      | None -> None
     )
     | _ -> None
   )
   | ECase (e, x, e1, y, e2) -> (
     match syn ctx e with
     | Some(typ_out, cons1) -> (
-      match (get_matched_sum_typ typ_out) with
+      match (get_match_sum_typ typ_out) with
       | Some(TSum(typ1, typ2), cons2) -> (
         match ana (Ctx.extend ctx (x, typ1)) e1 ty with
         | None -> None
