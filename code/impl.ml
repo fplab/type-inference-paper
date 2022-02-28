@@ -526,6 +526,20 @@ let rec merge_rec_unify_results (new_results: Typ.rec_unify_results) (old_result
   | hd::tl -> merge_rec_unify_results tl (add_rec_unify_result hd old_results)
 ;;
 
+(*
+  TODO: Phase out unify results and rec unify results to instead use TypGenRes.t
+  (currently, unify results and their kin are only used in unify and immediately
+  converted to typgenres before actually being used
+  unify results have statused denoting current solution statuses. TypGenRes.t avoids
+  claiming anything is solved or unsolved until actually finishing dfs and resolve.
+  Currently, TypGenRes converts from unify results to its t by literally scraping
+  all types out, totally ignoring concluded solution status, and compiling types
+  in a typgen
+  Potential approach: change all usages of unify results to genres
+  Replace all 
+  )
+*)
+
 (*effectively generates a basic representation of a constraint tree from which dfs can kick off *)
 let rec unify (constraints: Constraints.t)
   :  bool*Typ.unify_results*Typ.rec_unify_results =
