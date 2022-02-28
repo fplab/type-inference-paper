@@ -691,6 +691,23 @@ module TypGenRes = struct
         in
         List.fold_left (update typ) gen_results to_be_linked_to_typ
     ;;
+
+    (* Adds a gen result to a list of existing gen results if it doesn't already exist; if it does, merge 
+    with existing typ_gens associated with the key *)
+    let rec gen_results_set_add_many (gen_results_added: results) (gen_results: results): results =
+      match gen_results_added with
+      | [] -> gen_results
+      | hd::tl -> gen_results_set_add_many tl (gen_results_set_add_one hd gen_results)
+    and gen_results_set_add_one ((added_key, new_key_val): t) (gen_results: results): results =
+      match gen_results with
+      | [] -> [(added_key, new_key_val)]
+      | (key_type, val_typ_gens)::tl -> (
+        if (added_key = key_type) then 
+          (key_type, TypGen.extend_with_gens new_key_val val_typ_gens)::tl 
+        else 
+          (key_type, val_typ_gens)::(gen_results_set_add_one (added_key, new_key_val) tl)
+      )
+        ;;
 end
 
 module Exp = struct

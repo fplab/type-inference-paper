@@ -490,6 +490,7 @@ let rec add_unify_result (new_result: TypeInferenceVar.t*Typ.unify_result) (old_
   | (hd_var, hd_res)::tl -> (
     let (new_var, new_res) = new_result in
     if hd_var = new_var then (
+      (*in theory: we should we able to replace combine results with extend_with_gens *)
       (hd_var, (combine_results new_res hd_res))::tl
     )
     else (hd_var, hd_res)::(add_unify_result new_result tl)
@@ -536,11 +537,11 @@ let rec merge_rec_unify_results (new_results: Typ.rec_unify_results) (old_result
   all types out, totally ignoring concluded solution status, and compiling types
   in a typgen
   Potential approach: change all usages of unify results to genres
-  Replace all 
+  Replace all moments where the current result is 
   )
 *)
 
-(*effectively generates a basic representation of a constraint tree from which dfs can kick off *)
+(*
 let rec unify (constraints: Constraints.t)
   :  bool*Typ.unify_results*Typ.rec_unify_results =
   match constraints with
@@ -593,4 +594,40 @@ and unify_one (t1: Typ.t) (t2: Typ.t)
       )
     | (_, _) -> 
       (false, [], [])
+  ;;
+*)
+
+  (*effectively generates a basic representation of a constraint tree from which dfs can kick off *)
+let rec unify (constraints: Constraints.t):  TypGenRes.results =
+  match constraints with
+  | [] -> []
+  | (x, y) :: xs ->
+    (* generate substitutions of the rest of the list *)
+    let gen_res_tl = unify xs in
+    (* resolve the LHS and RHS of the constraints from the previous substitutions *)
+    let gen_res_hd = unify_one x y in 
+    TypGenRes.gen_results_set_add_many gen_res_hd gen_res_tl
+and unify_one (t1: Typ.t) (t2: Typ.t): TypGenRes.results  =
+    match ((t1, t2)) with
+    | (TArrow (ty1, ty2), TArrow (ty3, ty4)) 
+    | (TProd (ty1, ty2), TProd (ty3,ty4)) 
+    | (TSum (ty1, ty2), TSum (ty3,ty4))-> (
+      unify [(ty1,ty3);(ty2,ty4)]
+    )
+    | (((THole _) as hole), t) | (t, ((THole _) as hole)) ->
+      (* If a hole is equal to a type with no holes, it suffices to link the nodes in one direction 
+        (results are useless for fully defined types with no holes)
+        Otherwise, link in both directions to ensure symmetricity of equality is reflected *)
+      if (contains_hole t) then (
+        [(hole, [(TypGen.typ_to_typ_gen t)])]
+      ) else (
+        [
+          (hole, [(TypGen.typ_to_typ_gen t)]);
+          (t, [(TypGen.typ_to_typ_gen hole)]);
+        ]
+      )
+      
+    | (TNum, TNum) 
+    | (TBool, TBool) (* No reason to return axiomatically known results relating literals *)
+    | (_, _) -> []  (* No reason to return inconsistencies between literals or compounds of literals (static checking suffices) *)
   ;;
