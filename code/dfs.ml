@@ -5,7 +5,7 @@ open Syntax
     so that if an update to some child occurs, its uppermost dependency is flagged for reevaluation
     by reinsertion to the restrack if not already in the list of types to be evaluated
     
-    a type need only be reevaluated once if done after all types initially in unseen results are evaluated
+    a type need only be reevaluated once if done after all types initially in unseen results are evaluated.
     if a type is already inside unseen results, it is pending computation or currently being computed and thus
     need not be recomputed*)
 module ResTrack = struct
@@ -46,7 +46,7 @@ module ResTrack = struct
     ;;
 
     (*generates a list of the types involved in unify results. recursive results first *)
-    let results_to_t (u_results: Typ.unify_results) (r_results: Typ.rec_unify_results): t =
+    (* let results_to_t (u_results: Typ.unify_results) (r_results: Typ.rec_unify_results): t =
         let u_results_to_t (u_results: Typ.unify_results): t =
             let extend_by_u_res (acc: t) (u_res: TypeInferenceVar.t * Typ.unify_result): t =
                 let (u_var, _) = u_res in
@@ -64,10 +64,16 @@ module ResTrack = struct
         let ls_u = u_results_to_t u_results in
         let ls_r = r_results_to_t r_results in
         List.rev_append ls_r ls_u
+    ;; *)
+    let results_to_t (gen_results: TypGenRes.results): t =
+        let extend_by_gen_res (acc_t: t) ((key, _): TypGenRes.t): t =
+            (key, true)::acc_t
+        in
+        List.fold_left extend_by_gen_res [] gen_results
     ;;
 
     (*generates a list of dependencies given rec unify results *)
-    let r_results_to_dep_list (r_results: Typ.rec_unify_results): dep_list =
+    (* let r_results_to_dep_list (r_results: Typ.rec_unify_results): dep_list =
         let r_results_to_t (r_results: Typ.rec_unify_results): Typ.t list =
             let extend_by_r_res (acc: Typ.t list) (r_res: Typ.t * Typ.unify_result): Typ.t list =
                 let (r_typ, _) = r_res in
@@ -76,6 +82,34 @@ module ResTrack = struct
             List.fold_left extend_by_r_res [] r_results
         in
         let ls_r = r_results_to_t r_results in
+        let rec acc_deps (acc: dep_list) (typ: Typ.t): dep_list =
+            match typ with
+            | TArrow (ty1, ty2)
+            | TProd (ty1, ty2)
+            | TSum (ty1, ty2) -> (
+                let acc = add_typ_with_deps typ [] acc in
+                let acc = add_typ_with_deps ty1 [typ] acc in
+                let acc = add_typ_with_deps ty2 [typ] acc in
+                let acc = acc_deps acc ty1 in
+                acc_deps acc ty2
+            )
+            | _ -> acc
+        in
+        List.fold_left acc_deps [] ls_r
+    ;; *)
+
+    let r_results_to_dep_list (gen_results: TypGenRes.results): dep_list =
+        let r_results_to_t (gen_results: TypGenRes.results): Typ.t list =
+            let extend_by_r_res (acc: Typ.t list) ((key, _): TypGenRes.t): Typ.t list =
+                match key with
+                | TArrow _
+                | TProd _ 
+                | TSum _ -> key::acc
+                | _ -> acc
+            in
+            List.fold_left extend_by_r_res [] gen_results
+        in
+        let ls_r = r_results_to_t gen_results in
         let rec acc_deps (acc: dep_list) (typ: Typ.t): dep_list =
             match typ with
             | TArrow (ty1, ty2)
@@ -110,8 +144,9 @@ module ResTrack = struct
         uses path compression- returned dep_list has been compressed
         the type list returned is the type list that must be reseen *)
     let rec find_uppermost_dep (key: Typ.t) (deps: dep_list): dep_list * (Typ.t list) =
+        (* see if the inputted type has any dependencies *)
         let (removed, deps) = remove_and_inform (fun (x,_, _) -> (x = key)) deps in
-        (*if nothing was removed, return self *)
+        (* if nothing was removed, return self *)
         match removed with
         | None -> (deps, [])
         | Some (_, rvalues, already_reseen) -> (
@@ -149,9 +184,12 @@ module ResTrack = struct
         | hd::tl -> (
             let (hd_key, hd_vals, hd_reseen) = hd in
             if (hd_key = rep) then (
+                (* If the hd has already been reseen, we don't need to extend; return as is*)
                 if (hd_reseen) then (
                     deps, unseen_results
                 ) else (
+                    (* If it hasn't been reseen, add it to unseen results with an reseen status of false
+                      to indicate it must be dfsed again *)
                     ((hd_key, hd_vals, true)::tl), (unseen_results @ [(rep, false)])
                 )
             ) else (
@@ -364,8 +402,7 @@ let rec string_of_restrack (unseen: ResTrack.t) =
     logic: if in an r result, it technically is truly used as a hole with some potential result
             and needs to be able to be referenced in later values and be made 'explorable'.
             see "TypGenRes.explorable_list" in syntax.ml*)
-let add_all_refs_as_results (u_results: Typ.unify_results) (r_results: Typ.rec_unify_results)
-    : Typ.unify_results * Typ.rec_unify_results =
+let add_all_refs_as_results (gen_results: TypGenRes.results): TypGenRes.results =
     (*accumulates all referenced holes in the recursive types *)
     let rec acc_rec_holes (acc: TypeInferenceVar.t list) (typ: Typ.t): TypeInferenceVar.t list =
         match typ with
@@ -379,18 +416,23 @@ let add_all_refs_as_results (u_results: Typ.unify_results) (r_results: Typ.rec_u
             acc_rec_holes acc ty2
         )
     in
-    (*converts the list of rec unify results to recursive types*)
-    let r_res_to_typ (acc: Typ.t list) (res: Typ.t * Typ.unify_result): Typ.t list =
+    (*converts the list of gen results to recursive types*)
+    let r_res_to_typ (acc: Typ.t list) (res: TypGenRes.t): Typ.t list =
         let (r_typ, _) = res in
-        r_typ::acc
+        match r_typ with
+        | TArrow _
+        | TProd _
+        | TSum _ -> r_typ::acc
+        | _ -> acc
     in
-    let r_typs = List.fold_left r_res_to_typ [] r_results in
-    let var_ls = List.fold_left acc_rec_holes [] r_typs in
-    (*extends unify results with the accumulated types to be solved as self for referencing *)
-    let extend_u_results (acc: Typ.unify_results) (var: TypeInferenceVar.t): Typ.unify_results =
-        Impl.add_unify_result (var, (Typ.Ambiguous (None, [(Typ.THole var)]))) acc
+    let keysOfRecTyps = List.fold_left r_res_to_typ [] gen_results in
+    let var_ls = List.fold_left acc_rec_holes [] keysOfRecTyps in
+    (*extends gen results with the accumulated types to be solved as self for referencing *)
+    let extend_gen_results (acc_updated_results: TypGenRes.results) (var: TypeInferenceVar.t): TypGenRes.results =
+        let assoc_typ_gens = TypGen.extend_with_typ [] (THole var) in
+        TypGenRes.gen_results_set_add_one ((THole var), assoc_typ_gens) acc_updated_results
     in
-    (List.fold_left extend_u_results u_results var_ls), r_results
+    List.fold_left extend_gen_results gen_results var_ls
 ;;
 
 (* DFS DOCUMENTATION *)
@@ -688,19 +730,29 @@ let rec fix_tracked_results (results_to_fix: ResTrack.t) (gen_results: TypGenRes
     )
 ;;
 
+(* NOTE Anand: main function *)
 (*An all encompassing function that, given results from unification, performs all computation necessary to produce a final solution status set *)
-let finalize_results (u_results: Typ.unify_results) (r_results: Typ.rec_unify_results)
-    : Status.solution list = 
+let finalize_results (gen_results: TypGenRes.results): Status.solution list = 
+    (* NOTE Anand: gen_results is a map (and a graph lol). There are holes and recursive types contained by values in the map. They also need to be keys, because they need to be solved for as well! *)
     (*add all referenced holes across recursive types as 'results' so that they are discoverable in dfs *)
-    let (u_results, r_results) = 
-        add_all_refs_as_results u_results r_results
-    in
-    (*produce a set of typ gen results *)
-    let gen_results = TypGenRes.unif_results_to_gen_results u_results r_results in
+    (*
+      (|1|) 2
+      
+      ?1
+      ?2 -> ?3
+
+      post add all refs
+
+      ?1
+      ?2 -> ?3
+      ?2 
+      ?3
+    *)
+    let gen_results = add_all_refs_as_results gen_results in
     (*produce a set of types that must be dfsed for completion *)
-    let results_to_fix = ResTrack.results_to_t u_results r_results in
+    let results_to_fix = ResTrack.results_to_t gen_results in
     (*produce a dependency list to inform potential recomputation *)
-    let deps = ResTrack.r_results_to_dep_list r_results in
+    let deps = ResTrack.r_results_to_dep_list gen_results in
     (*fix all needed results and update the gen_results as appropriate *)
     let (_, gen_results, blacklist, _) = 
         fix_tracked_results results_to_fix gen_results [] deps

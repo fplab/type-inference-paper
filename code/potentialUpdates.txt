@@ -1,0 +1,3 @@
+Looking at Test 5: in syn/ana (probably a-subsump) make sure all constraints accumulated only relate holes
+
+Maybe move add_all_refs to unify (as a final step)

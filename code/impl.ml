@@ -597,7 +597,7 @@ and unify_one (t1: Typ.t) (t2: Typ.t)
   ;;
 *)
 
-  (*effectively generates a basic representation of a constraint tree from which dfs can kick off *)
+  (*effectively generates a basic representation of a constraint graph from which dfs can kick off *)
 let rec unify (constraints: Constraints.t):  TypGenRes.results =
   match constraints with
   | [] -> []
@@ -619,12 +619,12 @@ and unify_one (t1: Typ.t) (t2: Typ.t): TypGenRes.results  =
         (results are useless for fully defined types with no holes)
         Otherwise, link in both directions to ensure symmetricity of equality is reflected *)
       if (contains_hole t) then (
-        [(hole, [(TypGen.typ_to_typ_gen t)])]
-      ) else (
         [
           (hole, [(TypGen.typ_to_typ_gen t)]);
           (t, [(TypGen.typ_to_typ_gen hole)]);
         ]
+      ) else (
+        [(hole, [(TypGen.typ_to_typ_gen t)])]
       )
       
     | (TNum, TNum) 

@@ -1,0 +1,1901 @@
+dune build test.exe
+dune exec ./test.exe
+
+======[0]======
+EXP:   let x = (|[0]|) in x
+CONTEXT:
+
++ syn/ana result typ:
+ T?[0]
+
++ constraints:
+
++ unify results: (<hole_id>) (<type>)
+
+depth first search simplified results
+
+=============
+
+======[1]======
+EXP:   let (x , y) = ((|[0]|) , 1) in x + 1
+CONTEXT:
+
++ syn/ana result typ:
+ TNum
+
++ constraints:
+T?[0] == TNum
+TNum == TNum
+
++ unify results: (<hole_id>) (<type>)
+T?[0] type_gen_res: TNum
+
+depth first search simplified results
+solved: (T?[0]) - TNum
+
+=============
+
+======[2]======
+EXP:   let z = (|[0]|) in λx:T?[2].if z then f x else g x
+CONTEXT:
+f : TNum->T?[2]
+g : TBool->T?[3]
+
++ syn/ana result typ:
+ T?[2]->T?[2]
+
++ constraints:
+T?[4] == TBool
+T?[2] == TNum
+T?[2] == TBool
+T?[2] == T?[3]
+
++ unify results: (<hole_id>) (<type>)
+T?[2] type_gen_res: TNum//TBool//T?[3]
+T?[3] type_gen_res: T?[2]
+T?[4] type_gen_res: TBool
+
+depth first search simplified results
+unsolved: (T?[2]) - TNum//TBool
+unsolved: (T?[3]) - TNum//TBool
+solved: (T?[4]) - TBool
+
+=============
+
+======[3]======
+EXP:   let x = (|[0]|) in x + 1
+CONTEXT:
+
++ syn/ana result typ:
+ TNum
+
++ constraints:
+T?[0] == TNum
+TNum == TNum
+
++ unify results: (<hole_id>) (<type>)
+T?[0] type_gen_res: TNum
+
+depth first search simplified results
+solved: (T?[0]) - TNum
+
+=============
+
+======[4]======
+EXP:   let x = true in x + 1
+CONTEXT:
+
+ERROR
+: syn/ana error=============
+
+======[5]======
+EXP:   case e1 of L[x] -> x + 1else R[y] -> if y then 1 else 0
+CONTEXT:
+e1 : T?[1]+T?[2]
+
++ syn/ana result typ:
+ TNum
+
++ constraints:
+T?[1] == TNum
+TNum == TNum
+T?[2] == TBool
+TNum == TNum
+TNum == TNum
+
++ unify results: (<hole_id>) (<type>)
+T?[2] type_gen_res: TBool
+T?[1] type_gen_res: TNum
+
+depth first search simplified results
+solved: (T?[1]) - TNum
+solved: (T?[2]) - TBool
+
+=============
+
+======[6]======
+EXP:   case e1 of L[x] -> x + 1else R[y] -> if y then 1 else 0
+CONTEXT:
+e1 : TBool+T?[2]
+
+ERROR
+: syn/ana error=============
+
+======[7]======
+EXP:   let y = λx:T?[0].x + 1 in y (|[7]|)
+CONTEXT:
+
++ syn/ana result typ:
+ TNum
+
++ constraints:
+T?[0] == TNum
+TNum == TNum
+T?[1] == T?[0]
+
++ unify results: (<hole_id>) (<type>)
+T?[1] type_gen_res: T?[0]
+T?[0] type_gen_res: TNum//T?[1]
+
+depth first search simplified results
+solved: (T?[0]) - TNum
+solved: (T?[1]) - TNum
+
+=============
+
+======[8]======
+EXP:   λx:T?[2].x x + 5
+CONTEXT:
+
++ syn/ana result typ:
+ T?[2]->T?[4]
+
++ constraints:
+T?[2] == T?[3]->T?[4]
+T?[2] == TNum
+TNum == TNum
+TNum == T?[3]
+
++ unify results: (<hole_id>) (<type>)
+T?[3] type_gen_res: TNum
+T?[2] type_gen_res: [{T?[3]}->{T?[4]}]//TNum
+T?[3]->T?[4] type_gen_res: T?[2]
+
+depth first search simplified results
+unsolved: (T?[2]) - TNum//[{TNum}->{T?[4]}]
+unsolved: (T?[3]) - TNum
+unsolved: (T?[3]->T?[4]) - TNum//[{TNum}->{T?[4]}]
+unsolved: (T?[4]) - T?[4]
+
+=============
+
+======[9]======
+EXP:   λx:T?[2].x x
+CONTEXT:
+
++ syn/ana result typ:
+ T?[2]->T?[4]
+
++ constraints:
+T?[2] == T?[3]->T?[4]
+T?[2] == T?[3]
+
++ unify results: (<hole_id>) (<type>)
+T?[2] type_gen_res: [{T?[3]}->{T?[4]}]//T?[3]
+T?[3] type_gen_res: T?[2]
+T?[3]->T?[4] type_gen_res: T?[2]
+
+depth first search simplified results
+unsolved: (T?[2]) - T?[2]
+unsolved: (T?[3]) - T?[2]
+unsolved: (T?[3]->T?[4]) - [{T?[2]}->{T?[4]}]
+solved: (T?[4]) - T?[4]
+
+=============
+
+======[10]======
+EXP:   x x
+CONTEXT:
+x : T?[1]
+
++ syn/ana result typ:
+ T?[3]
+
++ constraints:
+T?[1] == T?[2]->T?[3]
+T?[1] == T?[2]
+
++ unify results: (<hole_id>) (<type>)
+T?[1] type_gen_res: [{T?[2]}->{T?[3]}]//T?[2]
+T?[2] type_gen_res: T?[1]
+T?[2]->T?[3] type_gen_res: T?[1]
+
+depth first search simplified results
+unsolved: (T?[1]) - T?[1]
+unsolved: (T?[2]) - T?[1]
+unsolved: (T?[2]->T?[3]) - [{T?[1]}->{T?[3]}]
+solved: (T?[3]) - T?[3]
+
+=============
+
+======[11]======
+EXP:   x 1 1
+CONTEXT:
+x : T?[1]
+
++ syn/ana result typ:
+ T?[5]
+
++ constraints:
+T?[1] == T?[2]->T?[3]
+TNum == T?[2]
+T?[3] == T?[4]->T?[5]
+TNum == T?[4]
+
++ unify results: (<hole_id>) (<type>)
+T?[4] type_gen_res: TNum
+T?[3] type_gen_res: [{T?[4]}->{T?[5]}]
+T?[4]->T?[5] type_gen_res: T?[3]
+T?[2] type_gen_res: TNum
+T?[1] type_gen_res: [{T?[2]}->{T?[3]}]
+T?[2]->T?[3] type_gen_res: T?[1]
+
+depth first search simplified results
+solved: (T?[1]) - TNum->(TNum->T?[5])
+solved: (T?[2]) - TNum
+solved: (T?[2]->T?[3]) - TNum->(TNum->T?[5])
+solved: (T?[3]) - TNum->T?[5]
+solved: (T?[4]) - TNum
+solved: (T?[4]->T?[5]) - TNum->T?[5]
+solved: (T?[5]) - T?[5]
+
+=============
+
+======[12]======
+EXP:   x 1 1 y
+CONTEXT:
+x : T?[1]
+y : T?[2]
+
++ syn/ana result typ:
+ T?[8]
+
++ constraints:
+T?[1] == T?[3]->T?[4]
+TNum == T?[3]
+T?[4] == T?[5]->T?[6]
+TNum == T?[5]
+T?[6] == T?[7]->T?[8]
+T?[2] == T?[7]
+
++ unify results: (<hole_id>) (<type>)
+T?[2] type_gen_res: T?[7]
+T?[7] type_gen_res: T?[2]
+T?[6] type_gen_res: [{T?[7]}->{T?[8]}]
+T?[7]->T?[8] type_gen_res: T?[6]
+T?[5] type_gen_res: TNum
+T?[4] type_gen_res: [{T?[5]}->{T?[6]}]
+T?[5]->T?[6] type_gen_res: T?[4]
+T?[3] type_gen_res: TNum
+T?[1] type_gen_res: [{T?[3]}->{T?[4]}]
+T?[3]->T?[4] type_gen_res: T?[1]
+
+depth first search simplified results
+solved: (T?[1]) - TNum->(TNum->(T?[2]->T?[8]))
+solved: (T?[2]) - T?[2]
+solved: (T?[3]) - TNum
+solved: (T?[3]->T?[4]) - TNum->(TNum->(T?[2]->T?[8]))
+solved: (T?[4]) - TNum->(T?[2]->T?[8])
+solved: (T?[5]) - TNum
+solved: (T?[5]->T?[6]) - TNum->(T?[2]->T?[8])
+solved: (T?[6]) - T?[2]->T?[8]
+solved: (T?[7]) - T?[2]
+solved: (T?[7]->T?[8]) - T?[2]->T?[8]
+solved: (T?[8]) - T?[8]
+
+=============
+
+======[13]======
+EXP:   λx:T?[3].f g x
+CONTEXT:
+f : TNum->T?[1]
+g : (TNum->TNum)->T?[2]
+
++ syn/ana result typ:
+ T?[3]->T?[1]
+
++ constraints:
+T?[3] == TNum->TNum
+T?[2] == TNum
+
++ unify results: (<hole_id>) (<type>)
+T?[2] type_gen_res: TNum
+T?[3] type_gen_res: [{TNum}->{TNum}]
+
+depth first search simplified results
+solved: (T?[2]) - TNum
+solved: (T?[3]) - TNum->TNum
+
+=============
+
+======[14]======
+EXP:   λx:T?[3].f g x 1
+CONTEXT:
+f : TNum->T?[1]
+g : (TNum->TNum)->T?[2]
+
++ syn/ana result typ:
+ T?[3]->T?[1]
+
++ constraints:
+T?[3] == T?[4]->T?[5]
+TNum == T?[4]
+T?[5] == TNum->TNum
+T?[2] == TNum
+
++ unify results: (<hole_id>) (<type>)
+T?[2] type_gen_res: TNum
+T?[5] type_gen_res: [{TNum}->{TNum}]
+T?[4] type_gen_res: TNum
+T?[3] type_gen_res: [{T?[4]}->{T?[5]}]
+T?[4]->T?[5] type_gen_res: T?[3]
+
+depth first search simplified results
+solved: (T?[2]) - TNum
+solved: (T?[3]) - TNum->(TNum->TNum)
+solved: (T?[4]) - TNum
+solved: (T?[4]->T?[5]) - TNum->(TNum->TNum)
+solved: (T?[5]) - TNum->TNum
+
+=============
+
+======[15]======
+EXP:   5 + 5 + (|[0]|)
+CONTEXT:
+
++ syn/ana result typ:
+ TNum
+
++ constraints:
+TNum == TNum
+TNum == TNum
+TNum == TNum
+T?[0] == TNum
+
++ unify results: (<hole_id>) (<type>)
+T?[0] type_gen_res: TNum
+
+depth first search simplified results
+solved: (T?[0]) - TNum
+
+=============
+
+======[16]======
+EXP:   λx:T?[2].x + 5
+CONTEXT:
+
++ syn/ana result typ:
+ T?[2]->TNum
+
++ constraints:
+T?[2] == TNum
+TNum == TNum
+
++ unify results: (<hole_id>) (<type>)
+T?[2] type_gen_res: TNum
+
+depth first search simplified results
+solved: (T?[2]) - TNum
+
+=============
+
+======[17]======
+EXP:   λx:T?[2].x 5
+CONTEXT:
+
++ syn/ana result typ:
+ T?[2]->T?[4]
+
++ constraints:
+T?[2] == T?[3]->T?[4]
+TNum == T?[3]
+
++ unify results: (<hole_id>) (<type>)
+T?[3] type_gen_res: TNum
+T?[2] type_gen_res: [{T?[3]}->{T?[4]}]
+T?[3]->T?[4] type_gen_res: T?[2]
+
+depth first search simplified results
+solved: (T?[2]) - TNum->T?[4]
+solved: (T?[3]) - TNum
+solved: (T?[3]->T?[4]) - TNum->T?[4]
+solved: (T?[4]) - T?[4]
+
+=============
+
+======[18]======
+EXP:   λx:TNum->TNum.x 5
+CONTEXT:
+
++ syn/ana result typ:
+ (TNum->TNum)->TNum
+
++ constraints:
+TNum == TNum
+
++ unify results: (<hole_id>) (<type>)
+
+depth first search simplified results
+
+=============
+
+======[19]======
+EXP:   (|[0]|):TNum->TNum
+CONTEXT:
+
++ syn/ana result typ:
+ TNum->TNum
+
++ constraints:
+T?[0] == TNum->TNum
+
++ unify results: (<hole_id>) (<type>)
+T?[0] type_gen_res: [{TNum}->{TNum}]
+
+depth first search simplified results
+solved: (T?[0]) - TNum->TNum
+
+=============
+
+======[20]======
+EXP:   λx.1 + x:TNum->TNum
+CONTEXT:
+
++ syn/ana result typ:
+ TNum->TNum
+
++ constraints:
+TNum == TNum
+TNum == TNum
+TNum == TNum
+
++ unify results: (<hole_id>) (<type>)
+
+depth first search simplified results
+
+=============
+
+======[21]======
+EXP:   x 1
+CONTEXT:
+x : TNum->TNum
+
++ syn/ana result typ:
+ TNum
+
++ constraints:
+TNum == TNum
+
++ unify results: (<hole_id>) (<type>)
+
+depth first search simplified results
+
+=============
+
+======[22]======
+EXP:   let x = (|[0]|) in (|[1]|)
+CONTEXT:
+
++ syn/ana result typ:
+ T?[1]
+
++ constraints:
+
++ unify results: (<hole_id>) (<type>)
+
+depth first search simplified results
+
+=============
+
+======[23]======
+EXP:   let h = λm:T?[7].if z then f m else g m in h
+CONTEXT:
+f : TNum->TNum
+g : TBool->TNum
+z : TBool
+
++ syn/ana result typ:
+ T?[7]->TNum
+
++ constraints:
+TBool == TBool
+T?[7] == TNum
+T?[7] == TBool
+TNum == TNum
+
++ unify results: (<hole_id>) (<type>)
+T?[7] type_gen_res: TNum//TBool
+
+depth first search simplified results
+unsolved: (T?[7]) - TNum//TBool
+
+=============
+
+======[24]======
+EXP:   let (x , y) = ((|[0]|) , (|[1]|)) in let z = y + 2 in f x + f z
+CONTEXT:
+f : T?[2]->TNum
+
++ syn/ana result typ:
+ TNum
+
++ constraints:
+T?[4] == TNum
+TNum == TNum
+T?[3] == T?[2]
+TNum == TNum
+TNum == T?[2]
+TNum == TNum
+
++ unify results: (<hole_id>) (<type>)
+T?[2] type_gen_res: T?[3]//TNum
+T?[3] type_gen_res: T?[2]
+T?[4] type_gen_res: TNum
+
+depth first search simplified results
+solved: (T?[2]) - TNum
+solved: (T?[3]) - TNum
+solved: (T?[4]) - TNum
+
+=============
+
+======[25]======
+EXP:   let (x , y) = ((|[0]|) , (|[1]|)) in x y + y
+CONTEXT:
+f : T?[2]->TNum
+
++ syn/ana result typ:
+ TNum
+
++ constraints:
+T?[0] == T?[2]->T?[3]
+T?[1] == T?[2]
+T?[3] == TNum
+T?[1] == TNum
+
++ unify results: (<hole_id>) (<type>)
+T?[1] type_gen_res: T?[2]//TNum
+T?[3] type_gen_res: TNum
+T?[2] type_gen_res: T?[1]
+T?[0] type_gen_res: [{T?[2]}->{T?[3]}]
+T?[2]->T?[3] type_gen_res: T?[0]
+
+depth first search simplified results
+solved: (T?[0]) - TNum->TNum
+solved: (T?[1]) - TNum
+solved: (T?[2]) - TNum
+solved: (T?[2]->T?[3]) - TNum->TNum
+solved: (T?[3]) - TNum
+
+=============
+
+======[26]======
+EXP:   let (x , y) = ((|[0]|) , (|[1]|)) in y x true + x + 3
+CONTEXT:
+
++ syn/ana result typ:
+ TNum
+
++ constraints:
+T?[1] == T?[2]->T?[3]
+T?[0] == T?[2]
+T?[3] == T?[4]->T?[5]
+TBool == T?[4]
+T?[5] == TNum
+T?[0] == TNum
+TNum == TNum
+TNum == TNum
+
++ unify results: (<hole_id>) (<type>)
+T?[0] type_gen_res: T?[2]//TNum
+T?[5] type_gen_res: TNum
+T?[4] type_gen_res: TBool
+T?[3] type_gen_res: [{T?[4]}->{T?[5]}]
+T?[4]->T?[5] type_gen_res: T?[3]
+T?[2] type_gen_res: T?[0]
+T?[1] type_gen_res: [{T?[2]}->{T?[3]}]
+T?[2]->T?[3] type_gen_res: T?[1]
+
+depth first search simplified results
+solved: (T?[0]) - TNum
+solved: (T?[1]) - TNum->(TBool->TNum)
+solved: (T?[2]) - TNum
+solved: (T?[2]->T?[3]) - TNum->(TBool->TNum)
+solved: (T?[3]) - TBool->TNum
+solved: (T?[4]) - TBool
+solved: (T?[4]->T?[5]) - TBool->TNum
+solved: (T?[5]) - TNum
+
+=============
+
+======[27]======
+EXP:   let (x , y) = ((|[0]|) , (|[1]|)) in if x then y x else y 3
+CONTEXT:
+f : T?[2]->TNum
+
++ syn/ana result typ:
+ T?[3]
+
++ constraints:
+T?[0] == TBool
+T?[1] == T?[2]->T?[3]
+T?[0] == T?[2]
+T?[1] == T?[4]->T?[5]
+TNum == T?[4]
+T?[3] == T?[5]
+
++ unify results: (<hole_id>) (<type>)
+T?[3] type_gen_res: T?[5]
+T?[5] type_gen_res: T?[3]
+T?[4] type_gen_res: TNum
+T?[1] type_gen_res: [{T?[2]//T?[4]}->{T?[3]//T?[5]}]
+T?[4]->T?[5] type_gen_res: T?[1]
+T?[0] type_gen_res: TBool//T?[2]
+T?[2] type_gen_res: T?[0]
+T?[2]->T?[3] type_gen_res: T?[1]
+
+depth first search simplified results
+unsolved: (T?[0]) - TNum//TBool
+unsolved: (T?[1]) - [{TNum//TBool}->{T?[3]}]
+unsolved: (T?[2]) - TNum//TBool
+unsolved: (T?[2]->T?[3]) - [{TNum//TBool}->{T?[3]}]
+solved: (T?[3]) - T?[3]
+unsolved: (T?[4]) - TNum//TBool
+unsolved: (T?[4]->T?[5]) - [{TNum//TBool}->{T?[3]}]
+solved: (T?[5]) - T?[3]
+
+=============
+
+======[28]======
+EXP:   let (x , y) = ((|[0]|) , (|[1]|)) in if x then y 3 else y x
+CONTEXT:
+f : T?[2]->TNum
+
++ syn/ana result typ:
+ T?[3]
+
++ constraints:
+T?[0] == TBool
+T?[1] == T?[2]->T?[3]
+TNum == T?[2]
+T?[1] == T?[4]->T?[5]
+T?[0] == T?[4]
+T?[3] == T?[5]
+
++ unify results: (<hole_id>) (<type>)
+T?[3] type_gen_res: T?[5]
+T?[5] type_gen_res: T?[3]
+T?[0] type_gen_res: TBool//T?[4]
+T?[4] type_gen_res: T?[0]
+T?[1] type_gen_res: [{T?[2]//T?[4]}->{T?[3]//T?[5]}]
+T?[4]->T?[5] type_gen_res: T?[1]
+T?[2] type_gen_res: TNum
+T?[2]->T?[3] type_gen_res: T?[1]
+
+depth first search simplified results
+unsolved: (T?[0]) - TBool//TNum
+unsolved: (T?[1]) - [{TBool//TNum}->{T?[3]}]
+unsolved: (T?[2]) - TBool//TNum
+unsolved: (T?[2]->T?[3]) - [{TBool//TNum}->{T?[3]}]
+solved: (T?[3]) - T?[3]
+unsolved: (T?[4]) - TBool//TNum
+unsolved: (T?[4]->T?[5]) - [{TBool//TNum}->{T?[3]}]
+solved: (T?[5]) - T?[3]
+
+=============
+
+======[29]======
+EXP:   let f:T?[0] = λx:T?[1].x in f 2
+CONTEXT:
+
++ syn/ana result typ:
+ T?[5]
+
++ constraints:
+T?[0] == T?[2]->T?[3]
+T?[1] == T?[3]
+T?[1] == T?[2]
+T?[0] == T?[4]->T?[5]
+TNum == T?[4]
+
++ unify results: (<hole_id>) (<type>)
+T?[4] type_gen_res: TNum
+T?[0] type_gen_res: [{T?[2]//T?[4]}->{T?[3]//T?[5]}]
+T?[4]->T?[5] type_gen_res: T?[0]
+T?[1] type_gen_res: T?[3]//T?[2]
+T?[2] type_gen_res: T?[1]
+T?[3] type_gen_res: T?[1]
+T?[2]->T?[3] type_gen_res: T?[0]
+
+depth first search simplified results
+solved: (T?[0]) - TNum->TNum
+solved: (T?[1]) - TNum
+solved: (T?[2]) - TNum
+solved: (T?[2]->T?[3]) - TNum->TNum
+solved: (T?[3]) - TNum
+solved: (T?[4]) - TNum
+solved: (T?[4]->T?[5]) - TNum->TNum
+solved: (T?[5]) - TNum
+
+=============
+
+======[30]======
+EXP:   (|[0]|) (|[1]|) + 1 + 4
+CONTEXT:
+
++ syn/ana result typ:
+ TNum
+
++ constraints:
+T?[0] == T?[1]->T?[2]
+T?[3] == TNum
+TNum == TNum
+TNum == T?[1]
+T?[2] == TNum
+TNum == TNum
+
++ unify results: (<hole_id>) (<type>)
+T?[2] type_gen_res: TNum
+T?[1] type_gen_res: TNum
+T?[3] type_gen_res: TNum
+T?[0] type_gen_res: [{T?[1]}->{T?[2]}]
+T?[1]->T?[2] type_gen_res: T?[0]
+
+depth first search simplified results
+solved: (T?[0]) - TNum->TNum
+solved: (T?[1]) - TNum
+solved: (T?[1]->T?[2]) - TNum->TNum
+solved: (T?[2]) - TNum
+solved: (T?[3]) - TNum
+
+=============
+
+======[31]======
+EXP:   let f:T?[4] = λx:T?[5].(|[2]|) x + 1 in f
+CONTEXT:
+
++ syn/ana result typ:
+ T?[4]
+
++ constraints:
+T?[4] == T?[6]->T?[7]
+T?[8] == T?[9]->T?[10]
+T?[5] == T?[9]
+T?[10] == TNum
+TNum == TNum
+TNum == T?[7]
+T?[5] == T?[6]
+
++ unify results: (<hole_id>) (<type>)
+T?[5] type_gen_res: T?[9]//T?[6]
+T?[6] type_gen_res: T?[5]
+T?[7] type_gen_res: TNum
+T?[10] type_gen_res: TNum
+T?[9] type_gen_res: T?[5]
+T?[8] type_gen_res: [{T?[9]}->{T?[10]}]
+T?[9]->T?[10] type_gen_res: T?[8]
+T?[4] type_gen_res: [{T?[6]}->{T?[7]}]
+T?[6]->T?[7] type_gen_res: T?[4]
+
+depth first search simplified results
+solved: (T?[4]) - T?[5]->TNum
+solved: (T?[5]) - T?[5]
+solved: (T?[6]) - T?[5]
+solved: (T?[6]->T?[7]) - T?[5]->TNum
+solved: (T?[7]) - TNum
+solved: (T?[8]) - T?[5]->TNum
+solved: (T?[9]) - T?[5]
+solved: (T?[9]->T?[10]) - T?[5]->TNum
+solved: (T?[10]) - TNum
+
+=============
+
+======[32]======
+EXP:   let f:T?[0] = λx.x in (f true , f 1)
+CONTEXT:
+
++ syn/ana result typ:
+ T?[4]*T?[6]
+
++ constraints:
+T?[0] == T?[1]->T?[2]
+T?[1] == T?[2]
+T?[0] == T?[3]->T?[4]
+TBool == T?[3]
+T?[0] == T?[5]->T?[6]
+TNum == T?[5]
+
++ unify results: (<hole_id>) (<type>)
+T?[5] type_gen_res: TNum
+T?[0] type_gen_res: [{T?[1]//T?[3]//T?[5]}->{T?[2]//T?[4]//T?[6]}]
+T?[5]->T?[6] type_gen_res: T?[0]
+T?[3] type_gen_res: TBool
+T?[3]->T?[4] type_gen_res: T?[0]
+T?[1] type_gen_res: T?[2]
+T?[2] type_gen_res: T?[1]
+T?[1]->T?[2] type_gen_res: T?[0]
+
+depth first search simplified results
+unsolved: (T?[0]) - [{TNum//TBool}->{TNum//TBool}]
+unsolved: (T?[1]) - TNum//TBool
+unsolved: (T?[1]->T?[2]) - [{TNum//TBool}->{TNum//TBool}]
+unsolved: (T?[2]) - TNum//TBool
+unsolved: (T?[3]) - TNum//TBool
+unsolved: (T?[3]->T?[4]) - [{TNum//TBool}->{TNum//TBool}]
+unsolved: (T?[4]) - TNum//TBool
+unsolved: (T?[5]) - TNum//TBool
+unsolved: (T?[5]->T?[6]) - [{TNum//TBool}->{TNum//TBool}]
+unsolved: (T?[6]) - TNum//TBool
+
+=============
+
+======[33]======
+EXP:   let f:T?[0]->T?[1] = λx.x in (f true , f 1)
+CONTEXT:
+
++ syn/ana result typ:
+ T?[1]*T?[1]
+
++ constraints:
+T?[0] == T?[1]
+TBool == T?[0]
+TNum == T?[0]
+
++ unify results: (<hole_id>) (<type>)
+T?[0] type_gen_res: T?[1]//TBool//TNum
+T?[1] type_gen_res: T?[0]
+
+depth first search simplified results
+unsolved: (T?[0]) - TBool//TNum
+unsolved: (T?[1]) - TBool//TNum
+
+=============
+
+======[34]======
+EXP:   let x:T?[0]+T?[1] = (|[1]|) in case x of L[x] -> if x then 1 else 1else R[x] -> x + 1
+CONTEXT:
+
++ syn/ana result typ:
+ TNum
+
++ constraints:
+T?[2] == T?[0]+T?[1]
+T?[0] == TBool
+TNum == TNum
+T?[1] == TNum
+TNum == TNum
+TNum == TNum
+
++ unify results: (<hole_id>) (<type>)
+T?[1] type_gen_res: TNum
+T?[0] type_gen_res: TBool
+T?[2] type_gen_res: [{T?[0]}+{T?[1]}]
+T?[0]+T?[1] type_gen_res: T?[2]
+
+depth first search simplified results
+solved: (T?[0]) - TBool
+solved: (T?[0]+T?[1]) - TBool+TNum
+solved: (T?[1]) - TNum
+solved: (T?[2]) - TBool+TNum
+
+=============
+
+======[35]======
+EXP:   let x:T?[0] = (|[1]|) in case x of L[x] -> 1else R[x] -> 1
+CONTEXT:
+
++ syn/ana result typ:
+ TNum
+
++ constraints:
+T?[1] == T?[0]
+T?[0] == T?[2]+T?[3]
+TNum == TNum
+
++ unify results: (<hole_id>) (<type>)
+T?[0] type_gen_res: T?[1]//[{T?[2]}+{T?[3]}]
+T?[2]+T?[3] type_gen_res: T?[0]
+T?[1] type_gen_res: T?[0]
+
+depth first search simplified results
+solved: (T?[0]) - T?[2]+T?[3]
+solved: (T?[1]) - T?[2]+T?[3]
+solved: (T?[2]+T?[3]) - T?[2]+T?[3]
+solved: (T?[2]) - T?[2]
+solved: (T?[3]) - T?[3]
+
+=============
+
+======[36]======
+EXP:   if true then x else if true then y else x
+CONTEXT:
+x : T?[0]
+y : T?[1]
+
++ syn/ana result typ:
+ T?[0]
+
++ constraints:
+TBool == TBool
+TBool == TBool
+T?[1] == T?[0]
+T?[0] == T?[1]
+
++ unify results: (<hole_id>) (<type>)
+T?[0] type_gen_res: T?[1]
+T?[1] type_gen_res: T?[0]
+
+depth first search simplified results
+solved: (T?[0]) - T?[0]
+solved: (T?[1]) - T?[0]
+
+=============
+
+======[37]======
+EXP:   if true then x else if true then y else if true then z else x
+CONTEXT:
+x : T?[0]
+y : T?[1]
+z : T?[2]
+
++ syn/ana result typ:
+ T?[0]
+
++ constraints:
+TBool == TBool
+TBool == TBool
+TBool == TBool
+T?[2] == T?[0]
+T?[1] == T?[2]
+T?[0] == T?[1]
+
++ unify results: (<hole_id>) (<type>)
+T?[0] type_gen_res: T?[2]//T?[1]
+T?[1] type_gen_res: T?[2]//T?[0]
+T?[2] type_gen_res: T?[0]//T?[1]
+
+depth first search simplified results
+solved: (T?[0]) - T?[0]
+solved: (T?[1]) - T?[0]
+solved: (T?[2]) - T?[0]
+
+=============
+
+======[38]======
+EXP:   if true then x else if true then y else if true then z else true
+CONTEXT:
+x : T?[0]
+y : T?[1]
+z : T?[2]
+
++ syn/ana result typ:
+ T?[0]
+
++ constraints:
+TBool == TBool
+TBool == TBool
+TBool == TBool
+T?[2] == TBool
+T?[1] == T?[2]
+T?[0] == T?[1]
+
++ unify results: (<hole_id>) (<type>)
+T?[0] type_gen_res: T?[1]
+T?[1] type_gen_res: T?[2]//T?[0]
+T?[2] type_gen_res: TBool//T?[1]
+
+depth first search simplified results
+solved: (T?[0]) - TBool
+solved: (T?[1]) - TBool
+solved: (T?[2]) - TBool
+
+=============
+
+======[39]======
+EXP:   if true then a else if true then b else if true then x else if true then y else if true then z else x
+CONTEXT:
+x : T?[0]
+y : T?[1]
+z : T?[2]
+a : T?[3]
+b : T?[4]
+
++ syn/ana result typ:
+ T?[3]
+
++ constraints:
+TBool == TBool
+TBool == TBool
+TBool == TBool
+TBool == TBool
+TBool == TBool
+T?[2] == T?[0]
+T?[1] == T?[2]
+T?[0] == T?[1]
+T?[4] == T?[0]
+T?[3] == T?[4]
+
++ unify results: (<hole_id>) (<type>)
+T?[3] type_gen_res: T?[4]
+T?[4] type_gen_res: T?[0]//T?[3]
+T?[0] type_gen_res: T?[2]//T?[1]//T?[4]
+T?[1] type_gen_res: T?[2]//T?[0]
+T?[2] type_gen_res: T?[0]//T?[1]
+
+depth first search simplified results
+solved: (T?[0]) - T?[0]
+solved: (T?[1]) - T?[0]
+solved: (T?[2]) - T?[0]
+solved: (T?[3]) - T?[0]
+solved: (T?[4]) - T?[0]
+
+=============
+
+======[40]======
+EXP:   (f if true then i else if true then x else if true then y else if true then z else x , (f true , (g if o then 2 else o , (g if true then a else if true then b else if true then c else a , f w))))
+CONTEXT:
+x : T?[0]
+y : T?[1]
+z : T?[2]
+a : T?[3]
+b : T?[4]
+c : T?[5]
+f : T?[6]->T?[7]
+g : T?[9]->T?[9]
+o : T?[10]
+w : T?[9]
+i : T?[13]
+
++ syn/ana result typ:
+ T?[7]*(T?[7]*(T?[9]*(T?[9]*T?[7])))
+
++ constraints:
+TBool == TBool
+T?[13] == T?[6]
+TBool == TBool
+T?[0] == T?[6]
+TBool == TBool
+T?[1] == T?[6]
+TBool == TBool
+T?[2] == T?[6]
+T?[0] == T?[6]
+TBool == T?[6]
+T?[10] == TBool
+TNum == T?[9]
+T?[10] == T?[9]
+TBool == TBool
+T?[3] == T?[9]
+TBool == TBool
+T?[4] == T?[9]
+TBool == TBool
+T?[5] == T?[9]
+T?[3] == T?[9]
+T?[9] == T?[6]
+
++ unify results: (<hole_id>) (<type>)
+T?[9] type_gen_res: TNum//T?[10]//T?[3]//T?[4]//T?[5]//T?[6]
+T?[6] type_gen_res: T?[13]//T?[0]//T?[1]//T?[2]//TBool//T?[9]
+T?[3] type_gen_res: T?[9]
+T?[5] type_gen_res: T?[9]
+T?[4] type_gen_res: T?[9]
+T?[10] type_gen_res: TBool//T?[9]
+T?[0] type_gen_res: T?[6]
+T?[2] type_gen_res: T?[6]
+T?[1] type_gen_res: T?[6]
+T?[13] type_gen_res: T?[6]
+
+depth first search simplified results
+unsolved: (T?[0]) - TBool//TNum
+unsolved: (T?[1]) - TBool//TNum
+unsolved: (T?[2]) - TBool//TNum
+unsolved: (T?[3]) - TBool//TNum
+unsolved: (T?[4]) - TBool//TNum
+unsolved: (T?[5]) - TBool//TNum
+unsolved: (T?[6]) - TBool//TNum
+unsolved: (T?[9]) - TBool//TNum
+unsolved: (T?[10]) - TBool//TNum
+unsolved: (T?[13]) - TBool//TNum
+
+=============
+
+======[41]======
+EXP:   if o then 2 else o
+CONTEXT:
+o : T?[0]
+
++ syn/ana result typ:
+ TNum
+
++ constraints:
+T?[0] == TBool
+TNum == T?[0]
+
++ unify results: (<hole_id>) (<type>)
+T?[0] type_gen_res: TBool//TNum
+
+depth first search simplified results
+unsolved: (T?[0]) - TBool//TNum
+
+=============
+
+======[42]======
+EXP:   g if o then 2 else o
+CONTEXT:
+g : T?[9]->T?[9]
+o : T?[0]
+
++ syn/ana result typ:
+ T?[9]
+
++ constraints:
+T?[0] == TBool
+TNum == T?[9]
+T?[0] == T?[9]
+
++ unify results: (<hole_id>) (<type>)
+T?[0] type_gen_res: TBool//T?[9]
+T?[9] type_gen_res: TNum//T?[0]
+
+depth first search simplified results
+unsolved: (T?[0]) - TNum//TBool
+unsolved: (T?[9]) - TNum//TBool
+
+=============
+
+======[43]======
+EXP:   let z = y (|[7]|) in (x (|[6]|) , (if true then z else x , (if true then x else f , (if z then z else (|[10]|) , (|[19]|) x))))
+CONTEXT:
+x : T?[0]
+y : T?[3]
+f : TNum->TNum
+
++ syn/ana result typ:
+ T?[8]*(T?[5]*(T?[0]*(T?[5]*T?[13])))
+
++ constraints:
+T?[3] == T?[4]->T?[5]
+T?[6] == T?[4]
+T?[0] == T?[7]->T?[8]
+T?[9] == T?[7]
+TBool == TBool
+T?[5] == T?[0]
+TBool == TBool
+T?[0] == TNum->TNum
+T?[5] == TBool
+T?[5] == T?[10]
+T?[11] == T?[12]->T?[13]
+T?[0] == T?[12]
+
++ unify results: (<hole_id>) (<type>)
+T?[0] type_gen_res: [{T?[7]//TNum}->{T?[8]//TNum}]//T?[5]//T?[12]
+T?[12] type_gen_res: T?[0]
+T?[11] type_gen_res: [{T?[12]}->{T?[13]}]
+T?[12]->T?[13] type_gen_res: T?[11]
+T?[5] type_gen_res: T?[0]//TBool//T?[10]
+T?[10] type_gen_res: T?[5]
+T?[9] type_gen_res: T?[7]
+T?[7] type_gen_res: T?[9]
+T?[7]->T?[8] type_gen_res: T?[0]
+T?[6] type_gen_res: T?[4]
+T?[4] type_gen_res: T?[6]
+T?[3] type_gen_res: [{T?[4]}->{T?[5]}]
+T?[4]->T?[5] type_gen_res: T?[3]
+
+depth first search simplified results
+unsolved: (T?[0]) - TBool//[{TNum}->{TNum}]
+unsolved: (T?[3]) - [{T?[4]}->{TBool//[{TNum}->{TNum}]}]
+solved: (T?[4]) - T?[4]
+unsolved: (T?[4]->T?[5]) - [{T?[4]}->{TBool//[{TNum}->{TNum}]}]
+unsolved: (T?[5]) - TBool//[{TNum}->{TNum}]
+solved: (T?[6]) - T?[4]
+unsolved: (T?[7]) - TNum
+unsolved: (T?[7]->T?[8]) - TBool//[{TNum}->{TNum}]
+unsolved: (T?[8]) - TNum
+unsolved: (T?[9]) - TNum
+unsolved: (T?[10]) - TBool//[{TNum}->{TNum}]
+unsolved: (T?[11]) - [{TBool//[{TNum}->{TNum}]}->{T?[13]}]
+unsolved: (T?[12]) - TBool//[{TNum}->{TNum}]
+unsolved: (T?[12]->T?[13]) - [{TBool//[{TNum}->{TNum}]}->{T?[13]}]
+solved: (T?[13]) - T?[13]
+
+=============
+
+======[44]======
+EXP:   let f:T?[0] = λx:T?[1].λy:T?[2].x y 2 in f (|[7]|) (|[8]|)
+CONTEXT:
+
++ syn/ana result typ:
+ T?[15]
+
++ constraints:
+T?[0] == T?[3]->T?[4]
+T?[4] == T?[5]->T?[6]
+T?[1] == T?[7]->T?[8]
+T?[2] == T?[7]
+T?[8] == T?[9]->T?[10]
+TNum == T?[9]
+T?[10] == T?[6]
+T?[2] == T?[5]
+T?[1] == T?[3]
+T?[0] == T?[11]->T?[12]
+T?[13] == T?[11]
+T?[12] == T?[14]->T?[15]
+T?[16] == T?[14]
+
++ unify results: (<hole_id>) (<type>)
+T?[16] type_gen_res: T?[14]
+T?[14] type_gen_res: T?[16]
+T?[12] type_gen_res: [{T?[14]}->{T?[15]}]
+T?[14]->T?[15] type_gen_res: T?[12]
+T?[13] type_gen_res: T?[11]
+T?[11] type_gen_res: T?[13]
+T?[0] type_gen_res: [{T?[3]//T?[11]}->{T?[4]//T?[12]}]
+T?[11]->T?[12] type_gen_res: T?[0]
+T?[1] type_gen_res: [{T?[7]}->{T?[8]}]//T?[3]
+T?[3] type_gen_res: T?[1]
+T?[2] type_gen_res: T?[7]//T?[5]
+T?[5] type_gen_res: T?[2]
+T?[10] type_gen_res: T?[6]
+T?[6] type_gen_res: T?[10]
+T?[9] type_gen_res: TNum
+T?[8] type_gen_res: [{T?[9]}->{T?[10]}]
+T?[9]->T?[10] type_gen_res: T?[8]
+T?[7] type_gen_res: T?[2]
+T?[7]->T?[8] type_gen_res: T?[1]
+T?[4] type_gen_res: [{T?[5]}->{T?[6]}]
+T?[5]->T?[6] type_gen_res: T?[4]
+T?[3]->T?[4] type_gen_res: T?[0]
+
+depth first search simplified results
+solved: (T?[0]) - (T?[2]->(TNum->T?[6]))->(T?[2]->T?[6])
+solved: (T?[1]) - T?[2]->(TNum->T?[6])
+solved: (T?[2]) - T?[2]
+solved: (T?[3]) - T?[2]->(TNum->T?[6])
+solved: (T?[3]->T?[4]) - (T?[2]->(TNum->T?[6]))->(T?[2]->T?[6])
+solved: (T?[4]) - T?[2]->T?[6]
+solved: (T?[5]) - T?[2]
+solved: (T?[5]->T?[6]) - T?[2]->T?[6]
+solved: (T?[6]) - T?[6]
+solved: (T?[7]) - T?[2]
+solved: (T?[7]->T?[8]) - T?[2]->(TNum->T?[6])
+solved: (T?[8]) - TNum->T?[6]
+solved: (T?[9]) - TNum
+solved: (T?[9]->T?[10]) - TNum->T?[6]
+solved: (T?[10]) - T?[6]
+solved: (T?[11]) - T?[2]->(TNum->T?[6])
+solved: (T?[11]->T?[12]) - (T?[2]->(TNum->T?[6]))->(T?[2]->T?[6])
+solved: (T?[12]) - T?[2]->T?[6]
+solved: (T?[13]) - T?[2]->(TNum->T?[6])
+solved: (T?[14]) - T?[2]
+solved: (T?[14]->T?[15]) - T?[2]->T?[6]
+solved: (T?[15]) - T?[6]
+solved: (T?[16]) - T?[2]
+
+=============
+
+======[45]======
+EXP:   let f:T?[0] = λx:T?[1].λy:T?[2].x y 2 in f λz.z + 2 (|[8]|)
+CONTEXT:
+
++ syn/ana result typ:
+ T?[16]
+
++ constraints:
+T?[0] == T?[3]->T?[4]
+T?[4] == T?[5]->T?[6]
+T?[1] == T?[7]->T?[8]
+T?[2] == T?[7]
+T?[8] == T?[9]->T?[10]
+TNum == T?[9]
+T?[10] == T?[6]
+T?[2] == T?[5]
+T?[1] == T?[3]
+T?[0] == T?[11]->T?[12]
+T?[11] == T?[13]->T?[14]
+T?[13] == TNum
+TNum == TNum
+TNum == T?[14]
+T?[12] == T?[15]->T?[16]
+T?[17] == T?[15]
+
++ unify results: (<hole_id>) (<type>)
+T?[17] type_gen_res: T?[15]
+T?[15] type_gen_res: T?[17]
+T?[12] type_gen_res: [{T?[15]}->{T?[16]}]
+T?[15]->T?[16] type_gen_res: T?[12]
+T?[14] type_gen_res: TNum
+T?[13] type_gen_res: TNum
+T?[11] type_gen_res: [{T?[13]}->{T?[14]}]
+T?[13]->T?[14] type_gen_res: T?[11]
+T?[0] type_gen_res: [{T?[3]//T?[11]}->{T?[4]//T?[12]}]
+T?[11]->T?[12] type_gen_res: T?[0]
+T?[1] type_gen_res: [{T?[7]}->{T?[8]}]//T?[3]
+T?[3] type_gen_res: T?[1]
+T?[2] type_gen_res: T?[7]//T?[5]
+T?[5] type_gen_res: T?[2]
+T?[10] type_gen_res: T?[6]
+T?[6] type_gen_res: T?[10]
+T?[9] type_gen_res: TNum
+T?[8] type_gen_res: [{T?[9]}->{T?[10]}]
+T?[9]->T?[10] type_gen_res: T?[8]
+T?[7] type_gen_res: T?[2]
+T?[7]->T?[8] type_gen_res: T?[1]
+T?[4] type_gen_res: [{T?[5]}->{T?[6]}]
+T?[5]->T?[6] type_gen_res: T?[4]
+T?[3]->T?[4] type_gen_res: T?[0]
+
+depth first search simplified results
+unsolved: (T?[0]) - [{[{TNum}->{TNum//[{TNum}->{T?[6]}]}]}->{[{TNum}->{T?[6]}]}]
+unsolved: (T?[1]) - [{TNum}->{TNum//[{TNum}->{T?[6]}]}]
+solved: (T?[2]) - TNum
+unsolved: (T?[3]) - [{TNum}->{TNum//[{TNum}->{T?[6]}]}]
+unsolved: (T?[3]->T?[4]) - [{[{TNum}->{TNum//[{TNum}->{T?[6]}]}]}->{[{TNum}->{T?[6]}]}]
+unsolved: (T?[4]) - [{TNum}->{T?[6]}]
+solved: (T?[5]) - TNum
+unsolved: (T?[5]->T?[6]) - [{TNum}->{T?[6]}]
+unsolved: (T?[6]) - T?[6]
+solved: (T?[7]) - TNum
+unsolved: (T?[7]->T?[8]) - [{TNum}->{TNum//[{TNum}->{T?[6]}]}]
+unsolved: (T?[8]) - TNum//[{TNum}->{T?[6]}]
+unsolved: (T?[9]) - TNum
+unsolved: (T?[9]->T?[10]) - TNum//[{TNum}->{T?[6]}]
+unsolved: (T?[10]) - T?[6]
+unsolved: (T?[11]) - [{TNum}->{TNum//[{TNum}->{T?[6]}]}]
+unsolved: (T?[11]->T?[12]) - [{[{TNum}->{TNum//[{TNum}->{T?[6]}]}]}->{[{TNum}->{T?[6]}]}]
+unsolved: (T?[12]) - [{TNum}->{T?[6]}]
+solved: (T?[13]) - TNum
+unsolved: (T?[13]->T?[14]) - [{TNum}->{TNum//[{TNum}->{T?[6]}]}]
+unsolved: (T?[14]) - TNum//[{TNum}->{T?[6]}]
+solved: (T?[15]) - TNum
+unsolved: (T?[15]->T?[16]) - [{TNum}->{T?[6]}]
+unsolved: (T?[16]) - T?[6]
+solved: (T?[17]) - TNum
+
+=============
+
+======[46]======
+EXP:   let f:T?[0] = λx:T?[1].λy:T?[2].x y 2 in f (|[7]|) λz.z + 2
+CONTEXT:
+
++ syn/ana result typ:
+ T?[15]
+
++ constraints:
+T?[0] == T?[3]->T?[4]
+T?[4] == T?[5]->T?[6]
+T?[1] == T?[7]->T?[8]
+T?[2] == T?[7]
+T?[8] == T?[9]->T?[10]
+TNum == T?[9]
+T?[10] == T?[6]
+T?[2] == T?[5]
+T?[1] == T?[3]
+T?[0] == T?[11]->T?[12]
+T?[13] == T?[11]
+T?[12] == T?[14]->T?[15]
+T?[14] == T?[16]->T?[17]
+T?[16] == TNum
+TNum == TNum
+TNum == T?[17]
+
++ unify results: (<hole_id>) (<type>)
+T?[17] type_gen_res: TNum
+T?[16] type_gen_res: TNum
+T?[14] type_gen_res: [{T?[16]}->{T?[17]}]
+T?[16]->T?[17] type_gen_res: T?[14]
+T?[12] type_gen_res: [{T?[14]}->{T?[15]}]
+T?[14]->T?[15] type_gen_res: T?[12]
+T?[13] type_gen_res: T?[11]
+T?[11] type_gen_res: T?[13]
+T?[0] type_gen_res: [{T?[3]//T?[11]}->{T?[4]//T?[12]}]
+T?[11]->T?[12] type_gen_res: T?[0]
+T?[1] type_gen_res: [{T?[7]}->{T?[8]}]//T?[3]
+T?[3] type_gen_res: T?[1]
+T?[2] type_gen_res: T?[7]//T?[5]
+T?[5] type_gen_res: T?[2]
+T?[10] type_gen_res: T?[6]
+T?[6] type_gen_res: T?[10]
+T?[9] type_gen_res: TNum
+T?[8] type_gen_res: [{T?[9]}->{T?[10]}]
+T?[9]->T?[10] type_gen_res: T?[8]
+T?[7] type_gen_res: T?[2]
+T?[7]->T?[8] type_gen_res: T?[1]
+T?[4] type_gen_res: [{T?[5]}->{T?[6]}]
+T?[5]->T?[6] type_gen_res: T?[4]
+T?[3]->T?[4] type_gen_res: T?[0]
+
+depth first search simplified results
+solved: (T?[0]) - ((TNum->TNum)->(TNum->T?[6]))->((TNum->TNum)->T?[6])
+solved: (T?[1]) - (TNum->TNum)->(TNum->T?[6])
+solved: (T?[2]) - TNum->TNum
+solved: (T?[3]) - (TNum->TNum)->(TNum->T?[6])
+solved: (T?[3]->T?[4]) - ((TNum->TNum)->(TNum->T?[6]))->((TNum->TNum)->T?[6])
+solved: (T?[4]) - (TNum->TNum)->T?[6]
+solved: (T?[5]) - TNum->TNum
+solved: (T?[5]->T?[6]) - (TNum->TNum)->T?[6]
+solved: (T?[6]) - T?[6]
+solved: (T?[7]) - TNum->TNum
+solved: (T?[7]->T?[8]) - (TNum->TNum)->(TNum->T?[6])
+solved: (T?[8]) - TNum->T?[6]
+solved: (T?[9]) - TNum
+solved: (T?[9]->T?[10]) - TNum->T?[6]
+solved: (T?[10]) - T?[6]
+solved: (T?[11]) - (TNum->TNum)->(TNum->T?[6])
+solved: (T?[11]->T?[12]) - ((TNum->TNum)->(TNum->T?[6]))->((TNum->TNum)->T?[6])
+solved: (T?[12]) - (TNum->TNum)->T?[6]
+solved: (T?[13]) - (TNum->TNum)->(TNum->T?[6])
+solved: (T?[14]) - TNum->TNum
+solved: (T?[14]->T?[15]) - (TNum->TNum)->T?[6]
+solved: (T?[15]) - T?[6]
+solved: (T?[16]) - TNum
+solved: (T?[16]->T?[17]) - TNum->TNum
+solved: (T?[17]) - TNum
+
+=============
+
+======[47]======
+EXP:   let f:T?[0] = λx:T?[1].λy:T?[2].x y 2 in f λz.z z g
+CONTEXT:
+g : TNum->TNum
+
++ syn/ana result typ:
+ T?[18]
+
++ constraints:
+T?[0] == T?[3]->T?[4]
+T?[4] == T?[5]->T?[6]
+T?[1] == T?[7]->T?[8]
+T?[2] == T?[7]
+T?[8] == T?[9]->T?[10]
+TNum == T?[9]
+T?[10] == T?[6]
+T?[2] == T?[5]
+T?[1] == T?[3]
+T?[0] == T?[11]->T?[12]
+T?[11] == T?[13]->T?[14]
+T?[13] == T?[15]->T?[16]
+T?[13] == T?[15]
+T?[16] == T?[14]
+T?[12] == T?[17]->T?[18]
+TNum->TNum == T?[17]
+
++ unify results: (<hole_id>) (<type>)
+T?[17] type_gen_res: [{TNum}->{TNum}]
+T?[12] type_gen_res: [{T?[17]}->{T?[18]}]
+T?[17]->T?[18] type_gen_res: T?[12]
+T?[16] type_gen_res: T?[14]
+T?[14] type_gen_res: T?[16]
+T?[13] type_gen_res: [{T?[15]}->{T?[16]}]//T?[15]
+T?[15] type_gen_res: T?[13]
+T?[15]->T?[16] type_gen_res: T?[13]
+T?[11] type_gen_res: [{T?[13]}->{T?[14]}]
+T?[13]->T?[14] type_gen_res: T?[11]
+T?[0] type_gen_res: [{T?[3]//T?[11]}->{T?[4]//T?[12]}]
+T?[11]->T?[12] type_gen_res: T?[0]
+T?[1] type_gen_res: [{T?[7]}->{T?[8]}]//T?[3]
+T?[3] type_gen_res: T?[1]
+T?[2] type_gen_res: T?[7]//T?[5]
+T?[5] type_gen_res: T?[2]
+T?[10] type_gen_res: T?[6]
+T?[6] type_gen_res: T?[10]
+T?[9] type_gen_res: TNum
+T?[8] type_gen_res: [{T?[9]}->{T?[10]}]
+T?[9]->T?[10] type_gen_res: T?[8]
+T?[7] type_gen_res: T?[2]
+T?[7]->T?[8] type_gen_res: T?[1]
+T?[4] type_gen_res: [{T?[5]}->{T?[6]}]
+T?[5]->T?[6] type_gen_res: T?[4]
+T?[3]->T?[4] type_gen_res: T?[0]
+
+depth first search simplified results
+unsolved: (T?[0]) - [{[{TNum//[{T?[15]}->{T?[16]}]}->{TNum//[{TNum}->{T?[6]}]}]}->{[{[{TNum}->{TNum}]}->{T?[6]}]}]
+unsolved: (T?[1]) - [{TNum//[{T?[15]}->{T?[16]}]}->{TNum//[{TNum}->{T?[6]}]}]
+unsolved: (T?[2]) - TNum//[{T?[15]}->{T?[16]}]
+unsolved: (T?[3]) - [{TNum//[{T?[15]}->{T?[16]}]}->{TNum//[{TNum}->{T?[6]}]}]
+unsolved: (T?[3]->T?[4]) - [{[{TNum//[{T?[15]}->{T?[16]}]}->{TNum//[{TNum}->{T?[6]}]}]}->{[{[{TNum}->{TNum}]}->{T?[6]}]}]
+unsolved: (T?[4]) - [{[{TNum}->{TNum}]}->{T?[6]}]
+unsolved: (T?[5]) - [{TNum}->{TNum}]
+unsolved: (T?[5]->T?[6]) - [{[{TNum}->{TNum}]}->{T?[6]}]
+unsolved: (T?[6]) - T?[6]
+unsolved: (T?[7]) - TNum//[{T?[15]}->{T?[16]}]
+unsolved: (T?[7]->T?[8]) - [{TNum//[{T?[15]}->{T?[16]}]}->{TNum//[{TNum}->{T?[6]}]}]
+unsolved: (T?[8]) - TNum//[{TNum}->{T?[6]}]
+unsolved: (T?[9]) - TNum
+unsolved: (T?[9]->T?[10]) - TNum//[{TNum}->{T?[6]}]
+unsolved: (T?[10]) - T?[6]
+unsolved: (T?[11]) - [{TNum//[{T?[15]}->{T?[16]}]}->{TNum//[{TNum}->{T?[6]}]}]
+unsolved: (T?[11]->T?[12]) - [{[{TNum//[{T?[15]}->{T?[16]}]}->{TNum//[{TNum}->{T?[6]}]}]}->{[{[{TNum}->{TNum}]}->{T?[6]}]}]
+unsolved: (T?[12]) - [{[{TNum}->{TNum}]}->{T?[6]}]
+unsolved: (T?[13]) - [{TNum//[{T?[15]}->{T?[16]}]}->{TNum//[{TNum}->{T?[6]}]}]
+unsolved: (T?[13]->T?[14]) - [{TNum//[{T?[15]}->{T?[16]}]}->{TNum//[{TNum}->{T?[6]}]}]
+unsolved: (T?[14]) - TNum//[{TNum}->{T?[6]}]
+unsolved: (T?[15]) - [{TNum//[{T?[15]}->{T?[16]}]}->{TNum//[{TNum}->{T?[6]}]}]
+unsolved: (T?[15]->T?[16]) - [{TNum//[{T?[15]}->{T?[16]}]}->{TNum//[{TNum}->{T?[6]}]}]
+unsolved: (T?[16]) - TNum//[{TNum}->{T?[6]}]
+unsolved: (T?[17]) - [{TNum}->{TNum}]
+unsolved: (T?[17]->T?[18]) - [{[{TNum}->{TNum}]}->{T?[6]}]
+unsolved: (T?[18]) - T?[6]
+
+=============
+
+======[48]======
+EXP:   let f:T?[0] = λx:T?[1].λy:T?[2].x y 2 in f λz.z z λi.i + 2
+CONTEXT:
+
++ syn/ana result typ:
+ T?[18]
+
++ constraints:
+T?[0] == T?[3]->T?[4]
+T?[4] == T?[5]->T?[6]
+T?[1] == T?[7]->T?[8]
+T?[2] == T?[7]
+T?[8] == T?[9]->T?[10]
+TNum == T?[9]
+T?[10] == T?[6]
+T?[2] == T?[5]
+T?[1] == T?[3]
+T?[0] == T?[11]->T?[12]
+T?[11] == T?[13]->T?[14]
+T?[13] == T?[15]->T?[16]
+T?[13] == T?[15]
+T?[16] == T?[14]
+T?[12] == T?[17]->T?[18]
+T?[17] == T?[19]->T?[20]
+T?[19] == TNum
+TNum == TNum
+TNum == T?[20]
+
++ unify results: (<hole_id>) (<type>)
+T?[20] type_gen_res: TNum
+T?[19] type_gen_res: TNum
+T?[17] type_gen_res: [{T?[19]}->{T?[20]}]
+T?[19]->T?[20] type_gen_res: T?[17]
+T?[12] type_gen_res: [{T?[17]}->{T?[18]}]
+T?[17]->T?[18] type_gen_res: T?[12]
+T?[16] type_gen_res: T?[14]
+T?[14] type_gen_res: T?[16]
+T?[13] type_gen_res: [{T?[15]}->{T?[16]}]//T?[15]
+T?[15] type_gen_res: T?[13]
+T?[15]->T?[16] type_gen_res: T?[13]
+T?[11] type_gen_res: [{T?[13]}->{T?[14]}]
+T?[13]->T?[14] type_gen_res: T?[11]
+T?[0] type_gen_res: [{T?[3]//T?[11]}->{T?[4]//T?[12]}]
+T?[11]->T?[12] type_gen_res: T?[0]
+T?[1] type_gen_res: [{T?[7]}->{T?[8]}]//T?[3]
+T?[3] type_gen_res: T?[1]
+T?[2] type_gen_res: T?[7]//T?[5]
+T?[5] type_gen_res: T?[2]
+T?[10] type_gen_res: T?[6]
+T?[6] type_gen_res: T?[10]
+T?[9] type_gen_res: TNum
+T?[8] type_gen_res: [{T?[9]}->{T?[10]}]
+T?[9]->T?[10] type_gen_res: T?[8]
+T?[7] type_gen_res: T?[2]
+T?[7]->T?[8] type_gen_res: T?[1]
+T?[4] type_gen_res: [{T?[5]}->{T?[6]}]
+T?[5]->T?[6] type_gen_res: T?[4]
+T?[3]->T?[4] type_gen_res: T?[0]
+
+depth first search simplified results
+unsolved: (T?[0]) - [{[{TNum//[{T?[15]}->{T?[16]}]}->{TNum//[{TNum}->{T?[6]}]}]}->{[{[{TNum}->{TNum}]}->{T?[6]}]}]
+unsolved: (T?[1]) - [{TNum//[{T?[15]}->{T?[16]}]}->{TNum//[{TNum}->{T?[6]}]}]
+unsolved: (T?[2]) - TNum//[{T?[15]}->{T?[16]}]
+unsolved: (T?[3]) - [{TNum//[{T?[15]}->{T?[16]}]}->{TNum//[{TNum}->{T?[6]}]}]
+unsolved: (T?[3]->T?[4]) - [{[{TNum//[{T?[15]}->{T?[16]}]}->{TNum//[{TNum}->{T?[6]}]}]}->{[{[{TNum}->{TNum}]}->{T?[6]}]}]
+unsolved: (T?[4]) - [{[{TNum}->{TNum}]}->{T?[6]}]
+unsolved: (T?[5]) - [{TNum}->{TNum}]
+unsolved: (T?[5]->T?[6]) - [{[{TNum}->{TNum}]}->{T?[6]}]
+unsolved: (T?[6]) - T?[6]
+unsolved: (T?[7]) - TNum//[{T?[15]}->{T?[16]}]
+unsolved: (T?[7]->T?[8]) - [{TNum//[{T?[15]}->{T?[16]}]}->{TNum//[{TNum}->{T?[6]}]}]
+unsolved: (T?[8]) - TNum//[{TNum}->{T?[6]}]
+unsolved: (T?[9]) - TNum
+unsolved: (T?[9]->T?[10]) - TNum//[{TNum}->{T?[6]}]
+unsolved: (T?[10]) - T?[6]
+unsolved: (T?[11]) - [{TNum//[{T?[15]}->{T?[16]}]}->{TNum//[{TNum}->{T?[6]}]}]
+unsolved: (T?[11]->T?[12]) - [{[{TNum//[{T?[15]}->{T?[16]}]}->{TNum//[{TNum}->{T?[6]}]}]}->{[{[{TNum}->{TNum}]}->{T?[6]}]}]
+unsolved: (T?[12]) - [{[{TNum}->{TNum}]}->{T?[6]}]
+unsolved: (T?[13]) - TNum//[{T?[15]}->{T?[16]}]
+unsolved: (T?[13]->T?[14]) - [{TNum//[{T?[15]}->{T?[16]}]}->{TNum//[{TNum}->{T?[6]}]}]
+unsolved: (T?[14]) - TNum//[{TNum}->{T?[6]}]
+unsolved: (T?[15]) - TNum//[{T?[15]}->{T?[16]}]
+unsolved: (T?[15]->T?[16]) - TNum//[{T?[15]}->{T?[16]}]
+unsolved: (T?[16]) - T?[16]
+unsolved: (T?[17]) - [{TNum}->{TNum}]
+unsolved: (T?[17]->T?[18]) - [{[{TNum}->{TNum}]}->{T?[6]}]
+unsolved: (T?[18]) - T?[6]
+unsolved: (T?[19]) - TNum//[{T?[15]}->{T?[16]}]
+unsolved: (T?[19]->T?[20]) - [{TNum//[{T?[15]}->{T?[16]}]}->{TNum//[{TNum}->{T?[6]}]}]
+unsolved: (T?[20]) - TNum//[{TNum}->{T?[6]}]
+
+=============
+
+======[49]======
+EXP:   let f:T?[0] = λx:T?[1].λy:T?[2].x y 2 in f λz.z λz.z + 2
+CONTEXT:
+
++ syn/ana result typ:
+ T?[16]
+
++ constraints:
+T?[0] == T?[3]->T?[4]
+T?[4] == T?[5]->T?[6]
+T?[1] == T?[7]->T?[8]
+T?[2] == T?[7]
+T?[8] == T?[9]->T?[10]
+TNum == T?[9]
+T?[10] == T?[6]
+T?[2] == T?[5]
+T?[1] == T?[3]
+T?[0] == T?[11]->T?[12]
+T?[11] == T?[13]->T?[14]
+T?[13] == T?[14]
+T?[12] == T?[15]->T?[16]
+T?[15] == T?[17]->T?[18]
+T?[17] == TNum
+TNum == TNum
+TNum == T?[18]
+
++ unify results: (<hole_id>) (<type>)
+T?[18] type_gen_res: TNum
+T?[17] type_gen_res: TNum
+T?[15] type_gen_res: [{T?[17]}->{T?[18]}]
+T?[17]->T?[18] type_gen_res: T?[15]
+T?[12] type_gen_res: [{T?[15]}->{T?[16]}]
+T?[15]->T?[16] type_gen_res: T?[12]
+T?[13] type_gen_res: T?[14]
+T?[14] type_gen_res: T?[13]
+T?[11] type_gen_res: [{T?[13]}->{T?[14]}]
+T?[13]->T?[14] type_gen_res: T?[11]
+T?[0] type_gen_res: [{T?[3]//T?[11]}->{T?[4]//T?[12]}]
+T?[11]->T?[12] type_gen_res: T?[0]
+T?[1] type_gen_res: [{T?[7]}->{T?[8]}]//T?[3]
+T?[3] type_gen_res: T?[1]
+T?[2] type_gen_res: T?[7]//T?[5]
+T?[5] type_gen_res: T?[2]
+T?[10] type_gen_res: T?[6]
+T?[6] type_gen_res: T?[10]
+T?[9] type_gen_res: TNum
+T?[8] type_gen_res: [{T?[9]}->{T?[10]}]
+T?[9]->T?[10] type_gen_res: T?[8]
+T?[7] type_gen_res: T?[2]
+T?[7]->T?[8] type_gen_res: T?[1]
+T?[4] type_gen_res: [{T?[5]}->{T?[6]}]
+T?[5]->T?[6] type_gen_res: T?[4]
+T?[3]->T?[4] type_gen_res: T?[0]
+
+depth first search simplified results
+solved: (T?[0]) - ((TNum->TNum)->(TNum->TNum))->((TNum->TNum)->T?[6])
+solved: (T?[1]) - (TNum->TNum)->(TNum->TNum)
+solved: (T?[2]) - TNum->TNum
+solved: (T?[3]) - (TNum->TNum)->(TNum->TNum)
+solved: (T?[3]->T?[4]) - ((TNum->TNum)->(TNum->TNum))->((TNum->TNum)->T?[6])
+solved: (T?[4]) - (TNum->TNum)->T?[6]
+solved: (T?[5]) - TNum->TNum
+solved: (T?[5]->T?[6]) - (TNum->TNum)->T?[6]
+solved: (T?[6]) - T?[6]
+solved: (T?[7]) - TNum->TNum
+solved: (T?[7]->T?[8]) - (TNum->TNum)->(TNum->TNum)
+solved: (T?[8]) - TNum->TNum
+solved: (T?[9]) - TNum
+solved: (T?[9]->T?[10]) - TNum->TNum
+solved: (T?[10]) - TNum
+solved: (T?[11]) - (TNum->TNum)->(TNum->TNum)
+solved: (T?[11]->T?[12]) - ((TNum->TNum)->(TNum->TNum))->((TNum->TNum)->T?[6])
+solved: (T?[12]) - (TNum->TNum)->T?[6]
+solved: (T?[13]) - TNum->TNum
+solved: (T?[13]->T?[14]) - (TNum->TNum)->(TNum->TNum)
+solved: (T?[14]) - TNum->TNum
+solved: (T?[15]) - TNum->TNum
+solved: (T?[15]->T?[16]) - (TNum->TNum)->T?[6]
+solved: (T?[16]) - T?[6]
+solved: (T?[17]) - TNum
+solved: (T?[17]->T?[18]) - TNum->TNum
+solved: (T?[18]) - TNum
+
+=============
+
+======[50]======
+EXP:   (if true then f x else g y , (if true then f a else 2 , if true then g b else false))
+CONTEXT:
+f : T?[0]
+g : T?[1]
+x : T?[2]
+y : T?[3]
+a : T?[4]
+b : T?[5]
+
++ syn/ana result typ:
+ T?[7]*(T?[11]*T?[13])
+
++ constraints:
+TBool == TBool
+T?[0] == T?[6]->T?[7]
+T?[2] == T?[6]
+T?[1] == T?[8]->T?[9]
+T?[3] == T?[8]
+T?[7] == T?[9]
+TBool == TBool
+T?[0] == T?[10]->T?[11]
+T?[4] == T?[10]
+T?[11] == TNum
+TBool == TBool
+T?[1] == T?[12]->T?[13]
+T?[5] == T?[12]
+T?[13] == TBool
+
++ unify results: (<hole_id>) (<type>)
+T?[13] type_gen_res: TBool
+T?[5] type_gen_res: T?[12]
+T?[12] type_gen_res: T?[5]
+T?[1] type_gen_res: [{T?[8]//T?[12]}->{T?[9]//T?[13]}]
+T?[12]->T?[13] type_gen_res: T?[1]
+T?[11] type_gen_res: TNum
+T?[4] type_gen_res: T?[10]
+T?[10] type_gen_res: T?[4]
+T?[0] type_gen_res: [{T?[6]//T?[10]}->{T?[7]//T?[11]}]
+T?[10]->T?[11] type_gen_res: T?[0]
+T?[7] type_gen_res: T?[9]
+T?[9] type_gen_res: T?[7]
+T?[3] type_gen_res: T?[8]
+T?[8] type_gen_res: T?[3]
+T?[8]->T?[9] type_gen_res: T?[1]
+T?[2] type_gen_res: T?[6]
+T?[6] type_gen_res: T?[2]
+T?[6]->T?[7] type_gen_res: T?[0]
+
+depth first search simplified results
+unsolved: (T?[0]) - [{T?[2]}->{TNum//TBool}]
+unsolved: (T?[1]) - [{T?[3]}->{TBool//TNum}]
+solved: (T?[2]) - T?[2]
+solved: (T?[3]) - T?[3]
+solved: (T?[4]) - T?[2]
+solved: (T?[5]) - T?[3]
+solved: (T?[6]) - T?[2]
+unsolved: (T?[6]->T?[7]) - [{T?[2]}->{TNum//TBool}]
+unsolved: (T?[7]) - TNum//TBool
+solved: (T?[8]) - T?[3]
+unsolved: (T?[8]->T?[9]) - [{T?[3]}->{TBool//TNum}]
+unsolved: (T?[9]) - TNum//TBool
+solved: (T?[10]) - T?[2]
+unsolved: (T?[10]->T?[11]) - [{T?[2]}->{TNum//TBool}]
+unsolved: (T?[11]) - TNum//TBool
+solved: (T?[12]) - T?[3]
+unsolved: (T?[12]->T?[13]) - [{T?[3]}->{TBool//TNum}]
+unsolved: (T?[13]) - TNum//TBool
+
+=============
+
+======[51]======
+EXP:   let g:T?[0] = λx:T?[1].λy:T?[2].x y (|[3]|) in g (|[4]|) λx.2
+CONTEXT:
+
++ syn/ana result typ:
+ T?[16]
+
++ constraints:
+T?[0] == T?[3]->T?[4]
+T?[4] == T?[5]->T?[6]
+T?[1] == T?[7]->T?[8]
+T?[2] == T?[7]
+T?[8] == T?[9]->T?[10]
+T?[11] == T?[9]
+T?[10] == T?[6]
+T?[2] == T?[5]
+T?[1] == T?[3]
+T?[0] == T?[12]->T?[13]
+T?[14] == T?[12]
+T?[13] == T?[15]->T?[16]
+T?[15] == T?[17]->T?[18]
+TNum == T?[18]
+
++ unify results: (<hole_id>) (<type>)
+T?[18] type_gen_res: TNum
+T?[15] type_gen_res: [{T?[17]}->{T?[18]}]
+T?[17]->T?[18] type_gen_res: T?[15]
+T?[13] type_gen_res: [{T?[15]}->{T?[16]}]
+T?[15]->T?[16] type_gen_res: T?[13]
+T?[14] type_gen_res: T?[12]
+T?[12] type_gen_res: T?[14]
+T?[0] type_gen_res: [{T?[3]//T?[12]}->{T?[4]//T?[13]}]
+T?[12]->T?[13] type_gen_res: T?[0]
+T?[1] type_gen_res: [{T?[7]}->{T?[8]}]//T?[3]
+T?[3] type_gen_res: T?[1]
+T?[2] type_gen_res: T?[7]//T?[5]
+T?[5] type_gen_res: T?[2]
+T?[10] type_gen_res: T?[6]
+T?[6] type_gen_res: T?[10]
+T?[11] type_gen_res: T?[9]
+T?[9] type_gen_res: T?[11]
+T?[8] type_gen_res: [{T?[9]}->{T?[10]}]
+T?[9]->T?[10] type_gen_res: T?[8]
+T?[7] type_gen_res: T?[2]
+T?[7]->T?[8] type_gen_res: T?[1]
+T?[4] type_gen_res: [{T?[5]}->{T?[6]}]
+T?[5]->T?[6] type_gen_res: T?[4]
+T?[3]->T?[4] type_gen_res: T?[0]
+
+depth first search simplified results
+solved: (T?[0]) - ((T?[17]->TNum)->(T?[9]->T?[6]))->((T?[17]->TNum)->T?[6])
+solved: (T?[1]) - (T?[17]->TNum)->(T?[9]->T?[6])
+solved: (T?[2]) - T?[17]->TNum
+solved: (T?[3]) - (T?[17]->TNum)->(T?[9]->T?[6])
+solved: (T?[3]->T?[4]) - ((T?[17]->TNum)->(T?[9]->T?[6]))->((T?[17]->TNum)->T?[6])
+solved: (T?[4]) - (T?[17]->TNum)->T?[6]
+solved: (T?[5]) - T?[17]->TNum
+solved: (T?[5]->T?[6]) - (T?[17]->TNum)->T?[6]
+solved: (T?[6]) - T?[6]
+solved: (T?[7]) - T?[17]->TNum
+solved: (T?[7]->T?[8]) - (T?[17]->TNum)->(T?[9]->T?[6])
+solved: (T?[8]) - T?[9]->T?[6]
+solved: (T?[9]) - T?[9]
+solved: (T?[9]->T?[10]) - T?[9]->T?[6]
+solved: (T?[10]) - T?[6]
+solved: (T?[11]) - T?[9]
+solved: (T?[12]) - (T?[17]->TNum)->(T?[9]->T?[6])
+solved: (T?[12]->T?[13]) - ((T?[17]->TNum)->(T?[9]->T?[6]))->((T?[17]->TNum)->T?[6])
+solved: (T?[13]) - (T?[17]->TNum)->T?[6]
+solved: (T?[14]) - (T?[17]->TNum)->(T?[9]->T?[6])
+solved: (T?[15]) - T?[17]->TNum
+solved: (T?[15]->T?[16]) - (T?[17]->TNum)->T?[6]
+solved: (T?[16]) - T?[6]
+solved: (T?[17]->T?[18]) - T?[17]->TNum
+solved: (T?[17]) - T?[17]
+solved: (T?[18]) - TNum
+
+=============
+
+======[52]======
+EXP:   let y = (|[0]|) in let x = ((L[y] , true) , (true , R[y])) in let z = (true , 2) in if true then y else z
+CONTEXT:
+
+ERROR
+: syn/ana error=============
+
+======[53]======
+EXP:   let y:T?[0] = (|[1]|) in let z:T?[2] = (true , 2) in case y of L[a] -> yelse R[b] -> z
+CONTEXT:
+
++ syn/ana result typ:
+ T?[0]
+
++ constraints:
+T?[3] == T?[0]
+T?[2] == T?[4]*T?[5]
+TBool == T?[4]
+TNum == T?[5]
+T?[0] == T?[6]+T?[7]
+T?[0] == T?[2]
+
++ unify results: (<hole_id>) (<type>)
+T?[0] type_gen_res: T?[3]//[{T?[6]}+{T?[7]}]//T?[2]
+T?[2] type_gen_res: [{T?[4]}*{T?[5]}]//T?[0]
+T?[6]+T?[7] type_gen_res: T?[0]
+T?[5] type_gen_res: TNum
+T?[4] type_gen_res: TBool
+T?[4]*T?[5] type_gen_res: T?[2]
+T?[3] type_gen_res: T?[0]
+
+depth first search simplified results
+unsolved: (T?[0]) - [{T?[6]}+{T?[7]}]//[{TBool}*{TNum}]
+unsolved: (T?[2]) - [{T?[6]}+{T?[7]}]//[{TBool}*{TNum}]
+unsolved: (T?[3]) - [{T?[6]}+{T?[7]}]//[{TBool}*{TNum}]
+solved: (T?[4]) - TBool
+unsolved: (T?[4]*T?[5]) - [{T?[6]}+{T?[7]}]//[{TBool}*{TNum}]
+solved: (T?[5]) - TNum
+unsolved: (T?[6]+T?[7]) - [{T?[6]}+{T?[7]}]//[{TBool}*{TNum}]
+solved: (T?[6]) - TBool
+solved: (T?[7]) - TNum
+
+=============

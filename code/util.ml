@@ -125,7 +125,7 @@ let rec string_of_gen_res (gen_results: TypGenRes.results) =
   | hd::tl -> (
     let (key, res) = hd in
     let hd_str = 
-      (string_of_typ key) ^ " ls: " ^ (string_of_typ_gens res) ^ "\n"
+      (string_of_typ key) ^ " type_gen_res: " ^ (string_of_typ_gens res) ^ "\n"
     in
     hd_str ^ (string_of_gen_res tl)
   )
@@ -241,12 +241,30 @@ let solve (ctx: Ctx.t) (e: Exp.t) =
     Printf.printf "\n+ constraints:\n";
     print_cons cons;
     Printf.printf "\n+ unify results: (<hole_id>) (<type>)\n";
-    let (_, u_results, r_results) = Impl.unify cons in 
-    Printf.printf "%s" (string_of_u_results u_results); 
-    Printf.printf "%s" (string_of_r_results r_results); 
+    let gen_results = Impl.unify cons in 
+    Printf.printf "%s" (string_of_gen_res gen_results);
     (*calls to new dfs code *)
     Printf.printf "depth first search simplified results\n";
-    let solutions_given = Dfs.finalize_results u_results r_results in
+    let solutions_given = Dfs.finalize_results gen_results in
     Printf.printf "%s" (string_of_solutions solutions_given);
   )
 ;;
+
+(*
+let y : ?9 = let x : ?1 = (1, true) in x.0 in y
+
+matched prod will generate two type holes
+
+let x : ?1 = (1, true) in x
+
+(1, true) ana ?1
+?1 == ?2 * ?3
+
+1 ana ?2
+?2 == Num
+
+true ana ?3
+?3 == Bool
+
+^these are keys in gen_results
+*)
