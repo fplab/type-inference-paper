@@ -463,7 +463,7 @@ module TypGen = struct
         Stdlib.compare (gen_to_float gen1) (gen_to_float gen2)
     ;;
 
-    (*fast sorts all layers of a typ_gens; call this and not explore *)
+    (*fast sorts all layers of a typ_gens; call this and never call gens_sort_explore *)
     let rec gens_sort_layer (gens: typ_gens): typ_gens =
         let gens = List.fast_sort comp_gen_elt gens in
         gens_sort_explore gens
@@ -533,7 +533,7 @@ module Blacklist = struct
     ;;
 end
 
-(* a representation of final solution statuses that arise from dfsed type generators; more condensed than unify_results *)
+(* a representation of final solution statuses that arise from dfsed type generators; [more condensed than unify_results (<- deprecated)]*)
 module Status = struct
     (*can be solved of a type or unsolved with a generator containing possible types *)
     type t =
@@ -583,7 +583,7 @@ module TypGenRes = struct
         | None -> None
     ;;
 
-    (*converts a unify result to a typ with a typ_gens *)
+    (* (*converts a unify result to a typ with a typ_gens*)
     let unif_res_to_gen_res (key: Typ.t) (u_res: Typ.unify_result): t =
         let typ_ls = 
             match u_res with
@@ -608,7 +608,7 @@ module TypGenRes = struct
             (unif_res_to_gen_res key u_res)::acc
         in
         List.fold_left r_convert_acc acc r_results
-    ;;
+    ;; *)
 
     (*replaces the gens associated with typ with replacement in gen_results *)
     let rec replace_gens_of_typ (typ: Typ.t) (replacement: TypGen.typ_gens) (gen_results: results): results =
