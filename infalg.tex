@@ -1,0 +1,34 @@
+\section{Type Hole Inference Algorithm}
+\label{sec:infalg}
+\emph{Type hole inference} takes two steps: (1) use bidirectional typing for type checking, type synthesis and constraint generation; (2) solve the constraint set by unification to infer types for type holes \cite{TaplBook}. In contrast to \emph{type inference}, our approach has the following features: (1) we separate type checking and constraint solving into two steps. The system only does type checking and triggers static errors at the first step; (2) expressions remain well-typed when the constraint solver can not find a solution for type variables, for instance when one type variable is equal to multiple types. The system postpones the remaining type checking to runtime. Since  type variables may be unconstrained after unification, we can generalize those type holes by introducing polymorphism in the future work. \par
+\parahead{Constraint Generation} Constraints are generated through bidirectional judgements in figure ~\ref{fig:ana-syn}. Take $(\lambda x:\tehole^A. x+1)~ \ehole$ as an example. We apply rule ~\ref{rule:syn-ap}, ~\ref{rule:syn-lamann}, ~\ref{rule:syn-num}, ~\ref{rule:ana-subsume} and ~\ref{rule:syn-ehole} to derive a constraint set: $\{\tehole^A \sim \tnum;~ \tehole^A \sim \tehole^B\}$, where $\tehole^B$ is a fresh type hole generated in rule \ref{rule:syn-ehole}. \par
+\parahead{Constraint Solver} Type constraint sets are solved by a standard unification algorithm \cite{RobinUnification}. The solution is a list of pairs, (\emph{type hole  identifier}, H-type), with substituting each type hole with corresponding H-type unifying a given constraint set \cite{TaplBook}. For example, the solution for the constraint set in the previous paragraph is [("A",$\tnum$); ("B", $\tnum$)]. \par 
+% \begin{figure}
+% \begin{multicols}{2}
+% \begin{lstlisting}[escapeinside={(*}{*)}]
+% let rec unify (constraints) =
+%   match constraints with
+%   | {} -> []
+%   | (*${\tau_x  \sim \tau_y} \cup tl $*)->
+%     let sub_tl = unify tl in
+%  		let sub_hd = 
+%  			unify_one 
+%  				(substitute (*$\tau_x$*) with sub_tl)
+%  				(substitute (*$\tau_y$*) with subs_hd)
+%  		in (subs_hd (*$\cup$*) subs_tl)
+% and unify_one ((*$\tau_x,~ \tau_y$*)) =
+%     match ((*$\tau_x,~ \tau_y$*)) with
+%     | (*$(\tnum, \tnum)$*) -> []
+%     | (*$(\ehole^A, \tau)$*) | (*$(\tau, \ehole^A)$*) -> [("A", (*$\tau$*))]
+%     | ((*$\tarr{\tau_1}{\tau_2}$*), (*$\tarr{\tau_3}{\tau_4}$*)) -> 
+%     		unify {(*$\tau_1  \sim \tau_3; ~\tau_2  \sim \tau_4$*)}
+%     | _ -> 	unification fails, 
+%     	postpone type checking to runtime
+%   ;;
+% \end{lstlisting}
+% \end{multicols}
+% \vspace{-4px}
+%  \hrule
+% \caption{Unification algorithm of type hole inference}
+% \label{fig:algcode}
+% \end{figure}

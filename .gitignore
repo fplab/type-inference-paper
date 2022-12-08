@@ -133,6 +133,7 @@ pythontex-files-*/
 # Texpad
 .texpadtmp
 
+
 # TikZ & PGF
 *.dpth
 *.md5
@@ -158,4 +159,6 @@ pythontex-files-*/
 # Latexian
 TSWLatexianTemp*
 
-patterns-paper.pdf
+type-inference-paper.pdf
+
+*/_build

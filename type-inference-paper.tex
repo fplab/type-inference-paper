@@ -1,22 +1,18 @@
 \PassOptionsToPackage{svgnames,dvipsnames,svgnames}{xcolor}
 \newif\ifarxiv
-\arxivtrue
-% \arxivfalse
+\arxivfalse
 \ifarxiv
-\documentclass[acmsmall,screen,nonacm]{acmart}
+
+%\documentclass[acmsmall,nonacm]{acmart}
+\documentclass[acmsmall,screen,review,nonacm]{acmart}
 \else
 %%% Note: arxiv does not want line numbers (they are detected somehow, and are not allowed)
-\documentclass[acmsmall,screen]{acmart}
-% \settopmatter{printfolios=false,printccs=false,printacmref=false}
+\documentclass[acmsmall,screen,review,nonacm]{acmart}
+%\documentclass[acmsmall,nonacm]{acmart}
+%\settopmatter{printfolios=false,printccs=false,printacmref=false}
 % \settopmatter{printccs=false,printacmref=false}
 \fi
-
-\ifarxiv
-\newcommand{\appendixName}{appendix}
-\else
-\newcommand{\appendixName}{extended appendix}
-\fi
-
+  
 %% For single-blind review submission
 %\documentclass[acmlarge,review]{acmart}\settopmatter{printfolios=true}
 %% For final camera-ready submission
@@ -35,7 +31,12 @@
 \usepackage{subcaption} %% For complex figures with subfigures/subcaptions
                         %% http://ctan.org/pkg/subcaption
 
+\usepackage{graphicx}
+%\usepackage{subfig}
 %% Cyrus packages
+
+\usepackage{multirow}
+\usepackage{multicol}
 \usepackage{microtype}
 \usepackage{mdframed}
 \usepackage{colortab}
@@ -49,8 +50,8 @@
 \usepackage{xspace}
 \usepackage{wrapfig}
 \usepackage{extarrows}
+\usepackage{listings}
 % \usepackage[subtle]{savetrees}
-
 \usepackage{listings}%
 \lstloadlanguages{ML}
 \lstset{tabsize=2, 
@@ -64,6 +65,16 @@ morekeywords={string, float, int, bool},
 classoffset=0,belowskip=\smallskipamount, aboveskip=\smallskipamount,
 moredelim=**[is][\color{red}]{SSTR}{ESTR}
 }
+
+\lstdefinestyle{mystyle}{
+otherkeywords = {match,Some,None,substitute,postpone,to, runtime,type, checking,unification, fails},
+}
+
+%"mystyle" code listing set
+\lstset{style=mystyle}
+
+%\usepackage[skip=2\baselineskip]{caption}
+\usepackage{caption}
 \newcommand{\li}[1]{\lstinline[basicstyle=\ttfamily\fontsize{9pt}{1em}\selectfont]{#1}}
 \newcommand{\lismall}[1]{\lstinline[basicstyle=\ttfamily\fontsize{9pt}{1em}\selectfont]{#1}}
 
@@ -135,27 +146,38 @@ moredelim=**[is][\color{red}]{SSTR}{ESTR}
 % \setlength{\belowdisplayshortskip}{0pt}
 
 
-\ifarxiv
-\setcopyright{rightsretained} 
-\acmJournal{PACMPL}
-\acmYear{2019} \acmVolume{3} \acmNumber{POPL} \ifarxiv \acmArticle{1} \else \acmArticle{14} \fi \acmMonth{1} \acmPrice{}\acmDOI{10.1145/3290327}
-\copyrightyear{2019}
-\else
-%%% The following is specific to POPL '19 and the paper
-%%% 'Live Functional Programming with Typed Holes'
-%%% by Cyrus Omar, Ian Voysey, Ravi Chugh, and Matthew A. Hammer.
-%%%
-\setcopyright{rightsretained}
-\acmPrice{}
-\acmDOI{10.1145/3290327}
-\acmYear{2019}
-\copyrightyear{2019}
-\acmJournal{PACMPL}
-\acmVolume{3}
-\acmNumber{POPL}
-\acmArticle{14}
-\acmMonth{1}
+
+\makeatletter\if@ACM@journal\makeatother
+%% Journal information (used by PACMPL format)
+%% Supplied to authors by publisher for camera-ready submission
+%\acmJournal{PACMPL}
+%\acmVolume{1}
+%\acmNumber{1}
+%\acmArticle{1}
+%\acmYear{2018}
+%\acmMonth{3}
+%\acmDOI{10.1145/nnnnnnn.nnnnnnn}
+%\startPage{1}
+\else\makeatother
+%% Conference information (used by SIGPLAN proceedings format)
+%% Supplied to authors by publisher for camera-ready submission
+% \acmConference[]{ACM SIGPLAN Conference on Programming Languages}{January 01--03, 2017}{New York, NY, USA}
+
+%\acmYear{2018}
+%\acmISBN{978-x-xxxx-xxxx-x/YY/MM}
+%\acmDOI{10.1145/nnnnnnn.nnnnnnn}
+%\startPage{1}
 \fi
+
+
+%% Copyright information
+%% Supplied to authors (based on authors' rights management selection;
+%% see authors.acm.org) by publisher for camera-ready submission
+\setcopyright{none}             %% For review submission
+%\setcopyright{acmcopyright}
+%\setcopyright{acmlicensed}
+%\setcopyright{rightsretained}
+%\copyrightyear{2017}           %% If different from \acmYear
 
 
 % \fancyfoot{} % suppresses the footer (also need \thispagestyle{empty} after \maketitle below)
@@ -163,6 +185,7 @@ moredelim=**[is][\color{red}]{SSTR}{ESTR}
 
 %% Bibliography style
 \bibliographystyle{ACM-Reference-Format}
+%\bibliographystyle{abbrvnat}
 %% Citation style
 %% Note: author/year citations are required for papers published as an
 %% issue of PACMPL.
@@ -172,21 +195,18 @@ moredelim=**[is][\color{red}]{SSTR}{ESTR}
 \input{macros}
 
 \setlength{\abovecaptionskip}{4pt plus 3pt minus 2pt} % Chosen fairly arbitrarily
+%\setlength{\abovecaptionskip}{4pt}
 \setlength{\belowcaptionskip}{-4pt plus 3pt minus 2pt} % Chosen fairly arbitrarily
 
 
 \begin{document}
 
 %% Title information
-\title{patterns paper}         %% [Short Title] is optional;
-\ifarxiv
-\subtitle{Extended Version}
-\subtitlenote{The original version of this article was published in the POPL 2019 edition of PACMPL \cite{HazelnutLive}. This extended version includes an additional appendix.}
-\fi
+\title{Type Hole Inference}         %% [Short Title] is optional;
                                         %% when present, will be used in
-
                                         %% header instead of Full Title.
-% \titlenote{with title note}             %% \titlenote is optional;
+%\titlenote{Some text and figures in this submission are taken from a full paper by the authors, which is currently under review.}
+%% \titlenote is optional;
                                         %% can be repeated if necessary;
                                         %% contents suppressed with 'anonymous'
 % \subtitle{Subtitle}                     %% \subtitle is optional
@@ -206,50 +226,24 @@ moredelim=**[is][\color{red}]{SSTR}{ESTR}
 %% extraction tools.
 
 %% Author with single affiliation.
-% \author{Cyrus Omar}
-% \authornote{with author1 note}          %% \authornote is optional;
+
+
+\author{Zhiyi Pan}
+ \authornote{Research advisor: Cyrus Omar; ACM student member number: 5024951; Category: undergraduate}          %% \authornote is optional;
                                         %% can be repeated if necessary
 % \orcid{nnnn-nnnn-nnnn-nnnn}             %% \orcid is optional
-% \affiliation{
+\affiliation{
   % \position{Position1}
   % \department{Department1}              %% \department is recommended
-  % \institution{University of Chicago, USA}            %% \institution is required
+  \institution{University of Michigan}            %% \institution is required
   % \streetaddress{Street1 Address1}
   % \city{City1}
   % \state{State1}
   % \postcode{Post-Code1}
   % \country{Country1}
-% }
-% \email{comar@cs.uchicago.edu}          %% \email is recommended
-
-
-% %% Author with two affiliations and emails.
-% \author{First2 Last2}
-% \authornote{with author2 note}          %% \authornote is optional;
-%                                         %% can be repeated if necessary
-% \orcid{nnnn-nnnn-nnnn-nnnn}             %% \orcid is optional
-% \affiliation{
-%   \position{Position2a}
-%   \department{Department2a}             %% \department is recommended
-%   \institution{Institution2a}           %% \institution is required
-%   \streetaddress{Street2a Address2a}
-%   \city{City2a}
-%   \state{State2a}
-%   \postcode{Post-Code2a}
-%   \country{Country2a}
-% }
-% \email{first2.last2@inst2a.com}         %% \email is recommended
-% \affiliation{
-%   \position{Position2b}
-%   \department{Department2b}             %% \department is recommended
-%   \institution{Institution2b}           %% \institution is required
-%   \streetaddress{Street3b Address2b}
-%   \city{City2b}
-%   \state{State2b}
-%   \postcode{Post-Code2b}
-%   \country{Country2b}
-% }
-% \email{first2.last2@inst2b.org}         %% \email is recommended
+ %\category{undergraduate}
+}
+\email{zhiyipan@umich.edu}          %% \email is recommended
 
 
 %% Paper note
@@ -265,7 +259,7 @@ moredelim=**[is][\color{red}]{SSTR}{ESTR}
 %% Abstract
 %% Note: \begin{abstract}...\end{abstract} environment must come
 %% before \maketitle command
-% \input{abstract}
+%\input{abstract}
 
 
 %% 2012 ACM Computing Classification System (CSS) concepts
@@ -284,58 +278,29 @@ moredelim=**[is][\color{red}]{SSTR}{ESTR}
 % </concept>
 % </ccs2012>
 % \end{CCSXML}
-\begin{CCSXML}
-<ccs2012>
-<concept>
-<concept_id>10011007.10011006.10011008.10011009.10011012</concept_id>
-<concept_desc>Software and its engineering~Functional languages</concept_desc>
-<concept_significance>500</concept_significance>
-</concept>
-% <concept>
-% <concept_id>10003752.10010124.10010131.10010134</concept_id>
-% <concept_desc>Theory of computation~Operational semantics</concept_desc>
-% <concept_significance>500</concept_significance>
-% </concept>
-</ccs2012>
-\end{CCSXML}
 
-\ccsdesc[500]{Software and its engineering~Functional languages}
-% \ccsdesc[500]{Theory of computation~Operational semantics}
+% \ccsdesc[500]{Software and its engineering~General programming languages}
+% \ccsdesc[300]{Social and professional topics~History of programming languages}
 %% End of generated code
 
 
 %% Keywords
 %% comma separated list
-% \keywords{live programming, gradual typing, contextual modal type theory, typed holes, structured editing}  %% \keywords is optional
+% \keywords{keyword1, keyword2, keyword3}  %% \keywords is optional
 
 
 %% \maketitle
 %% Note: \maketitle command must come after title commands, author
 %% commands, abstract environment, Computing Classification System
 %% environment and commands, and keywords command.
-% \maketitle
+\maketitle
 % \thispagestyle{empty} % suppresses the footer
 
-% \input{intro}
-% \input{examples}
-% \input{calculus}
-% \input{implementation}
-% \input{related-work}
-% \input{discussion}
-
-\input{formally}
-%\clearpage
-\bibliography{all.short}
-
-\ifarxiv
+\input{intro}
+\input{typinf}
+\input{infalg}
+\input{conclusion}
 \clearpage
-\appendix
-%\input{appendix-defns}
-%\input{extensions}
-\else
-
-\fi
-% \input{misc}
-% \input{implementation-appendix}
+\bibliography{references,all.short,hazel_NSF}
 
 \end{document}

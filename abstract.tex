@@ -1,0 +1,7 @@
+% !TEX root = hazel-LIVE2018.tex
+
+\begin{abstract}
+\emph{Type inference} allows programmers to omit type annotations while still permitting type checking. The problem is that \emph{type inference} only works on complete programs, e.g. syntactically well-formed expressions. This paper introduces a \emph{type hole inference} system that applies type inference on incomplete programs. We start from modeling incomplete programs by lambda calculus with \emph{holes} developed in \Hazelnut, where holes stand for missing types and expressions. We extended static semantics with \emph{type constraints}, and borrow machinery from unification-based type inference to infer types for type holes by identifying the type hole with the type variable. In particular, our system will not report a static error when unification fails but postpone type-checking for type holes to runtime. This provides an approach to combine \emph{gradual typing} and \emph{type inference}. 
+
+\end{abstract}
+    

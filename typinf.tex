@@ -1,0 +1,192 @@
+\section{Type System for Type Hole Inference}
+\label{sec:typinf}
+Figure ~\ref{fig:syntax_fig} defines the syntax of H-types and H-expressions. We start from the definition given in \citet{HazelnutPOPL} except two modifications. First, we add an annotated lambda. Second, we attach a unique \emph{type hole identifier}, drawn as a superscript capital letter, to each type hole, such as $\ehole^A$. In this way, type holes are identified as type variables. There are two types of expression holes: empty holes, $\ehole$, standing for missing parts of an incomplete program, and non-empty holes, $\notehole{e}$, operating as membranes around static and dynamic type inconsistencies \cite{HazelLive}. \par
+\begin{figure}[htbp]
+\vspace{-3px} 
+$\arraycolsep=4pt\begin{array}{lll}
+HTyp~~ \tau & ::= &
+  \tnum ~\vert~
+  \tarr{\tau}{\tau} ~\vert~
+  \ehole^A
+  \\
+HExp~~ e & ::= &
+  x ~\vert~
+  \lamfunc{x}{e} ~\vert~
+  \lamfunc{x:\tau}{e} ~\vert~
+  e(e) ~\vert~
+  \underlinenum{n} ~\vert~
+  (e+e) ~\vert~
+  e: \tau ~\vert~
+  \ehole  ~\vert~
+  \notehole{e} 
+\end{array}$
+\hrule
+\caption{Syntax of H-types, H-expressions, and Type Constraint Set}
+\label{fig:syntax_fig}
+\vspace{-5px}
+\end{figure}
+Figure ~\ref{fig:ana-syn} defines a bidirectional typing system extended with type constraint sets. \emph{Type constraint set} $C$ is a set of type consistency equations, namely \emph{type constraints}. Type consistency $\tau \sim \tau$ is a symmetric and reflective but not transitive relation defined in figure ~\ref{fig:type-consistency} \cite{HazelnutPOPL}. We use a union operation, $C \cup C$, corresponding to mathematical set union operation to generate constraints inductively through bidirectional propagation. The type constraint set is solved by the unification algorithm in section ~\ref{sec:infalg}, but importantly, constraint solving is not necessary for typing to succeed. The typing context, $\Gamma$, maps a set of expression variables to their types. Rule ~\ref{rule:syn-ehole} and ~\ref{rule:syn-hole} synthesize expression hole to hole type, with premise, $(A ~ \text{fresh})$, indicating generation of a new \emph{type identifier}. Rule ~\ref{rule:ana-subsume} and ~\ref{rule:ana-lam} have type consistency in their premises, generating new constraints and merging them into constraint sets in the conclusion. Rule ~\ref{rule:syn-ap}, ~\ref{rule:ana-lam} and ~\ref{rule:ana-lamann} have \emph{matched arrow type judgements} defined in figure ~\ref{fig:match-arrow-typ}. They leave the arrow type unchanged and assign the type hole the matched arrow type $\tarr{\tehole^B}{\tehole^C}$ with fresh identifiers and constraint generation \cite{HazelnutPOPL}.
+\begin{figure}
+\vspace{-3px} 
+    \begin{multicols}{2}
+      \fbox{$\consexptyp{\Gamma}{e}{\tau}{C}$}~~\text{$e$ synthesizes $\tau$}\hfill
+    \begin{subequations}
+    \begin{equation}\label{rule:syn-var}
+        \inferrule[]{ }{
+            \consexptyp{\Gamma, x : \tau}{x}{\tau}{\econs}
+          }
+    \end{equation}
+    \begin{equation}\label{rule:syn-num}
+        \inferrule[]{ }{
+            \consexptyp{\Gamma}{\hnum{n}}{\tnum}{\econs}
+          }
+    \end{equation}
+    \begin{equation}\label{rule:syn-plus}
+        \inferrule[]{
+            \ana{\Gamma}{e_1}{\tnum}{C_1} \\
+            \ana{\Gamma}{e_2}{\tnum}{C_2}
+          }{
+            \consexptyp{\Gamma}{(e_1 + e_2)}{\tnum}{C_1 \cup C_2}
+          }
+    \end{equation}
+    \begin{equation}
+        \inferrule[]{
+            \ananc{\Gamma}{e_1}{\tnum}\\
+            \ananc{\Gamma}{e_2}{\tnum}
+          }{
+            \consexptypnc{\Gamma}{(e_1 + e_2)}{\tnum}
+          }
+    \end{equation}
+    \begin{equation}\label{rule:syn-asc}
+        \inferrule[]{
+            \ana{\Gamma}{e}{\tau}{C}
+          }{
+            \consexptyp{\Gamma}{(e : \tau)}{\tau}{C}
+          }
+    \end{equation}
+    \begin{equation}\label{rule:syn-ehole}
+        \inferrule[]{(A~\text{fresh}) }{
+            \consexptyp{\Gamma}{\llparenthesiscolor \rrparenthesiscolor}{\llparenthesiscolor \rrparenthesiscolor^A}{\econs}
+          }
+    \end{equation}
+    \begin{equation}\label{rule:syn-hole}
+        \inferrule[]{
+            (A~\text{fresh}) \\
+            \consexptyp{\Gamma}{e}{\tau}{C}
+           }{
+             \consexptyp{\Gamma}{\llparenthesiscolor e \rrparenthesiscolor}{\llparenthesiscolor \rrparenthesiscolor^A}{C}
+           }
+    \end{equation}
+    \begin{equation}\label{rule:syn-lamann}
+        \inferrule[]{
+          \consexptyp{\Gamma, x : \tau_{in}}{e}{\tau_{out}}{C}
+        }{
+          \consexptyp{\Gamma}{\lamfunc{x:\tau_{in}}{e}}{\tarr{\tau_{in}}{\tau_{out}}}{C}
+        }
+    \end{equation}
+    \begin{equation}\label{rule:syn-ap}
+      \inferrule[]{
+          \consexptyp{\Gamma}{e_1}{\tau_1}{C_1} \\
+          \tau_1 \typearrow \tarr{\tau_{in}}{\tau_{out}} \addcons{C_2} \\
+          \ana{\Gamma}{e_2}{\tau_{in}}{C_3}
+        }{
+          \consexptyp{\Gamma}{\hap{e_1}{e_2}}{\tau_{out}} { C_1 \cup C_2 \cup C_3}
+        }
+  \end{equation}
+    \end{subequations}
+    \vspace{3px}\fbox{$\ana{\Gamma}{e}{\tau} {C}$}~~\text{$e$ analyzes against $\tau$}\hfill
+    \begin{subequations}
+    \begin{equation}\label{rule:ana-subsume}
+      \inferrule[]{
+          \consexptyp{\Gamma}{e}{\tau'}{C_1} \\
+          \tau \sim \tau' 
+        }{
+          \ana{\Gamma}{e}{\tau}{C_1 \cup \{\tau \sim \tau'  \}}
+        }
+  \end{equation}
+    \begin{equation}\label{rule:ana-lam}
+        \inferrule[]{
+            \tau \typearrow \tarr{\tau_{in}}{\tau_{out}} \addcons{C_1} \\
+             \ana{\Gamma, x : \tau_{in}}{e}{\tau_{out}}{C_2}
+           }{
+             \ana{\Gamma}{\lamfunc{x}{e}}{\tau}{C_1 \cup C_2}
+           }
+    \end{equation}
+    \begin{equation}\label{rule:ana-lamann}
+        \inferrule[]{
+         \tau \typearrow \tarr{\tau_{in}}{\tau_{out}} \addcons{C_1} \\
+          \ana{\Gamma, x : \tau'_{in}}{e}{\tau_{out}}{C_2} \\
+          \tau_{in} \sim \tau'_{in}
+        }{
+          \ana{\Gamma}{\lamfunc{x:\tau'_{in}}{e}}{\tau}{C_1 \cup C_2 \cup \{ \tau_{in} \sim \tau'_{in} \}}
+        }
+    \end{equation}
+    \end{subequations}
+  \end{multicols}
+  \hrule
+  \caption{H-type synthesis and analysis.}
+  \label{fig:ana-syn}
+  \vspace{-10px}
+\end{figure}
+
+\begin{figure}
+   \fbox{$\tau \sim \tau $}~~\text{$\tau$ is consistent to $\tau$}\hfill
+    \begin{subequations}\label{eqns:consistency}
+    \begin{mathpar}
+      \hfill
+        \inferrule[]{
+            }{
+              \tnum \sim \tnum
+            }
+            \hfill
+    \inferrule[]{
+        }{
+        \tehole^A \sim \tau
+        }
+        \hfill
+    \inferrule[]{
+        }{
+        \tau \sim \tehole^A
+        }
+        \hfill
+    \inferrule[]{
+        \tau_1 \sim \tau_3 \\
+        \tau_2 \sim \tau_4
+        }{
+        \tarr{\tau_1}{\tau_2} \sim \tarr{\tau_3}{\tau_4}
+        }\hfill \text{\hspace{-2px}(\ref*{eqns:consistency}a-d)}
+    \end{mathpar}
+  \end{subequations}
+  \hrule
+  \caption{H-type consistency.}
+  \label{fig:type-consistency}
+  \vspace{-3px}
+\end{figure}
+
+\begin{figure}
+    \fbox{$\tau \typearrow \tarr{\tau_{in}}{\tau_{out}} \addcons{C}$}~~\text{$\tau$ has matching arrow type $\tarr{\tau_{in}}{\tau_{out}}$}\hfill
+    \begin{subequations}\label{eqns:matcharrow}
+      \begin{minipage}{0.43\linewidth}
+        \begin{equation}
+          \inferrule[]{ }{
+            \tarr{\tau_{in}}{\tau_{out}} \typearrow \tarr{\tau_{in}}{\tau_{out}} \addcons{\econs}
+          }
+        \end{equation}
+        \end{minipage}
+        \begin{minipage}{0.55\linewidth}
+        \begin{equation}
+          \inferrule[ ]{
+            (B~\text{fresh}) \\
+            (C~\text{fresh})
+           }{
+             \tehole^A \typearrow \tarr{\tehole^B}{\tehole^C} \addcons{\{ \tehole^A \sim \tarr{\tehole^B}{\tehole^C} \} }
+           }
+        \end{equation}
+        \end{minipage}
+
+    \end{subequations}
+    \hrule
+    \caption{Matched arrow types.}
+    \label{fig:match-arrow-typ} 
+    \vspace{-2px} 
+  \end{figure}
